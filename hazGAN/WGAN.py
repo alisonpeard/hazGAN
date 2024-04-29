@@ -50,7 +50,7 @@ def define_generator(config, nchannels=2):
     TODO: Get rid of dense layers so its resolutiuon invariant - Harris (2022).
     >>> generator = define_generator()
     """
-    z = tf.keras.Input(shape=(100))
+    z = tf.keras.Input(shape=(100,))
 
     # First fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
     fc = layers.Dense(config["complexity_0"] * config["g_layers"][0])(z)
