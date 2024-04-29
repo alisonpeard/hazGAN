@@ -21,7 +21,7 @@ tf.config.set_visible_devices([], "GPU")
 # tf.debugging.enable_check_numerics()
 
 import wandb
-from wandb.keras import WandbCallback
+from wandb.keras import WandbMetricsLogger
 import hazGAN as hg
 
 global rundir
@@ -76,7 +76,7 @@ def main(config):
         gan.fit(
             train,
             epochs=config.nepochs,
-            callbacks=[WandbCallback(), hg.Visualiser(1, runname=runname)]
+            callbacks=[WandbMetricsLogger(), hg.Visualiser(1, runname=runname)]
         )
 
     # reproducibility
