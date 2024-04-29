@@ -16,11 +16,11 @@ class Visualiser(Callback):
     def on_epoch_end(self, epoch, logs={}):
         if (epoch % self.frequency == 0) & (epoch > 0):
             clear_output(wait=True)
-            nchan = tf.shape(self.model(3))[-1].numpy()
+            nchan = tf.shape(self.model(nsamples=3))[-1].numpy()
             fig, axs = plt.subplots(nchan, 3, figsize=(10, 2 * nchan))
             if nchan == 1:
                 axs = axs[tf.newaxis, :]
-            generated_data = self.model(3)
+            generated_data = self.model(nsamples=3)
             vmin = tf.reduce_min(generated_data)
             vmax = tf.reduce_max(generated_data)
             for c in range(nchan):
