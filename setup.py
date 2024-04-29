@@ -11,7 +11,8 @@ setup(
 
     packages=find_packages(),
     install_requires=[
-        "tensorflow-macos",
+        #"tensorflow-macos",
+        "tensorflow",
         "tensorflow-metal",
         "scipy",
         "pandas",
