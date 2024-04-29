@@ -16,7 +16,8 @@ dependencies:
     - pyyaml
     - h5py
     - pip:
-        - tensorflow-macos==2.12
+        # - tensorflow-macos==2.12
+        - tensorflow>=2.13 # for metal and tfd compatibility
         - tensorflow-metal==0.8.0
         - wandb
         - tensorflow-probability
