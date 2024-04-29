@@ -5,11 +5,10 @@ import wandb
 import pandas as pd
 from scipy.stats import ksone # Kolmogorov-Smirnov test
 import tensorflow as tf
-from tensorflow_probability.distributions import Gumbel
+import tensorflow_probability as tfp
 import hazGAN as hg
 import matplotlib.pyplot as plt
 import wandb
-
 
 
 def ks_critical_value(n_trials, alpha):
@@ -45,10 +44,9 @@ axs[0].set_title("Generated data")
 axs[1].hist(u_ij, bins=50, **hist_kwargs)
 axs[1].set_title("Uniform data")
 # %%
-from tensorflow_probability.distirbutions import Gumbel
-gumbel = Gumbel(0, 1)
-gumbel.sample(1000).numpy()
-
+tf.random.gumbel = tfp.distributions.Gumbel(0, 1).sample
+x = tf.random.gumbel(1000).numpy()
+plt.hist(x)
 # %% --------------------------------------------------------------------------------------------
 # %% initialise model
 fake_u = hg.unpad(wgan(nsamples=1000), paddings).numpy()

@@ -11,8 +11,10 @@ from tensorflow import keras
 from tensorflow.keras import optimizers
 from tensorflow.keras import layers
 from inspect import signature
+import tensorflow_probability as tfp
 from .extreme_value_theory import chi_loss, inv_gumbel
 
+tf.random.gumbel = tfp.distributions.Gumbel(0, 1).sample # so can sample as normal
 
 def get_optimizer_kwargs(optimizer):
     optimizer = getattr(optimizers, optimizer)
