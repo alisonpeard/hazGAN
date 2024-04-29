@@ -10,7 +10,6 @@ import hazGAN as hg
 import matplotlib.pyplot as plt
 import wandb
 
-
 def ks_critical_value(n_trials, alpha):
     return ksone.ppf(1 - alpha / 2, n_trials)
 
@@ -21,9 +20,8 @@ hist_kwargs = {"density": True, "color": "lightgrey", "alpha": 0.6, "edgecolor":
 
 # %%
 wd = "/Users/alison/Documents/DPhil/multivariate/hazGAN"
-RUNNAME = "_240429-gumbel"
+RUNNAME = "classic-glade-121"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
-
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 cmaps = ["YlOrRd", "PuBu", "YlGnBu"]
 figdir = "/Users/alison/Documents/DPhil/multivariate/hazGAN/figures/results"
@@ -47,6 +45,7 @@ axs[1].set_title("Uniform data")
 tf.random.gumbel = tfp.distributions.Gumbel(0, 1).sample
 x = tf.random.gumbel(1000).numpy()
 plt.hist(x)
+
 # %% --------------------------------------------------------------------------------------------
 # %% initialise model
 fake_u = hg.unpad(wgan(nsamples=1000), paddings).numpy()
