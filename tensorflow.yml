@@ -1,0 +1,35 @@
+name: tensorflow
+channels:
+    - apple
+    - conda-forge
+dependencies:
+    - python<3.11
+    - pip>=19.0
+    - tensorflow-deps
+    - numpy
+    - pandas
+    - scipy
+    - ipykernel
+    - notebook
+    - matplotlib
+    - seaborn
+    - pyyaml
+    - h5py
+    - pip:
+        - tensorflow-macos==2.12
+        - tensorflow-metal==0.8.0
+        - wandb
+        - tensorflow-probability
+
+
+## NOTE:
+# mamba env create -f tensorflow.yml
+# conda activate tensorflow
+# python -m ipykernel install --user --n tensorflow
+
+# conda env remove -n tensorflow
+# conda info --envs
+
+# References:
+# Source: https://github.com/tcapelle/apple_m1_pro_python/tree/main
+# Metal compatibility: https://pypi.org/project/tensorflow-metal/

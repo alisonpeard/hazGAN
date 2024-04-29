@@ -1,0 +1,34 @@
+program: train_dcgan.py
+name: Sept04-new-transforms
+method: bayes
+project: hazardGAN
+metric:
+  name: g_loss_raw
+  goal: minimize
+parameters:
+  model:
+    values: [dcgan, wgan]
+  latent_space_distn:
+    values: [normal, uniform]
+  seed:
+    values: [0, 1, 2, 6, 7, 42]
+  lambda_:
+    min: 0.0
+    max: 1.0
+  learning_rate:
+    min: 0.0001
+    max: 0.0003
+  beta_1:
+    min: 0.1
+    max: 0.5
+  lrelu:
+    min: 0.1
+    max: 0.4
+  dropout:
+    min: 0.3
+    max: 0.6
+  training_balance:
+    values: [1, 2]
+run_cap: 50
+
+# >> wandb sweep sweep_dcgan.yml
