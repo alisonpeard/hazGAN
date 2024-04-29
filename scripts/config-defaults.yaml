@@ -28,7 +28,7 @@ latent_space_distn:
   value: normal
 gumbel:
   desc: Train on Gumbel marginals instead of uniform marginals.
-  value: False
+  value: True
 optimizer:
   desc: Optimizer to use, ['SGD', 'Adam'].
   value: Adam

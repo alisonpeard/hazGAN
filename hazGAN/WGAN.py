@@ -11,7 +11,7 @@ from tensorflow import keras
 from tensorflow.keras import optimizers
 from tensorflow.keras import layers
 from inspect import signature
-from .extreme_value_theory import chi_loss
+from .extreme_value_theory import chi_loss, inv_gumbel
 
 
 def get_optimizer_kwargs(optimizer):
@@ -120,6 +120,7 @@ class WGAN(keras.Model):
         self.latent_dim = config.latent_dims
         self.lambda_ = config.lambda_
         self.lambda_gp = config.lambda_gp
+        self.gumbel = config.gumbel
         self.config = config
         self.latent_space_distn = getattr(tf.random, config.latent_space_distn)
         self.trainable_vars = [
@@ -140,7 +141,11 @@ class WGAN(keras.Model):
 
     def call(self, nsamples=5):
         random_latent_vectors = self.latent_space_distn((nsamples, self.latent_dim))
-        return self.generator(random_latent_vectors, training=False)
+        raw = self.generator(random_latent_vectors, training=False)
+        if self.gumbel:
+            return inv_gumbel(raw)
+        else:
+            return raw
 
     def train_step(self, data):
         batch_size = tf.shape(data)[0]

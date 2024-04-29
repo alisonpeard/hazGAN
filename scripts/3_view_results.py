@@ -3,12 +3,14 @@ import os
 import numpy as np
 import wandb
 import pandas as pd
+from scipy.stats import ksone # Kolmogorov-Smirnov test
 import tensorflow as tf
+from tensorflow_probability.distributions import Gumbel
 import hazGAN as hg
 import matplotlib.pyplot as plt
 import wandb
 
-from scipy.stats import ksone
+
 
 def ks_critical_value(n_trials, alpha):
     return ksone.ppf(1 - alpha / 2, n_trials)
@@ -20,7 +22,7 @@ hist_kwargs = {"density": True, "color": "lightgrey", "alpha": 0.6, "edgecolor":
 
 # %%
 wd = "/Users/alison/Documents/DPhil/multivariate/hazGAN"
-RUNNAME = "_240429-workingok"
+RUNNAME = "_240429-gumbel"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
@@ -32,6 +34,21 @@ config = wandb.config
 wgan = hg.WGAN(wandb.config, nchannels=2)
 wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generator_weights"))
 wgan.generator.summary()
+# %% is it generating gumbel-distributed marginals
+i, j, c = np.random.randint(18), np.random.randint(22), 0  # choose random pixel
+y_ij = wgan.generator(tf.random.normal((10000, 100))).numpy()[:, i, j, c]
+u_ij = wgan(10000).numpy()[:, i, j, c]
+
+fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+axs[0].hist(y_ij, bins=50, **hist_kwargs)
+axs[0].set_title("Generated data")
+axs[1].hist(u_ij, bins=50, **hist_kwargs)
+axs[1].set_title("Uniform data")
+# %%
+from tensorflow_probability.distirbutions import Gumbel
+gumbel = Gumbel(0, 1)
+gumbel.sample(1000).numpy()
+
 # %% --------------------------------------------------------------------------------------------
 # %% initialise model
 fake_u = hg.unpad(wgan(1000), paddings).numpy()
