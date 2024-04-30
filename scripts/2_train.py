@@ -59,7 +59,7 @@ def main(config):
     logdir = os.path.join(cwd, "_logs")
     tf.debugging.set_log_device_placement(True)
     tf.debugging.experimental.enable_dump_debug_info(logdir, tensor_debug_mode='FULL_HEALTH', circular_buffer_size=-1)
-    
+
     # load data
     [train_u, test_u], *_ = hg.load_training(datadir, config.train_size, 'reflect', gumbel_marginals=config.gumbel)
     train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
@@ -80,15 +80,15 @@ def main(config):
         )
 
     # reproducibility
-    gan.generator.save_weights(os.path.join(rundir, f"generator_weights"))
-    gan.critic.save_weights(os.path.join(rundir, f"critic_weights"))
+    gan.generator.save_weights(os.path.join(rundir, f"generator.weights.h5"))
+    gan.critic.save_weights(os.path.join(rundir, f"critic.weights.h5"))
     save_config(rundir)
 
     # generate images to visualise some results
     paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
     train_u = hg.unpad(train_u, paddings).numpy()
     test_u = hg.unpad(test_u, paddings).numpy()
-    fake_u = hg.unpad(gan(1000), paddings).numpy()
+    fake_u = hg.unpad(gan(nsamples=1000), paddings).numpy()
     fig = hg.plot_generated_marginals(fake_u, vmin=None, vmax=None, runname=runname)
     log_image_to_wandb(fig, f"generated_marginals", imdir)
 

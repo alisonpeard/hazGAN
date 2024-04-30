@@ -20,7 +20,7 @@ hist_kwargs = {"density": True, "color": "lightgrey", "alpha": 0.6, "edgecolor":
 
 # %%
 wd = "/Users/alison/Documents/DPhil/multivariate/hazGAN"
-RUNNAME = "_240429-workingok"
+RUNNAME = "classic-glade-121"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
@@ -30,11 +30,11 @@ figdir = "/Users/alison/Documents/DPhil/multivariate/hazGAN/figures/results"
 wandb.init(project="test", mode="disabled")
 config = wandb.config
 wgan = hg.WGAN(wandb.config, nchannels=2)
-wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generator_weights"))
+wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generator.weights.h5"))
 wgan.generator.summary()
 # %% --------------------------------------------------------------------------------------------
 # %% initialise model
-fake_u = hg.unpad(wgan(1000), paddings).numpy()
+fake_u = hg.unpad(wgan(nsamples=1000), paddings).numpy()
 [train_u, test_u], [train_x, test_x], [train_m, test_m], [train_z, test_z], params = hg.load_training(
     "/Users/alison/Documents/DPhil/multivariate/era5_data",
     config.train_size,
