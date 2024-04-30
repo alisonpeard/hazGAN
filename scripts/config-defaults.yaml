@@ -3,7 +3,7 @@ model:
   desc: Which model to train, ['wgan' | 'dcgan'].
   value: wgan
 nepochs:
-  value: 10
+  value: 500
 train_size:
   value: 150
 batch_size:

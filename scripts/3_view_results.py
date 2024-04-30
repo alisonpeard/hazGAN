@@ -20,7 +20,7 @@ hist_kwargs = {"density": True, "color": "lightgrey", "alpha": 0.6, "edgecolor":
 
 # %%
 wd = "/Users/alison/Documents/DPhil/multivariate/hazGAN"
-RUNNAME = "classic-glade-121"
+RUNNAME = "_240430-gumbel"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 cmaps = ["YlOrRd", "PuBu", "YlGnBu"]
@@ -31,22 +31,29 @@ config = wandb.config
 wgan = hg.WGAN(wandb.config, nchannels=2)
 wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generator.weights.h5"))
 wgan.generator.summary()
-# %% is it generating gumbel-distributed marginals
-i, j, c = np.random.randint(18), np.random.randint(22), 0  # choose random pixel
-y_ij = wgan.generator(tf.random.normal((10000, 100))).numpy()[:, i, j, c]
-u_ij = wgan(10000).numpy()[:, i, j, c]
+# %% 
+if config.gumbel:
+    # is it generating gumbel-distributed marginals?
+    from scipy.stats import gumbel_r
+    n = 1000
+    i, j, c = np.random.randint(18), np.random.randint(22), 0  # choose random pixel
+    y_ij = wgan.generator(tf.random.normal((n, 100))).numpy()[:, i, j, c]
+    u_ij = wgan(nsamples=n).numpy()[:, i, j, c]
 
-fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-axs[0].hist(y_ij, bins=50, **hist_kwargs)
-axs[0].set_title("Generated data")
-axs[1].hist(u_ij, bins=50, **hist_kwargs)
-axs[1].set_title("Uniform data")
-# %%
-tf.random.gumbel = tfp.distributions.Gumbel(0, 1).sample
-x = tf.random.gumbel(1000).numpy()
-plt.hist(x)
+    # compare generated to standard gumbel distribution
+    u = np.linspace(gumbel_r.ppf(1e-6), gumbel_r.ppf(1-1e-6), n)
+    y = gumbel_r.pdf(u)
 
-# %% --------------------------------------------------------------------------------------------
+    fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+    gumbel = gum = tfp.distributions.Gumbel(0, 1)
+    axs[0].hist(y_ij, bins=50, **hist_kwargs)
+    axs[0].plot(u, y, "--r", label='Gumbel(0,1)')
+    axs[0].legend()
+    axs[0].set_title("Generated data")
+
+    axs[1].hist(u_ij, bins=50, **hist_kwargs)
+    axs[1].set_title("Uniform data")
+
 # %% initialise model
 fake_u = hg.unpad(wgan(nsamples=1000), paddings).numpy()
 [train_u, test_u], [train_x, test_x], [train_m, test_m], [train_z, test_z], params = hg.load_training(
@@ -58,7 +65,7 @@ fake_u = hg.unpad(wgan(nsamples=1000), paddings).numpy()
 )
 
 # %% plot 100 images
-fig = hg.plot_one_hundred_images(fake_u, cmap="Spectral_r")#, vmin=0, vmax=1)
+fig = hg.plot_one_hundred_images(fake_u, cmap="Spectral_r", vmin=0, vmax=1)
 fig = hg.plot_one_hundred_images(test_u, cmap="Spectral_r", suptitle="Test marginals", vmin=0, vmax=1)
 # %%
 # Pixel distribution histograms
@@ -170,7 +177,7 @@ fig.suptitle(r"Pairwise Pearson correlation $\rho$ for channel {}".format(channe
 fig.colorbar(im, ax=axs, orientation="vertical", shrink=0.8, aspect=20)
 
 # %% extremal correlations across space for generated data
-channel = 1
+channel = 0
 ecs_fake = hg.pairwise_extremal_coeffs(fake_u[..., channel]).numpy()
 ecs_train = hg.pairwise_extremal_coeffs(train_u[..., channel]).numpy()
 ecs_test = hg.pairwise_extremal_coeffs(test_u[..., channel]).numpy()
@@ -205,12 +212,4 @@ fig, ax = plt.subplots(1, 1, figsize=(5, 5))
 im = ax.imshow(diffs, cmap="coolwarm", vmin=vmin, vmax=vmax)
 fig.colorbar(im)
 ax.set_title("Difference in extremal coefficients")
-
-
-# %%
-# random test
-x = np.random.normal(0, 1, size=10000)
-y = 1 / (1 + np.exp(-x))
-import seaborn as sns
-sns.jointplot(x=x, y=y)
 # %%
