@@ -96,7 +96,7 @@ def main(config):
 if __name__ == "__main__":
     wandb.init(settings=wandb.Settings(code_dir="."))  # saves snapshot of code as artifact
     runname = wandb.run.name
-    rundir = os.path.join(wd, "wandb-runs", runname)
+    rundir = os.path.join(wd, "_wandb-runs", runname)
     os.makedirs(rundir)
 
     wandb.config["seed"] = np.random.randint(0, 1e6)

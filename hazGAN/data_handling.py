@@ -36,7 +36,6 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
     if gumbel_marginals:
         train_u = gumbel(train_u)
         test_u = gumbel(test_u)
-        min_u, max_u = tf.math.reduce_min(train_u), tf.math.reduce_max(train_u)
 
     if numpy:
         train_u = train_u.numpy()
