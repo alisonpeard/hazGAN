@@ -32,7 +32,7 @@ figdir = "/Users/alison/Documents/DPhil/multivariate/hazGAN/figures/results"
 wandb.init(project="test", mode="disabled")
 config = wandb.config
 wgan = hg.WGAN(wandb.config, nchannels=2)
-wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generator_weights"))
+wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generator.weights.h5"))
 wgan.generator.summary()
 # %% is it generating gumbel-distributed marginals
 i, j, c = np.random.randint(18), np.random.randint(22), 0  # choose random pixel
@@ -51,7 +51,7 @@ gumbel.sample(1000).numpy()
 
 # %% --------------------------------------------------------------------------------------------
 # %% initialise model
-fake_u = hg.unpad(wgan(1000), paddings).numpy()
+fake_u = hg.unpad(wgan(nsamples=1000), paddings).numpy()
 [train_u, test_u], [train_x, test_x], [train_m, test_m], [train_z, test_z], params = hg.load_training(
     "/Users/alison/Documents/DPhil/multivariate/era5_data",
     config.train_size,

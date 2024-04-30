@@ -1,9 +1,9 @@
 # training settings
 model:
-  desc: Which model to train, either 'wgan' or 'dcgan'.
+  desc: Which model to train, ['wgan' | 'dcgan'].
   value: wgan
 nepochs:
-  value: 500
+  value: 10
 train_size:
   value: 150
 batch_size:
