@@ -3,9 +3,9 @@ model:
   desc: Which model to train, ['wgan' | 'dcgan'].
   value: wgan
 nepochs:
-  value: 10
+  value: 1000
 train_size:
-  value: 150
+  value: 500
 batch_size:
   value: 50
 chi_frequency:

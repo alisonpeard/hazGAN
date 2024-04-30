@@ -35,7 +35,7 @@ wgan.generator.summary()
 if config.gumbel:
     # is it generating gumbel-distributed marginals?
     from scipy.stats import gumbel_r
-    n = 1000
+    n = config.train_size
     i, j, c = np.random.randint(18), np.random.randint(22), 0  # choose random pixel
     y_ij = wgan.generator(tf.random.normal((n, 100))).numpy()[:, i, j, c]
     u_ij = wgan(nsamples=n).numpy()[:, i, j, c]
@@ -55,7 +55,7 @@ if config.gumbel:
     axs[1].set_title("Uniform data")
 
 # %% initialise model
-fake_u = hg.unpad(wgan(nsamples=1000), paddings).numpy()
+fake_u = hg.unpad(wgan(nsamples=config.train_size), paddings).numpy()
 [train_u, test_u], [train_x, test_x], [train_m, test_m], [train_z, test_z], params = hg.load_training(
     "/Users/alison/Documents/DPhil/multivariate/era5_data",
     config.train_size,
