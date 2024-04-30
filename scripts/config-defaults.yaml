@@ -25,10 +25,10 @@ true_label_smooth:
   value: 0.9
 latent_space_distn:
   desc: Distribution of latent space, ['normal', 'uniform', 'gumbel', 't'].
-  value: gumbel
+  value: uniform
 gumbel:
   desc: Train on Gumbel marginals instead of uniform marginals.
-  value: True
+  value: False
 optimizer:
   desc: Optimizer to use, ['SGD', 'Adam'].
   value: Adam

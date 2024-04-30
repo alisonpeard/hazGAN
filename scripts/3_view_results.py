@@ -20,7 +20,7 @@ hist_kwargs = {"density": True, "color": "lightgrey", "alpha": 0.6, "edgecolor":
 
 # %%
 wd = "/Users/alison/Documents/DPhil/multivariate/hazGAN"
-RUNNAME = "_240430-gumbel"
+RUNNAME = "_240430-uniform1000"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 cmaps = ["YlOrRd", "PuBu", "YlGnBu"]
@@ -161,7 +161,7 @@ fig.suptitle(f"Data distributions, pixel ({i}, {j}), channel {c}\n")
 # Pixel relationships
 # --------------------------------------------------------------------------------------------
 # %% calculate Pearson correlations
-channel = 1
+channel = 0
 corrs_train = hg.get_all_correlations(train_u[..., channel])
 corrs_test = hg.get_all_correlations(test_u[..., channel])
 corrs_u = hg.get_all_correlations(fake_u[..., channel])
@@ -177,7 +177,6 @@ fig.suptitle(r"Pairwise Pearson correlation $\rho$ for channel {}".format(channe
 fig.colorbar(im, ax=axs, orientation="vertical", shrink=0.8, aspect=20)
 
 # %% extremal correlations across space for generated data
-channel = 0
 ecs_fake = hg.pairwise_extremal_coeffs(fake_u[..., channel]).numpy()
 ecs_train = hg.pairwise_extremal_coeffs(train_u[..., channel]).numpy()
 ecs_test = hg.pairwise_extremal_coeffs(test_u[..., channel]).numpy()
@@ -192,6 +191,7 @@ print("RMSE chi test: ", rmse_chi_test)
 # %%
 vmin = min(ecs_fake.min(), ecs_train.min(), ecs_test.min())
 vmax = max(ecs_fake.max(), ecs_train.max(), ecs_test.max())
+vmin, vmax = 1, 2
 
 fig, axs = plt.subplots(1, 3, figsize=(10, 3))
 im = axs[0].imshow(ecs_train, cmap="coolwarm_r", vmin=vmin, vmax=vmax)
@@ -212,3 +212,5 @@ fig, ax = plt.subplots(1, 1, figsize=(5, 5))
 im = ax.imshow(diffs, cmap="coolwarm", vmin=vmin, vmax=vmax)
 fig.colorbar(im)
 ax.set_title("Difference in extremal coefficients")# %%
+
+# %%
