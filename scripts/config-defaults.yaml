@@ -25,7 +25,7 @@ true_label_smooth:
   value: 0.9
 latent_space_distn:
   desc: Distribution of latent space, ['normal', 'uniform', 'gumbel', 't'].
-  value: uniform
+  value: normal
 gumbel:
   desc: Train on Gumbel marginals instead of uniform marginals.
   value: False

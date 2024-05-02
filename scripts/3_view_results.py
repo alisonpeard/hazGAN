@@ -31,6 +31,7 @@ config = wandb.config
 wgan = hg.WGAN(wandb.config, nchannels=2)
 wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generator.weights.h5"))
 wgan.generator.summary()
+
 # %% 
 if config.gumbel:
     # is it generating gumbel-distributed marginals?
