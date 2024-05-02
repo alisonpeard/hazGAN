@@ -1,2 +1,0 @@
-import tensorflow_probability as tfp
-tfp.distributions.Gumbel
