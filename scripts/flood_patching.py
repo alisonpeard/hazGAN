@@ -102,9 +102,9 @@ sample.plot('return_period', legend=True, cmap='Reds', ax=axs[0], vmin=0, vmax=2
 sample.plot('return_period', legend=True, cmap='Reds', ax=axs[1], vmin=0, vmax=250)
 sample.plot('return_period', legend=True, cmap='Reds', ax=axs[2], vmin=0, vmax=250)
 sample.plot('return_period', legend=True, cmap='Reds', ax=axs[3], vmin=0, vmax=250)
-sample.sort_values(by='flood_rp0000', ascending=True).plot('flood_rp0000', legend=True, cmap=cmap, ax=axs[1], vmin=0, vmax=5, alpha=.8)
-sample.plot('d_y', legend=True, cmap=cmap, ax=axs[2], vmin=0, vmax=5, alpha=.8)
-sample.sort_values(by='flood_rp0250', ascending=True).plot('flood_rp0250', legend=True, cmap=cmap, ax=axs[3], vmin=0, vmax=5, alpha=.8)
+sample.sort_values(by='flood_rp0000', ascending=True).plot('flood_rp0000', legend=True, cmap=cmap, ax=axs[1], vmin=0, vmax=5, alpha=.8, s=1)
+sample.plot('d_y', legend=True, cmap=cmap, ax=axs[2], vmin=0, vmax=5, alpha=.8, s=1)
+sample.sort_values(by='flood_rp0250', ascending=True).plot('flood_rp0250', legend=True, cmap=cmap, ax=axs[3], vmin=0, vmax=5, alpha=.8, s=1)
 
 axs[0].set_title('Pixelwise return periods')
 axs[1].set_title('0-year return period')
@@ -117,5 +117,9 @@ for ax in axs:
     ax.label_outer()
 # %%
 sample['diff'] = sample['flood_rp0250'] - sample['flood_rp0002']
-sample.plot('diff', legend=True, cmap='Spectral_r')
+sample.sort_values(by='diff', ascending=True).plot('diff',
+                                                   legend=True,
+                                                   cmap='Reds',
+                                                   s=1)
+plt.title('Difference between 250-year and 2-year return periods')
 # %%
