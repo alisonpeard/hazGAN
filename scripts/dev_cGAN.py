@@ -88,12 +88,11 @@ random_latent_vectors = tf.random.normal((batch_size, 100))
 random_vector_labels = ops.concatenate([random_latent_vectors, z[:, None]], axis=1)
 fake_u = wgan.generator(random_vector_labels)
 
-
-
-
 # %% discriminator
 z = ops.repeat(z[..., None, None], repeats=[u.shape[1] * u.shape[2]])
 z = ops.reshape(z, (-1, u.shape[1], u.shape[2], 1))
 u = ops.concatenate([u, z], axis=-1)
 
+# %%
+wgan.critic(u)
 # %% ref critic function

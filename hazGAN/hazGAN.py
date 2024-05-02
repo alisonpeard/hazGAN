@@ -11,7 +11,8 @@ Methods:
 * inverse transform
 """
 from .WGAN import WGAN, compile_wgan
-from .DCGAN import DCGAN
+from .DCGAN import DCGAN, compile_dcgan
+from .cGAN import cGAN, compile_cgan
 from .extreme_value_theory import POT
 
 class hazGAN(object):

@@ -61,9 +61,10 @@ def main(config):
     tf.debugging.experimental.enable_dump_debug_info(logdir, tensor_debug_mode='FULL_HEALTH', circular_buffer_size=-1)
 
     # load data
-    [train_u, test_u], *_ = hg.load_training(datadir, config.train_size, 'reflect', gumbel_marginals=config.gumbel)
-    train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
-    test = tf.data.Dataset.from_tensor_slices(test_u).batch(config.batch_size)
+    train, test = hg.load_datasets(datadir, config.train_size, 'reflect',
+                                   gumbel_marginals=config.gumbel,
+                                   batch_size=config.batch_size,
+                                   conditional=(config.model == "cGAN"))
 
     # train test callbacks
     chi_score = hg.ChiScore({"train": next(iter(train)), "test": next(iter(test))},
@@ -85,6 +86,7 @@ def main(config):
     save_config(rundir)
 
     # generate images to visualise some results
+    [train_u, test_u], *_  = hg.load_training(datadir, config.train_size, 'reflect', gumbel_marginals=config.gumbel)
     paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
     train_u = hg.unpad(train_u, paddings).numpy()
     test_u = hg.unpad(test_u, paddings).numpy()
@@ -104,3 +106,4 @@ if __name__ == "__main__":
 
     tf.config.experimental.enable_op_determinism()  # removes stochasticity from individual operations
     main(wandb.config)
+# %%

@@ -4,6 +4,7 @@
 # from .hazGAN import * # wrapper class for DGMs --later
 from .WGAN import *
 from .DCGAN import *
+from .cGAN import *
 from .utils import *
 from .plot import *
 from .callbacks import *

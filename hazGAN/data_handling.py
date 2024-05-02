@@ -5,8 +5,13 @@ from sklearn.preprocessing import StandardScaler
 from .extreme_value_theory import gumbel
 
 
-def load_datasets(datadir, ntrain, padding_mode='constant', image_shape=(18, 22), gumbel_marginals=False, batch_size=32):
-    [train_u, test_u], *_ = load_training(datadir, ntrain, padding_mode, image_shape, gumbel_marginals=gumbel_marginals)
+def load_datasets(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
+                  gumbel_marginals=False, batch_size=32,
+                  conditional=False):
+    [train_u, test_u], [train_x, test_x], [train_m, test_m], [train_z, test_z], params = load_training(datadir, ntrain, padding_mode, image_shape, gumbel_marginals=gumbel_marginals)
+    if conditional:
+        train = (train_u, train_z)
+        test = (test_u, test_z)
     train = tf.data.Dataset.from_tensor_slices(train_u).batch(batch_size)
     test = tf.data.Dataset.from_tensor_slices(test_u).batch(batch_size)
     return train, test
