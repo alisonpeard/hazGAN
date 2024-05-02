@@ -20,7 +20,7 @@ hist_kwargs = {"density": True, "color": "lightgrey", "alpha": 0.6, "edgecolor":
 
 # %%
 wd = "/Users/alison/Documents/DPhil/multivariate/hazGAN"
-RUNNAME = "_240430-uniform1000"
+RUNNAME = "_240502-normal1000"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 cmaps = ["YlOrRd", "PuBu", "YlGnBu"]
