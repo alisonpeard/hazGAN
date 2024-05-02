@@ -1,4 +1,5 @@
 #%%
+# env: general
 import os
 import numpy as np
 import glob
@@ -6,6 +7,7 @@ import rioxarray as rio
 import pandas as pd
 import geopandas as gpd
 from rasterio.enums import Resampling
+import matplotlib.pyplot as plt
 
 rp_map = {'rp0250': 250,
           'rp0050': 500,
@@ -49,17 +51,57 @@ gdfs.sort_values(by='flood_rp0250', ascending=True).plot('flood_rp0250', cmap='S
 gdfs.to_file('/Users/alison/Documents/DPhil/multivariate/deltares_data/flood_hazard.gpkg', driver='GPKG')
 
 # %% Load uniform marginals sample from training data
+from shapely.geometry import box
+
 data = np.load('/Users/alison/Documents/DPhil/multivariate/era5_data/data.npz')
-t = 1
+U = data['U'].reshape((data['U'].shape[0], 18 * 22 * 2))
+U_flat = np.mean(U, axis=1)
+tmax = np.argmax(U_flat)
+# %%
+t = tmax
 U = data['U'][t, ..., 0].ravel()
 lat = data['lat'].ravel()
 lon = data['lon'].ravel()
 quantiles = gpd.GeoDataFrame({'quantile': U}, geometry=gpd.points_from_xy(lon, lat)).set_crs(4326)
 quantiles['return_period'] = 1 / (1 - quantiles['quantile']) # TODO: check
-quantiles.plot('return_period')
+fig, ax = plt.subplots()
+quantiles.plot('return_period', legend=True, ax=ax)
+aoi = gpd.GeoDataFrame([], geometry=[box(*gdf.total_bounds)]).set_crs(4326)
+aoi.boundary.plot(ax=ax, color='red')
 # %%
 import geospatial_utils as gu
-agg = gu.grid_ckdnearest(gdfs, quantiles, ['return_period'])
-agg = agg.reset_index()
-agg.plot('return_period', legend=True)
+agg = gu.grid_ckdnearest(gdfs, quantiles, ['return_period'], k=1, aggfunc=max)
+sample = gdfs.join(agg['return_period'])
+sample.plot('return_period', legend=True)
+# %%
+def interpolate_row(row, rp_map):
+    """Raghav's interpolation."""
+    r_y = row['return_period']
+    rps = list(rp_map.values())
+    r_l = max([r for r in rps if r <= r_y])
+    r_u = min([r for r in rps if r > r_y])
+    d_l = row[f'flood_rp{str(r_l).zfill(4)}']
+    d_u = row[f'flood_rp{str(r_u).zfill(4)}']
+    print('lower:', r_l, 'upper:', r_u, 'd_l:', d_l, 'd_u:', d_u, 'r_y:', r_y)
+    eps = 1e-6
+    return d_l + (d_u - d_l) * (np.log(r_y+eps) - np.log(r_l+eps)) / (np.log(r_u+eps) - np.log(r_l+eps))
+
+# %%
+sample['d_y'] = sample.apply(interpolate_row, axis=1, args=(rp_map,))
+sample = sample.replace(0, np.nan)
+sample = sample.sort_values(by='d_y', ascending=True)
+# %%    
+fig, axs = plt.subplots(1, 4, figsize=(15, 5))
+sample.plot('return_period', legend=True, cmap='Spectral_r', ax=axs[0])
+sample.plot('flood_rp0002', legend=True, cmap='Blues', ax=axs[1])
+sample.plot('d_y', legend=True, cmap='Blues', ax=axs[2])
+sample.plot('flood_rp0250', legend=True, cmap='Blues', ax=axs[3])
+
+axs[0].set_title('Pixelwise return periods')
+axs[1].set_title('2-year return period')
+axs[2].set_title('Interpolated return period')
+axs[3].set_title('250-year return period')
+# %%
+sample['diff'] = sample['flood_rp0250'] - sample['flood_rp0002']
+sample.plot('diff', legend=True, cmap='Spectral_r')
 # %%
