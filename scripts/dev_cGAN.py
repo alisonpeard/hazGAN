@@ -11,7 +11,24 @@ data_source = "era5"
 cwd = os.getcwd()  # scripts directory
 wd = os.path.join(cwd, "..")  # hazGAN directory
 datadir = os.path.join(wd, "..", f"{data_source}_data")  # keep data folder in parent directory
-# %%
+# %% Define ECDF sums by multiplying by duration
+import pandas as pd
+
+def weibull(col: pd.Series):
+    return col.rank(method='first') / (len(col) + 1)
+
+data = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))
+data['ecdf_sum'] = data['ecdf'] * data['cluster.size']
+data['ecdf_sum'].hist(bins=50, color='lightgrey', edgecolor='k', density=True)
+data['ecdf(ecdf_sum)'] = weibull(data['ecdf_sum'])
+data['return_period'] = 1 / (1 - data['ecdf(ecdf_sum)'])
+# %% TODO: think about whether this actually makes sense
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+rps = [*data['return_period'].unique()]
+ax.hist(rps, bins=50, color='lightgrey', edgecolor='k', density=True)
+ax.set_yscale('log')
+# %% Define cGAN
 # load data
 [train_u, test_u], [train_x, test_x], [train_m, test_m], [train_z, test_z], params = hg.load_training(datadir, 1000, 'reflect', gumbel_marginals=True)
 

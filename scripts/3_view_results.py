@@ -31,7 +31,6 @@ config = wandb.config
 wgan = hg.WGAN(wandb.config, nchannels=2)
 wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generator.weights.h5"))
 wgan.generator.summary()
-
 # %% 
 if config.gumbel:
     # is it generating gumbel-distributed marginals?
@@ -64,7 +63,7 @@ fake_u = hg.unpad(wgan(nsamples=config.train_size), paddings).numpy()
     gumbel_marginals=False,
     numpy=True
 )
-
+hg.plot_generated_marginals(fake_u, vmin=None, vmax=None, runname=RUNNAME)
 # %% plot 100 images
 fig = hg.plot_one_hundred_images(fake_u, cmap="Spectral_r", vmin=0, vmax=1)
 fig = hg.plot_one_hundred_images(test_u, cmap="Spectral_r", suptitle="Test marginals", vmin=0, vmax=1)
