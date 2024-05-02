@@ -104,26 +104,3 @@ if __name__ == "__main__":
 
     tf.config.experimental.enable_op_determinism()  # removes stochasticity from individual operations
     main(wandb.config)
-# %% DEBUGGING --------------------------------------------------------------------------------------------
-# ---------------------------------------------------------------------------------------------------------
-wandb.init(settings=wandb.Settings(code_dir="."))  # saves snapshot of code as artifact
-runname = wandb.run.name
-rundir = os.path.join(wd, "wandb-runs", runname)
-
-
-wandb.config["seed"] = np.random.randint(0, 1e6)
-tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
-
-tf.config.experimental.enable_op_determinism()  # removes stochasticity from individual operations
-config = wandb.config
-
-[train_u, test_u], *_ = hg.load_training(datadir, config.train_size, 'reflect', gumbel_marginals=config.gumbel)
-train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
-test = tf.data.Dataset.from_tensor_slices(test_u).batch(config.batch_size)
-
-gan = getattr(hg, f"compile_{config.model}")(config, nchannels=2)
-#%%
-random_latent_vectors = tf.random.normal((config.batch_size, 100))
-# %%
-gan.generator(random_latent_vectors)
-# %%
