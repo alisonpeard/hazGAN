@@ -28,7 +28,7 @@ gdfs = None
 cols = []
 for file, rp in zip(files, rps):
     image = rio.open_rasterio(file)
-    scale_factor = 0.01 # upsample to save time while in dev --do this better once working
+    scale_factor = 0.1 # upsample to save time while in dev --do this better once working
     image = rio.open_rasterio(file)
     res = image.rio.resolution()
     image = image.rio.reproject(image.rio.crs, resolution=(res[0] / scale_factor, res[1] / scale_factor), resampling=Resampling.nearest)
@@ -75,7 +75,11 @@ sample = gdfs.join(agg['return_period'])
 sample.plot('return_period', legend=True)
 # %%
 def interpolate_row(row, rp_map):
-    """Raghav's interpolation."""
+    """
+    Logarithmic scaling between return periods.
+    
+    §JBA Global Flood Model Technical Report.
+    """
     r_y = row['return_period']
     rps = list(rp_map.values())
     r_l = max([r for r in rps if r <= r_y])
@@ -86,21 +90,31 @@ def interpolate_row(row, rp_map):
     eps = 1e-6
     return d_l + (d_u - d_l) * (np.log(r_y+eps) - np.log(r_l+eps)) / (np.log(r_u+eps) - np.log(r_l+eps))
 
+
 # %%
 sample['d_y'] = sample.apply(interpolate_row, axis=1, args=(rp_map,))
 sample = sample.replace(0, np.nan)
 sample = sample.sort_values(by='d_y', ascending=True)
-# %%    
-fig, axs = plt.subplots(1, 4, figsize=(15, 5))
-sample.plot('return_period', legend=True, cmap='Spectral_r', ax=axs[0])
-sample.plot('flood_rp0002', legend=True, cmap='Blues', ax=axs[1])
-sample.plot('d_y', legend=True, cmap='Blues', ax=axs[2])
-sample.plot('flood_rp0250', legend=True, cmap='Blues', ax=axs[3])
+# %%
+cmap = plt.cm.get_cmap('Blues', 6)
+fig, axs = plt.subplots(1, 4, figsize=(18, 3))
+sample.plot('return_period', legend=True, cmap='Reds', ax=axs[0], vmin=0, vmax=250)
+sample.plot('return_period', legend=True, cmap='Reds', ax=axs[1], vmin=0, vmax=250)
+sample.plot('return_period', legend=True, cmap='Reds', ax=axs[2], vmin=0, vmax=250)
+sample.plot('return_period', legend=True, cmap='Reds', ax=axs[3], vmin=0, vmax=250)
+sample.sort_values(by='flood_rp0000', ascending=True).plot('flood_rp0000', legend=True, cmap=cmap, ax=axs[1], vmin=0, vmax=5, alpha=.8)
+sample.plot('d_y', legend=True, cmap=cmap, ax=axs[2], vmin=0, vmax=5, alpha=.8)
+sample.sort_values(by='flood_rp0250', ascending=True).plot('flood_rp0250', legend=True, cmap=cmap, ax=axs[3], vmin=0, vmax=5, alpha=.8)
 
 axs[0].set_title('Pixelwise return periods')
-axs[1].set_title('2-year return period')
+axs[1].set_title('0-year return period')
 axs[2].set_title('Interpolated return period')
 axs[3].set_title('250-year return period')
+
+for ax in axs:
+    ax.set_xlabel('Longitude')
+    ax.set_ylabel('Latitude')
+    ax.label_outer()
 # %%
 sample['diff'] = sample['flood_rp0250'] - sample['flood_rp0002']
 sample.plot('diff', legend=True, cmap='Spectral_r')
