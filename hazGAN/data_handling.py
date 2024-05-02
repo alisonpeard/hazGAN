@@ -13,6 +13,11 @@ def load_datasets(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
 
 
 def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22), numpy=False, gumbel_marginals=False):
+    """
+    Returns:
+    --------
+    [train_u, test_u], [train_x, test_x], [train_m, test_m], [train_z, test_z], params
+    """
     data = np.load(os.path.join(datadir, "data.npz"))
     X = tf.image.resize(data["X"], image_shape)
     U = tf.image.resize(data["U"], image_shape)
