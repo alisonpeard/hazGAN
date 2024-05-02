@@ -5,7 +5,7 @@ library(lubridate)
 library(dplyr)
 require(ggplot2)
 library(extRemes)
-filename <- 'data_1950_2022.csv'
+filename <- 'data_1950_2022.parquet'
 wd <- "/Users/alison/Documents/DPhil/multivariate"
 indir <- paste0(wd, '/', 'era5_data')
 r.func <- max # https://doi.org/10.1111/rssb.12498 for theory
