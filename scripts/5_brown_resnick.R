@@ -1,27 +1,26 @@
 # copying /Users/alison/Documents/DPhil/multivariate/_archive/evtGAN_code&data_download04082023/Maxima_rain/evt_rain.R
 # Example from vignette
-rm(rs = list())
+rm(list = ls())
+library(arrow)
+library(ncdf4)
 library(SpatialExtremes)
 
-## 1. Smith's model
-set.seed(8)
-x <- y <- seq(0, 10, length = 100)
-coord <- cbind(x, y)
-data <- rmaxstab(1, coord, "gauss", cov11 = 9/8, cov12 = 0, cov22 = 9/8,
-                 grid = TRUE)
-##We change to unit Gumbel margins for visibility
-filled.contour(x, y, log(data), color.palette = terrain.colors)
+# 100 randomly-selected locations
+load('/Users/alison/Documents/DPhil/multivariate/_archive/evtGAN_code&data_download04082023/Maxima/Data/ii.rdata')
 
-## 2. Schlather's model
-data <- rmaxstab(1, coord, cov.mod = "powexp", nugget = 0, range = 3,
-                 smooth = 1, grid = TRUE)
-filled.contour(x, y, log(data), color.palette = terrain.colors)
+coord = read_parquet('/Users/alison/Documents/DPhil/multivariate/era5_data/coords.parquet')
+coord = as.matrix(coord[,c('latitude', 'longitude')])
 
-# Define the coordinate of each location
-n.site <- 30
-locations <- matrix(runif(2 * n.site, 0, 10), ncol = 2)
-colnames(locations) <- c("lon", "lat")
 
-## 3. Brown--Resnick's model **** Only available for non gridded points currently ****
-data <- rmaxstab(1, coord, cov.mod = "brown", range = 3, smooth = 0.5, grid=TRUE)
-filled.contour(x, y, data, color.palette = terrain.colors)
+
+######### temp data from paper ######################################
+nc_data <- nc_open('/Users/alison/Documents/DPhil/multivariate/_archive/evtGAN_code&data_download04082023/Maxima/Data/temperature_maxima.nc')
+lon <- ncvar_get(nc_data, "lon")
+lat <- ncvar_get(nc_data, "lat", verbose = F)
+t <- ncvar_get(nc_data, "time")
+temp <- ncvar_get(nc_data, "MaxTemp")
+dim(temp) <- c(18*22,2000)
+temp <- temp-273.15
+train <- temp[,1:50]
+test <- temp[,51:2000]
+
