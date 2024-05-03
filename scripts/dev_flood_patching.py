@@ -63,7 +63,7 @@ U = data['U'][t, ..., 0].ravel()
 lat = data['lat'].ravel()
 lon = data['lon'].ravel()
 quantiles = gpd.GeoDataFrame({'quantile': U}, geometry=gpd.points_from_xy(lon, lat)).set_crs(4326)
-quantiles['return_period'] = 1 / (1 - quantiles['quantile']) # TODO: check
+quantiles['return_period'] = 1 / (1 - (quantiles['quantile'])) # TODO: check
 fig, ax = plt.subplots()
 quantiles.plot('return_period', legend=True, ax=ax)
 aoi = gpd.GeoDataFrame([], geometry=[box(*gdf.total_bounds)]).set_crs(4326)
