@@ -20,7 +20,7 @@ hist_kwargs = {"density": True, "color": "lightgrey", "alpha": 0.6, "edgecolor":
 
 # %%
 wd = "/Users/alison/Documents/DPhil/multivariate/hazGAN"
-RUNNAME = "_240502-normal1000"
+RUNNAME = "_240430-gumbel1000"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 cmaps = ["YlOrRd", "PuBu", "YlGnBu"]
@@ -38,7 +38,8 @@ if config.gumbel:
     from scipy.stats import gumbel_r
     n = config.train_size
     i, j, c = np.random.randint(18), np.random.randint(22), 0  # choose random pixel
-    y_ij = wgan.generator(tf.random.normal((n, 100))).numpy()[:, i, j, c]
+    latent_vector = wgan.latent_space_distn((n, 100))
+    y_ij = wgan.generator(latent_vector).numpy()[:, i, j, c]
     u_ij = wgan(nsamples=n).numpy()[:, i, j, c]
 
     # compare generated to standard gumbel distribution
