@@ -64,12 +64,12 @@ def main(config):
     train, test = hg.load_datasets(datadir, config.train_size, 'reflect',
                                    gumbel_marginals=config.gumbel,
                                    batch_size=config.batch_size,
-                                   conditional=(config.model == "cGAN"))
+                                   conditional=(config.model == "cgan"))
 
     # train test callbacks
-    chi_score = hg.ChiScore({"train": next(iter(train)), "test": next(iter(test))},
-                            frequency=config.chi_frequency, gumbel_margins=config.gumbel)
-    early_stopping = EarlyStopping(monitor="g_loss_raw", patience=20, mode="min")
+    # chi_score = hg.ChiScore({"train": next(iter(train)), "test": next(iter(test))},
+    #                         frequency=config.chi_frequency, gumbel_margins=config.gumbel)
+    # early_stopping = EarlyStopping(monitor="g_loss_raw", patience=20, mode="min")
 
     # compile
     with tf.device("/gpu:0"):
@@ -90,7 +90,7 @@ def main(config):
     paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
     train_u = hg.unpad(train_u, paddings).numpy()
     test_u = hg.unpad(test_u, paddings).numpy()
-    fake_u = hg.unpad(gan(nsamples=1000), paddings).numpy()
+    fake_u = hg.unpad(gan(condition=np.repeat(0.9, 1000)), paddings).numpy()
     fig = hg.plot_generated_marginals(fake_u, vmin=None, vmax=None, runname=runname)
     log_image_to_wandb(fig, f"generated_marginals", imdir)
 

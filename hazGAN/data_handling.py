@@ -10,8 +10,8 @@ def load_datasets(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
                   conditional=False):
     [train_u, test_u], [train_x, test_x], [train_m, test_m], [train_z, test_z], params = load_training(datadir, ntrain, padding_mode, image_shape, gumbel_marginals=gumbel_marginals)
     if conditional:
-        train = (train_u, train_z)
-        test = (test_u, test_z)
+        train_u = (train_u, train_z)
+        test_u = (test_u, test_z)
     train = tf.data.Dataset.from_tensor_slices(train_u).batch(batch_size)
     test = tf.data.Dataset.from_tensor_slices(test_u).batch(batch_size)
     return train, test
@@ -40,8 +40,8 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
     test_x = X[ntrain:, ...]
     train_m = M[:ntrain, ...]
     test_m = M[ntrain:, ...]
-    train_z = z[:ntrain]
-    test_z = z[ntrain:]
+    train_z = tf.cast(z[:ntrain], dtype=tf.float32)
+    test_z = tf.cast(z[ntrain:], dtype=tf.float32)
 
     if gumbel_marginals:
         train_u = gumbel(train_u)

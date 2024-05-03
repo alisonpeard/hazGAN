@@ -1,5 +1,7 @@
 """
-Wasserstein GAN with gradient penalty (WGAN-GP).
+Conditional Wasserstein GAN with gradient penalty (WGAN-GP).
+
+Would it be better to build the condition reshaping into generator and critic?
 
 References:
 ..[1] Gulrajani (2017) https://github.com/igul222/improved_wgan_training/blob/master/gan_mnist.py 
@@ -142,8 +144,10 @@ class cGAN(keras.Model):
         self.d_optimizer.build(self.critic.trainable_variables)
         self.g_optimizer.build(self.generator.trainable_variables)
 
-    def call(self, nsamples=5):
+    def call(self, condition):
+        nsamples = len(condition)
         random_latent_vectors = self.latent_space_distn((nsamples, self.latent_dim))
+        random_latent_vectors = ops.concatenate([random_latent_vectors, condition[:, None]], axis=1)
         raw = self.generator(random_latent_vectors, training=False)
         if self.gumbel:
             return inv_gumbel(raw)
@@ -157,11 +161,11 @@ class cGAN(keras.Model):
 
         # add condition to latent vectors and data
         random_latent_vectors = ops.concatenate([random_latent_vectors, condition[:, None]], axis=1)
-        condition = ops.repeat(condition[..., None, None], repeats=[data.shape[1] * data.shape[2]])
-        condition = ops.reshape(condition, (-1, data.shape[1], data.shape[2], 1))
-        data = ops.concatenate([data, condition], axis=-1)
-
+        condition_2d = ops.repeat(condition[..., None, None], repeats=[data.shape[1] * data.shape[2]])
+        condition_2d = ops.reshape(condition_2d, (-1, data.shape[1], data.shape[2], 1))
+        data = ops.concatenate([data, condition_2d], axis=-1)
         fake_data = self.generator(random_latent_vectors, training=False)
+        fake_data = ops.concatenate([fake_data, condition_2d], axis=-1)
 
         # train critic
         for _ in range(self.config.training_balance):
@@ -187,8 +191,10 @@ class cGAN(keras.Model):
 
         # train generator
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
+        random_latent_vectors = ops.concatenate([random_latent_vectors, condition[:, None]], axis=1)
         with tf.GradientTape() as tape:
             generated_data = self.generator(random_latent_vectors)
+            generated_data = ops.concatenate([generated_data, condition_2d], axis=-1)
             score = self.critic(generated_data, training=False)
             g_loss_raw = -tf.reduce_mean(score)
             #g_penalty = self.lambda_ * chi_loss(data, generated_data) # extremal correlation structure
