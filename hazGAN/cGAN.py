@@ -144,8 +144,15 @@ class cGAN(keras.Model):
         self.d_optimizer.build(self.critic.trainable_variables)
         self.g_optimizer.build(self.generator.trainable_variables)
 
-    def call(self, condition):
-        nsamples = len(condition)
+    def call(self, nsamples=1, condition=0.9):
+        """
+        If condition is array-like this takes precendence.
+        """
+        if hasattr(condition, "__len__"):
+            condition = tf.convert_to_tensor(condition, dtype=tf.float32)
+            nsamples = len(condition)
+        else:
+            condition = tf.repeat(condition, nsamples)
         random_latent_vectors = self.latent_space_distn((nsamples, self.latent_dim))
         random_latent_vectors = ops.concatenate([random_latent_vectors, condition[:, None]], axis=1)
         raw = self.generator(random_latent_vectors, training=False)
