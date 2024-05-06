@@ -1,44 +1,39 @@
-# copying /Users/alison/Documents/DPhil/multivariate/_archive/evtGAN_code&data_download04082023/Maxima_rain/evt_rain.R
-# Example from vignette
+# fit and sample from Brown-Resnick
 rm(list = ls())
 library(arrow)
 library(ncdf4)
 library(mvPot)
 library(SpatialExtremes)
 
-# 100 randomly-selected locations
-load('/Users/alison/Documents/DPhil/multivariate/_archive/evtGAN_code&data_download04082023/Maxima/Data/ii.rdata')
-coord = read_parquet('/Users/alison/Documents/DPhil/multivariate/era5_data/coords.parquet')
-coord = as.matrix(coord[,c('latitude', 'longitude')])
-
-
+channel <- 1
+ntrain <- 1000
+outdir <- '/Users/alison/Documents/DPhil/multivariate/results/brown_resnick/'
 
 extCoeffBR <- function(h, par){
   s=par[1]
   a=par[2]
   gamma=(h^a)/s
   2 - 2*pnorm(sqrt(gamma)/2)
-}
-BRIsoFit <- function(data, coord){
-  emp <- fitextcoeff(t(data), as.matrix(coord), estim="ST",marge="emp",plot=F)$ext.coeff
+} # from https://doi.org/10.48550/arXiv.2111.00267
+BRIsoFit <- function(data,coord){
+  emp <- fitextcoeff(t(data), as.matrix(coord), estim="ST", marge="emp",plot=F)$ext.coeff
   
   BREst <- function(theta,emp) {
-    # from Boulaguiem (2020) but modified to match Section 2.1.2?
-    s=theta[1]
+    lambda=theta[1]
     alfa=theta[2]
     dist=emp[,1]
     est=emp[,2]
     
     z=sapply(dist, function(x) {
-      gamma=(x^alfa)/s
+      gamma=(x^alfa)*lambda
       2*pnorm(sqrt(gamma)/2)
     })
     
-    sum((est+z)^2) # changed sign --Alison
+    sum((est-z)^2)
   }
   
-  list(par=nlminb(start=c(1,1), BREst, lower=c(0,0), upper=c(Inf,2), emp=emp)$par,dist=emp[,1])
-} # modified from paper
+  list(par=nlminb(start=c(1,1), BREst, lower=c(0,0), upper=c(Inf,2), emp=emp)$par, dist=emp[,1])
+}
 BRIsoSim <- function(n, par, coord){
   s=par[1]
   alfa=par[2]
@@ -56,77 +51,47 @@ BRIsoSim <- function(n, par, coord){
   simu=t(z)
 }
 
-
-
-par <- BRIsoFit(train, coord)$par
-sample <- BRIsoSim(1000, par, coord)
-
-
-
-######### Boulaguiem (2020) ref ######################################
-load('/Users/alison/Documents/DPhil/multivariate/_archive/evtGAN_code&data_download04082023/Maxima/Data/coord_EU.rdata')
-coord_EU = as.matrix(coord_EU)
-nc_data <- nc_open('/Users/alison/Documents/DPhil/multivariate/_archive/evtGAN_code&data_download04082023/Maxima/Data/temperature_maxima.nc')
+load(paste0(outdir, 'ii.rdata'))
+coord = read_parquet('/Users/alison/Documents/DPhil/multivariate/era5_data/coords.parquet')
+coord = as.matrix(coord[,c('latitude', 'longitude')])
+nc_data <- nc_open('/Users/alison/Documents/DPhil/multivariate/era5_data/data.nc')
 lon <- ncvar_get(nc_data, "lon")
-lat <- ncvar_get(nc_data, "lat", verbose = F)
+lat <- ncvar_get(nc_data, "lat")
 t <- ncvar_get(nc_data, "time")
-temp <- ncvar_get(nc_data, "MaxTemp")
-dim(temp) <- c(18*22,2000)
-temp <- temp-273.15
-train <- temp[,1:50]
-test <- temp[,51:2000]
-test_ECs = fitextcoeff(t(test[ii,]), coord_EU[ii,], plot=T)
-emp <- fitextcoeff(t(test[ii,]), as.matrix(coord_EU[ii,]), estim = "ST",marge="emp",plot=T)$ext.coeff
+U <- ncvar_get(nc_data, "U")[channel,,,]
+dim(U) <- c(18*22,2715)
+frechet <- -1 / log(U) # transform to unit Fréchet
+train <- frechet[,1:ntrain]
+test <- frechet[,(ntrain+1):2715]
 
-
-BRIsoSim <- function(n,par,coord){
-  s=par[1]
-  alfa=par[2]
-  
-  vario <- function(h){
-    h=as.matrix(h)
-    1/2 * s*(norm(h,type = "2"))^alfa
-  }
-  #loc <- expand.grid(1:4, 1:4)
-  simu = simulBrownResnick(n,as.data.frame(coord),vario)
-  z=rbind()
-  for(i in 1:length(simu)) {
-    z=rbind(z,simu[[i]])
-  }
-  simu=t(z)
-}
-extCoeffBR <- function(dist,par){
-  lambda=par[1]
-  alfa=par[2]
-  gamma=lambda*dist^alfa
-  2*pnorm(sqrt(gamma)/2)
-}
-
-ppp <- BRIsoFit(test[ii,],coord_EU[ii,])
+# fit ECs
+emp <- fitextcoeff(t(test[ii,]), as.matrix(coord[ii,]), estim="ST", marge="frech", plot=T)#$ext.coeff
+ppp <- BRIsoFit(test[ii,], coord[ii,])
 dist_ppp <- ppp$dist
-par_temp <- ppp$par
-yyy_temp <- sapply(dist_ppp,function(x) extCoeffBR(x,par_temp))
+par_U <- ppp$par;par_U
+yyy_U <- sapply(dist_ppp, function(x) extCoeffBR(x, par_U))
+plot(dist_ppp, yyy_U)
 
-# voriomat for spectral dist
-varMat <- function(coord,par){
-  vario <- function(h,par){
-    lambda=par[1]
-    alfa=par[2]
-    h=as.matrix(h)
-    1/2 * lambda*(norm(h,type = "2"))^alfa
-  }
-  dim <- nrow(coord)
-  coord <- as.data.frame(coord)
-  dists <- lapply(1:ncol(coord), function(i) {
-    outer(coord[, i], coord[, i], "-")
-  })
-  computeVarMat <- sapply(1:length(dists[[1]]), function(i) {
-    h <- rep(0, ncol(coord))
-    for (j in 1:ncol(coord)) {
-      h[j] = dists[[j]][i]
-    }
-    vario(h,par)
-  })
-  matrix(computeVarMat, dim, dim)
-}
-varioMat_temp <- varMat(coord_EU,par_temp)
+# sample new to compare
+nsamples <- 2
+par <- BRIsoFit(train, coord)$par # fit on train sample then sample new
+sample <- BRIsoSim(nsamples, par_U, coord)
+dim(sample) <- c(22, 18, nsamples)
+sample_U <- exp(-1/sample)
+lat <- unique(coord[,1])
+lon <- unique(coord[,2])
+lat <- ncdim_def("latitude", "degrees_north", lat)
+lon <- ncdim_def("longitude", "degrees_east", lon)
+index <- ncdim_def('sample', 'index', 1:nsamples, unlim=TRUE)
+mv <- -999
+var <- ncvar_def("marginals", "uniform", list(lon, lat, index), longname="Brown-Resnick samples of U10 with uniform marginals", mv)
+
+channels = c('u10', 'mslp')
+filename <- paste0(outdir, 'sample_', channels[channel], '.nc')
+
+ncnew <- nc_create(filename, list(var))
+ncvar_put(ncnew, var, sample_U)
+nc_close(ncnew)
+
+ncnew <- nc_open(filename)
+dim(ncvar_get(ncnew, "marginals"))
