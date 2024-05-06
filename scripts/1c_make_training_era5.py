@@ -11,7 +11,7 @@ from calendar import month_name as month
 channels = ["u10", "mslp"]
 wd = "/Users/alison/Documents/DPhil/multivariate"
 datadir = os.path.join(wd, "era5_data")
-df = pd.read_csv(os.path.join(datadir, f"fitted_data.csv"))
+df = pd.read_parquet(os.path.join(datadir, f"fitted_data.parquet"))
 coords = gpd.read_file(os.path.join(datadir, "coords.gpkg"))
 df = df.merge(coords, on="grid")
 df.columns = [col.replace(".", "_") for col in df.columns]
@@ -20,7 +20,7 @@ df["extremeness"] = df["extremeness_u10"]
 df = df.drop(columns=["extremeness_u10", "extremeness_mslp"])
 
 # add event sizes
-events = (pd.read_csv(os.path.join(datadir, "event_data.csv"))[["cluster", "cluster.size"]].groupby("cluster").mean())
+events = (pd.read_parquet(os.path.join(datadir, "event_data.parquet"))[["cluster", "cluster.size"]].groupby("cluster").mean())
 events = events.to_dict()["cluster.size"]
 df["size"] = df["cluster"].map(events)
 gdf = gpd.GeoDataFrame(df, geometry="geometry").set_crs("EPSG:4326")
@@ -137,5 +137,25 @@ lon = gdf_params["longitude"].values.reshape([ny, nx])[::-1, ...]
 params.shape
 # %%
 np.savez(os.path.join(datadir, f"data.npz"), X=X, U=U, M=M, z=z,lat=lat, lon=lon, t=t, s=s, params=params)
-# %%
+# %% Save in netcdf format
+import xarray as xr
 
+events = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))
+times = pd.to_datetime(events[['cluster', 'time']].groupby('cluster').first()['time'].reset_index(drop=True))
+
+ds = xr.Dataset({'U': (['time', 'lat', 'lon', 'channel'], U),
+                 'X': (['time', 'lat', 'lon', 'channel'], X),
+                 'M': (['time', 'lat', 'lon', 'channel'], M),
+                 'z': (['time'], z),
+                 's': (['time'], s),
+                 'params': (['y', 'x', 'param', 'channel'], params)
+                 },
+                coords={'lat': (['lat'], lat[:, 0]),
+                        'lon': (['lon'], lon[0, :]),
+                        'time': times,
+                        'channel': channels
+                 },
+                 attrs={'crs': 'EPSG:4326'})
+ds.isel(time=1, channel=0).U.plot(cmap='Spectral_r')
+ds.to_netcdf(os.path.join(datadir, "data.nc"))
+# %%
