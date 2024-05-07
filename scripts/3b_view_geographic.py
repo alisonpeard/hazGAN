@@ -96,7 +96,34 @@ data = xr.open_dataset("/Users/alison/Documents/DPhil/multivariate/era5_data/dat
 ntrain = 1000
 grid_idx = samples['grid'].values
 #%% match params to grid numbers
+from hazGAN import POT
+
 params = data.params.values[..., channel].reshape(18*22, 3)[grid_idx, ...]
-X = data.X.values[:ntrain, ..., channel].reshape(18*22, ntrain)[..., grid_idx]
-U = data.U.values[:ntrain, ..., channel].reshape(18*22, ntrain)[..., grid_idx]
+X = data.X.values[:ntrain, ..., channel].reshape(18*22, ntrain)[grid_idx, ...]
+U = data.U.values[:ntrain, ..., channel].reshape(18*22, ntrain)[grid_idx, ...]
+
+sample_arr = samples.loc[:,'1':].values
+sample_arr = sample_arr.T[..., np.newaxis]
+X = X.T[..., np.newaxis]
+U = U.T[..., np.newaxis]
+params = params[..., np.newaxis]
+result = POT.inv_probability_integral_transform(sample_arr, X, U, params, gumbel_margins=False).squeeze()
+# %%
+samples_X = samples.loc[:, :'lat'].copy()
+samples_X = pd.concat([samples_X, pd.DataFrame(result.T, columns=np.arange(1, 1001).astype(str))], axis=1).set_index('obs_pt')
+
+# %% look at Pearson correlation between observation points
+samples_transpose = samples_X.T.loc['1':, :]
+samples_transpose.corr()
+# %% make heatmap of correlations
+import seaborn as sns
+fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+sns.heatmap(samples_transpose.corr(), ax=ax, cmap='magma')
+
+# %%
+from hazGAN import scatter_density2
+x = samples_X.loc['haldia', '1':].values
+y = samples_X.loc['kolkata', '1':].values
+fig, ax = plt.subplots(1, 1, figsize=(5, 4))
+scatter_density2(x, y, ax=ax, cmap='magma')
 # %%
