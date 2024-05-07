@@ -13,7 +13,7 @@ def inv_probability_integral_transform(marginals, x, y, params=None, gumbel_marg
     Args:
     -----
     marginals : np.array
-        Uniform marginals.
+        Uniform marginals with dimensions [n, h, w, c] or [n, h * w, c].
     x : np.array
         Data that original quantiles were calculated from.
     y : np.array
@@ -21,22 +21,25 @@ def inv_probability_integral_transform(marginals, x, y, params=None, gumbel_marg
     params : np.array
         Parameters of fitted GPD distribution.
     """
-    assert marginals.ndim == 4, "Function takes rank 4 arrays"
-    n, h, w, c = marginals.shape
-
     marginals = inv_gumbel(marginals) if gumbel_margins else marginals
 
-    assert x.shape[1:] == (h,w,c,), f"Marginals and x have different dimensions: {x.shape[1:]} != {h, w, c}."
-    assert y.shape[1:] == (h,w, c,), f"Marginals and y have different dimensions: {y.shape[1:]} != {h, w, c}."
-    assert (x.shape[0] == tf.shape(y)[0]), f"x and y have different dimensions: {x.shape[0]} != {y.shape[0]}."
+    assert x.shape[1:] == marginals.shape[1:], f"Marginals and x have different dimensions: {marginals.shape[1:]} != {x.shape[1:]}."
+    assert y.shape[1:] == marginals.shape[1:], f"Marginals and y have different dimensions: {marginals.shape[1:]} != {y.shape[1:]}."
+    assert (x.shape[0] == tf.shape(y)[0]), f"x and y have different number of samples: {x.shape[0]} != {y.shape[0]}."
 
-    marginals = marginals.reshape(n, h * w, c)
-    x = x.reshape(len(x), h * w, c)
-    y = y.reshape(len(y), h * w, c)
-
-    if params is not None:
-        assert params.shape == (h,w,3,c,), "Marginals and parameters have different dimensions."
-        params = params.reshape(h * w, 3, c)
+    original_shape = marginals.shape
+    if marginals.ndim == 4:
+        n, h, w, c = marginals.shape
+        hw = h * w
+        marginals = marginals.reshape(n, hw, c)
+        x = x.reshape(len(x), hw, c)
+        y = y.reshape(len(y), hw, c)
+        if params is not None:
+            params = params.reshape(hw, 3, c)
+    elif marginals.ndim == 3:
+        n, hw, c = marginals.shape
+    else:
+        raise ValueError("Marginals must have dimensions [n, h, w, c] or [n, h * w, c].")      
 
     quantiles = []
     for channel in range(c):
@@ -47,11 +50,10 @@ def inv_probability_integral_transform(marginals, x, y, params=None, gumbel_marg
                     marginals[:, j, channel],
                     x[:, j, channel], y[:, j, channel]
                     )
-                    for j in range(h * w)
+                    for j in range(hw)
                 ]
             ).T
         else:
-            thresh = params[..., 0, channel]
             q = np.array(
             [
                 empirical_quantile(
@@ -60,12 +62,12 @@ def inv_probability_integral_transform(marginals, x, y, params=None, gumbel_marg
                     y[:, j, channel],
                     params[j, ..., channel]
                 )
-                for j in range(h * w)
+                for j in range(hw)
             ]
         ).T
         quantiles.append(q)
     quantiles = np.stack(quantiles, axis=-1)
-    quantiles = quantiles.reshape(n, h, w, c)
+    quantiles = quantiles.reshape(*original_shape)
     return quantiles
 
 
