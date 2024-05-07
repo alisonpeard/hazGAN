@@ -16,7 +16,7 @@ extCoeffBR <- function(h, par){
   2 - 2*pnorm(sqrt(gamma)/2)
 } # from https://doi.org/10.48550/arXiv.2111.00267
 BRIsoFit <- function(data,coord){
-  emp <- fitextcoeff(t(data), as.matrix(coord), estim="ST", marge="emp",plot=F)$ext.coeff
+  emp <- fitextcoeff(t(data), as.matrix(coord), estim="ST", marge="frech",plot=F)$ext.coeff
   
   BREst <- function(theta,emp) {
     lambda=theta[1]
@@ -51,47 +51,55 @@ BRIsoSim <- function(n, par, coord){
   simu=t(z)
 }
 
-load(paste0(outdir, 'ii.rdata'))
-coord = read_parquet('/Users/alison/Documents/DPhil/multivariate/era5_data/coords.parquet')
-coord = as.matrix(coord[,c('latitude', 'longitude')])
+coord <- read_parquet('/Users/alison/Documents/DPhil/multivariate/era5_data/coords.parquet')
+coord <- as.matrix(coord[,c('latitude', 'longitude')])
 nc_data <- nc_open('/Users/alison/Documents/DPhil/multivariate/era5_data/data.nc')
 lon <- ncvar_get(nc_data, "lon")
 lat <- ncvar_get(nc_data, "lat")
 t <- ncvar_get(nc_data, "time")
 U <- ncvar_get(nc_data, "U")[channel,,,]
+heatmap(U[,,1], Rowv=NA, Colv=NA)
+
 dim(U) <- c(18*22,2715)
 frechet <- -1 / log(U) # transform to unit Fréchet
 train <- frechet[,1:ntrain]
 test <- frechet[,(ntrain+1):2715]
 
 # fit ECs
-emp <- fitextcoeff(t(test[ii,]), as.matrix(coord[ii,]), estim="ST", marge="frech", plot=T)#$ext.coeff
-ppp <- BRIsoFit(test[ii,], coord[ii,])
-dist_ppp <- ppp$dist
-par_U <- ppp$par;par_U
-yyy_U <- sapply(dist_ppp, function(x) extCoeffBR(x, par_U))
-plot(dist_ppp, yyy_U)
+test_ECs <- fitextcoeff(t(test), as.matrix(coord), estim="ST", marge="frech", plot=T)$ext.coeff
+train_ECs <- fitextcoeff(t(train), as.matrix(coord), estim="ST", marge="frech", plot=T)$ext.coeff
 
-# sample new to compare
-nsamples <- 2
-par <- BRIsoFit(train, coord)$par # fit on train sample then sample new
-sample <- BRIsoSim(nsamples, par_U, coord)
-dim(sample) <- c(22, 18, nsamples)
+n <- 18 * 22
+npairs <- n * (n - 1) / 2 # i.e. (n C 2)
+indices <- list()
+for(i in 1:(n-1)){
+  for(j in (i+1):n){
+    indices <- rbind(indices, c(i, j))
+  }
+}
+
+# save for later
+ECs <- cbind(indices, test_ECs)
+ECs <- cbind(ECs, train_ECs[,'ext.coeff'])
+colnames(ECs) <- c('i', 'j', 'distance', 'test_EC', 'train_EC')
+ECs <- data.frame(t(apply(ECs, 1, unlist)))
+write_parquet(ECs, sink=paste0(outdir, 'ECs.parquet'))
+
+# now fit to train data and sample for observation points (try for all 396 points later)
+ops <- read_parquet("/Users/alison/Documents/DPhil/multivariate/era5_data/ops.parquet")
+ii <- ops$grid
+
+nsamples <- ntrain
+fit <- BRIsoFit(train[ii,], coord[ii,])
+par_U <- fit$par # fit on train sample then sample new
+sample <- BRIsoSim(nsamples, par_U, coord[ii,])
 sample_U <- exp(-1/sample)
-lat <- unique(coord[,1])
-lon <- unique(coord[,2])
-lat <- ncdim_def("latitude", "degrees_north", lat)
-lon <- ncdim_def("longitude", "degrees_east", lon)
-index <- ncdim_def('sample', 'index', 1:nsamples, unlim=TRUE)
-mv <- -999
-var <- ncvar_def("marginals", "uniform", list(lon, lat, index), longname="Brown-Resnick samples of U10 with uniform marginals", mv)
 
-channels = c('u10', 'mslp')
-filename <- paste0(outdir, 'sample_', channels[channel], '.nc')
+head(ops)
+dim(sample_U)
+sample.df <- cbind(ops, sample_U)
 
-ncnew <- nc_create(filename, list(var))
-ncvar_put(ncnew, var, sample_U)
-nc_close(ncnew)
+channels <- c('u10', 'mslp')
+write_parquet(sample.df, paste0(outdir, 'samples_', channels[channel], '.parquet'))
 
-ncnew <- nc_open(filename)
-dim(ncvar_get(ncnew, "marginals"))
+              
