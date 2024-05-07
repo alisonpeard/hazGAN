@@ -154,7 +154,8 @@ ds = xr.Dataset({'U': (['time', 'lat', 'lon', 'channel'], U),
                 coords={'lat': (['lat'], lat[:, 0]),
                         'lon': (['lon'], lon[0, :]),
                         'time': times,
-                        'channel': channels
+                        'channel': channels,
+                        'param': ['shape', 'loc', 'scale']
                  },
                  attrs={'crs': 'EPSG:4326', 'u10': '10m wind speed', 'mslp': 'mean sea level pressure'})
 ds.isel(time=1, channel=0).U.plot(cmap='Spectral_r')
