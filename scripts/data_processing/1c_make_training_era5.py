@@ -4,6 +4,7 @@ os.environ["USE_PYGEOS"] = "0"
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import xarray as xr
 import matplotlib.pyplot as plt
 from calendar import month_name as month
 
@@ -21,7 +22,7 @@ df["extremeness"] = df["extremeness_u10"]
 df = df.drop(columns=["extremeness_u10", "extremeness_mslp"])
 
 # add event sizes
-events = (pd.read_parquet(os.path.join(datadir, "event_data.parquet"))[["cluster", "cluster.size"]].groupby("cluster").mean())
+events = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))[["cluster", "cluster.size"]].groupby("cluster").mean()
 events = events.to_dict()["cluster.size"]
 df["size"] = df["cluster"].map(events)
 gdf = gpd.GeoDataFrame(df, geometry="geometry").set_crs("EPSG:4326")
@@ -50,10 +51,6 @@ fig.suptitle(f"Fit for ERA5 {var.upper()}, N={gdf['cluster'].nunique()}")
 
 print(gdf[gdf[f"p_{var}"] < 0.1]["grid"].nunique(), "significant p-values")
 # %%
-gdf["grid"].nunique()
-fig = gdf[[f"p_{var}", "grid"]].groupby("grid").mean().hist(color="lightgrey", bins=15, edgecolor="k")
-# %%
-
 monthly_medians = pd.read_csv(os.path.join(datadir, "monthly_medians.csv"), index_col="month")
 assert monthly_medians.groupby(['month', 'grid']).count().max().max() == 1, "Monthly medians not unique"
 monthly_medians = monthly_medians.groupby(["month", "grid"]).mean().reset_index()
@@ -65,99 +62,78 @@ for var in channels:
     assert n == len(gdf), "Merge failed"
     del gdf[f'month_{var}']
 
-
-# %%
 # use latitude and longitude columns to label grid points in (i,j) format
 gdf["latitude"] = gdf["geometry"].apply(lambda x: x.y)
 gdf["longitude"] = gdf["geometry"].apply(lambda x: x.x)
 gdf = gdf.sort_values(["latitude", "longitude", "cluster"], ascending=[True, True, True])
 gdf.head()
-# %%
+# %% make netcdf file
 nchannels = len(channels)
-# get dimensions
 T = gdf["cluster"].nunique()
 nx = gdf["longitude"].nunique()
 ny = gdf["latitude"].nunique()
 
 # make training tensors
-X = gdf[channels].values.T.reshape([nchannels, ny, nx, T])[:, ::-1, :, :]
-U = gdf[[f"ecdf_{c}" for c in channels]].values.T.reshape([nchannels, ny, nx, T])[:, ::-1, :, :]
-M = gdf[[f"{c}_median" for c in channels]].values.T.reshape([nchannels, ny, nx, T])[:, ::-1, :, :]
-X = np.swapaxes(X, 0, -1)
-U = np.swapaxes(U, 0, -1)
-M = np.swapaxes(M, 0, -1)
-z = gdf[["cluster", "extremeness"]].groupby("cluster").mean().values.reshape([T])
-t = gdf[["cluster"]].groupby("cluster").mean().reset_index().values.reshape([T])
-s = gdf[["cluster", "size"]].groupby("cluster").mean().values.reshape([T])
-# %%
-i = np.random.uniform(0, T, 1).astype(int)[0]
-fig, axs = plt.subplots(1, 2, figsize=(8, 4))
-axs[0].imshow(U[i, ..., 0], vmin=0, vmax=1)
-axs[0].set_title(f"Channel {0}")
-axs[1].imshow(U[i, ..., 1], vmin=0, vmax=1)
-axs[1].set_title(f"Channel {1}")
-fig.suptitle(f"Pixel {i}")
+events = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))
+times = pd.to_datetime(events[['cluster', 'time']].groupby('cluster').first()['time'].reset_index(drop=True))
+gdf = gdf.sort_values(["cluster", "latitude", "longitude"], ascending=[True, True, True]) # [T, i, j, channel]
+grid = gdf["grid"].unique().reshape([ny, nx])
+lat = gdf["latitude"].unique()
+lon = gdf["longitude"].unique()
+X = gdf[channels].values.reshape([T, ny, nx, nchannels])
+U = gdf[[f"ecdf_{c}" for c in channels]].values.reshape([T, ny, nx, nchannels])
+M = gdf[[f"{c}_median" for c in channels]].values.reshape([T, ny, nx, nchannels])
+z = gdf[["cluster", "extremeness"]].groupby("cluster").mean().values.reshape(T)
+s = gdf[["cluster", "size"]].groupby("cluster").mean().values.reshape(T)
 
-vmin0 = M[i, ..., 0].min()
-vmax0 = M[i, ..., 0].max()
-vmin1 = M[i, ..., 1].min()
-vmax1 = M[i, ..., 1].max()
-
-fig, axs = plt.subplots(1, 2, figsize=(8, 4))
-axs[0].imshow(M[i, ..., 0], vmin=vmin0, vmax=vmax0)
-axs[0].set_title(f"Median channel {0}")
-axs[1].imshow(M[i, ..., 1], vmin=vmin1, vmax=vmax1)
-axs[1].set_title(f"Median channel {1}")
-
-fig, axs = plt.subplots(1, 2, figsize=(8, 4))
-axs[0].imshow(M[i, ..., 0] + U[i, ..., 0], vmin=vmin0, vmax=vmax0)
-axs[0].set_title(f"Median + anomaly channel {0}")
-axs[1].imshow(M[i, ..., 1] + U[i, ..., 1])
-axs[1].set_title(f"Median + anomaly channel {1}")
-
-# %%
-# parameters and coordinates (slightly hardcoded)
+# parameters
 threshs = []
 scales = []
 shapes = []
-
 if len(channels) > 1:
     gpd_params = ([f"thresh_{var}" for var in channels] + [f"scale_{var}" for var in channels] + [f"shape_{var}" for var in channels])
 else:
     gpd_params = ["thresh", "scale", "shape"]
-
 gdf_params = (gdf[[*gpd_params, "longitude", "latitude"]].groupby(["latitude", "longitude"]).mean().reset_index())
-
-thresh = np.array(gdf_params[[f"thresh_{var}" for var in channels]].values.reshape([ny, nx, nchannels])[::-1, ...])
-scale = np.array(gdf_params[[f"scale_{var}" for var in channels]].values.reshape([ny, nx, nchannels])[::-1, ...])
-shape = np.array(gdf_params[[f"shape_{var}" for var in channels]].values.reshape([ny, nx, nchannels])[::-1, ...])
-
+thresh = np.array(gdf_params[[f"thresh_{var}" for var in channels]].values.reshape([ny, nx, nchannels]))
+scale = np.array(gdf_params[[f"scale_{var}" for var in channels]].values.reshape([ny, nx, nchannels]))
+shape = np.array(gdf_params[[f"shape_{var}" for var in channels]].values.reshape([ny, nx, nchannels]))
 params = np.stack([shape, thresh, scale], axis=-2)
-lat = gdf_params["latitude"].values.reshape([ny, nx])[::-1, ...]
-lon = gdf_params["longitude"].values.reshape([ny, nx])[::-1, ...]
-params.shape
-# %%
-np.savez(os.path.join(datadir, f"data.npz"), X=X, U=U, M=M, z=z,lat=lat, lon=lon, t=t, s=s, params=params)
-# %% Save in netcdf format
-import xarray as xr
 
-events = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))
-times = pd.to_datetime(events[['cluster', 'time']].groupby('cluster').first()['time'].reset_index(drop=True))
-
-ds = xr.Dataset({'U': (['time', 'lat', 'lon', 'channel'], U),
-                 'X': (['time', 'lat', 'lon', 'channel'], X),
-                 'M': (['time', 'lat', 'lon', 'channel'], M),
-                 'z': (['time'], z),
-                 's': (['time'], s),
-                 'params': (['lat', 'lon', 'param', 'channel'], params)
+ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], U),
+                 'anomaly': (['time', 'lat', 'lon', 'channel'], X),
+                 'medians': (['time', 'lat', 'lon', 'channel'], M),
+                 'extremeness': (['time'], z),
+                 'duration': (['time'], s),
+                 'params': (['lat', 'lon', 'param', 'channel'], params),
+                 'grid': (['lat', 'lon'], grid),
                  },
-                coords={'lat': (['lat'], lat[:, 0]),
-                        'lon': (['lon'], lon[0, :]),
+                coords={'lat': (['lat'], lat),
+                        'lon': (['lon'], lon),
                         'time': times,
                         'channel': channels,
                         'param': ['shape', 'loc', 'scale']
                  },
-                 attrs={'crs': 'EPSG:4326', 'u10': '10m wind speed', 'mslp': 'mean sea level pressure'})
-ds.isel(time=1, channel=0).U.plot(cmap='Spectral_r')
+                 attrs={'CRS': 'EPSG:4326', 'u10': '10m wind speed', 'mslp': 'negative of mean sea level pressure'})
+
 ds.to_netcdf(os.path.join(datadir, "data.nc"))
+# %% view netcdf file
+t = np.random.uniform(0, T, 1).astype(int)[0]
+ds_t = ds.isel(time=t)
+fig, axs = plt.subplots(1, 2, figsize=(10, 3))
+ds_t.isel(channel=0).anomaly.plot(cmap='viridis', ax=axs[0])
+ds_t.isel(channel=1).anomaly.plot(cmap='viridis', ax=axs[1])
+fig.suptitle("Anomaly")
+
+fig, axs = plt.subplots(1, 2, figsize=(10, 3))
+ds_t.isel(channel=0).medians.plot(cmap='viridis', ax=axs[0])
+ds_t.isel(channel=1).medians.plot(cmap='viridis', ax=axs[1])
+fig.suptitle(f"Median")
+
+fig, axs = plt.subplots(1, 2, figsize=(10, 3))
+(ds_t.isel(channel=0).anomaly + ds_t.isel(channel=0).medians).plot(cmap='viridis', ax=axs[0])
+(ds_t.isel(channel=1).anomaly + ds_t.isel(channel=1).medians).plot(cmap='viridis', ax=axs[1])
+fig.suptitle('Anomaly + Median')
+# %%
+ds.close()
 # %%
