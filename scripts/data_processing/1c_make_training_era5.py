@@ -136,4 +136,3 @@ fig, axs = plt.subplots(1, 2, figsize=(10, 3))
 fig.suptitle('Anomaly + Median')
 # %%
 ds.close()
-# %%

@@ -1,6 +1,6 @@
 import os
 import tensorflow as tf
-import numpy as np
+import xarray as xr
 from sklearn.preprocessing import StandardScaler
 from .extreme_value_theory import gumbel
 
@@ -13,12 +13,13 @@ def load_datasets(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
 
 
 def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22), numpy=False, gumbel_marginals=False):
-    data = np.load(os.path.join(datadir, "data.npz"))
-    X = tf.image.resize(data["X"], image_shape)
-    U = tf.image.resize(data["U"], image_shape)
-    M = tf.image.resize(data["M"], image_shape)
-    z = data["z"]
-    params = data["params"]
+    """Note numpy arrays will appear upside down because of latitude."""
+    data = xr.open_dataset(os.path.join(datadir, "data.nc"))
+    X = tf.image.resize(data.anomaly, image_shape)
+    U = tf.image.resize(data.uniform, image_shape)
+    M = tf.image.resize(data.medians, image_shape)
+    z = data.extremeness.values
+    params = data.params.values
     
     if padding_mode is not None:
         paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
@@ -46,6 +47,4 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
         test_m = test_m.numpy()
 
     return [train_u, test_u], [train_x, test_x], [train_m, test_m], [train_z, test_z], params
-
-
 
