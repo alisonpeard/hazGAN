@@ -43,7 +43,6 @@ ops_gdf = ops_gdf.set_crs(4326)
 ops_gdf.head()
 
 # %%
-# %%
 import pandas as pd
 coords = pd.read_parquet("/Users/alison/Documents/DPhil/multivariate/era5_data/coords.parquet")
 coords = gpd.GeoDataFrame(coords, geometry=gpd.points_from_xy(coords.longitude, coords.latitude)).set_crs(4326)

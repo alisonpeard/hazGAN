@@ -57,7 +57,7 @@ nc_data <- nc_open('/Users/alison/Documents/DPhil/multivariate/era5_data/data.nc
 lon <- ncvar_get(nc_data, "lon")
 lat <- ncvar_get(nc_data, "lat")
 t <- ncvar_get(nc_data, "time")
-U <- ncvar_get(nc_data, "U")[channel,,,]
+U <- ncvar_get(nc_data, "uniform")[channel,,,]
 heatmap(U[,,1], Rowv=NA, Colv=NA)
 
 dim(U) <- c(18*22,2715)

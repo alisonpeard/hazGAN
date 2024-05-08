@@ -100,6 +100,9 @@ scale = np.array(gdf_params[[f"scale_{var}" for var in channels]].values.reshape
 shape = np.array(gdf_params[[f"shape_{var}" for var in channels]].values.reshape([ny, nx, nchannels]))
 params = np.stack([shape, thresh, scale], axis=-2)
 
+from itertools import product
+latlon = np.array([*product(lat, lon)])
+
 ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], U),
                  'anomaly': (['time', 'lat', 'lon', 'channel'], X),
                  'medians': (['time', 'lat', 'lon', 'channel'], M),
@@ -136,3 +139,4 @@ fig, axs = plt.subplots(1, 2, figsize=(10, 3))
 fig.suptitle('Anomaly + Median')
 # %%
 ds.close()
+# %%
