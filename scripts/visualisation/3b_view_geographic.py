@@ -6,7 +6,7 @@ import xarray as xr
 import matplotlib.pyplot as plt
 # %% load netcdf data
 ds = xr.open_dataset("/Users/alison/Documents/DPhil/multivariate/era5_data/data.nc")
-ds.isel(time=0, channel=0).U.plot()
+ds.isel(time=0, channel=0).uniform.plot()
 # %%
 gdf = ds.to_dataframe().reset_index()
 gdf = gpd.GeoDataFrame(gdf, geometry=gpd.points_from_xy(gdf.lon, gdf.lat))
@@ -21,13 +21,12 @@ observation_points = {
     'khulna': (89.5911, 22.8456),
     # mayanmar
     'sittwe': (92.9000, 20.1500),
-    'yangoon': (96.1561, 16.8409),
-    'akyab': (92.9000, 20.1500),
+    #'akyab': (92.9000, 20.1500),
     'rangoon': (96.1561, 16.8409),
     # india
     'kolkata': (88.3639, 22.5726),
     'madras': (80.2707, 13.0827),
-    'chennai': (80.2707, 13.0827),
+    #'chennai': (80.2707, 13.0827),
     'vishakapatham': (83.3165, 17.6868),
     'haldia': (87.9634, 22.0253),
     # noaa buoys
@@ -36,7 +35,7 @@ observation_points = {
     'buoy_23219': (88.998, 13.472),
     'buoy_23008': (90.0, 12.0),
     'buoy_23218': (88.5, 10.165),
-    'buoy_23401': (88.55, 8.86),
+    #'buoy_23401': (88.55, 8.86),
     'buoy_23007': (90.0, 8.0)
 }
 ops_gdf = gpd.GeoDataFrame.from_dict(observation_points, orient='index', columns=['lon', 'lat'], geometry=gpd.points_from_xy(*zip(*observation_points.values())))
@@ -68,7 +67,15 @@ ops = ops.rename(columns={'index': 'obs_pt'})
 ops[['obs_pt', 'grid', 'lon', 'lat']].to_parquet("/Users/alison/Documents/DPhil/multivariate/era5_data/ops.parquet")
 # %% train/test ECs
 ECs = pd.read_parquet("//Users/alison/Documents/DPhil/multivariate/results/brown_resnick/ECs.parquet")
+# lets use this to choose a high EC pair, a middle EC pair, and a low EC pair
+# high EC pair
+high_EC = ECs[ECs['train_EC'] > 1.9].sample(1)
+# middle EC pair
+middle_EC = ECs[(ECs['train_EC'] > 1.5) & (ECs['train_EC'] < 1.6)].sample(1)
+# low EC pair
+low_EC = ECs[ECs['train_EC'] < 1.1].sample(1)
 
+# %%
 ECs_train = np.zeros((396, 396))
 ECs_test = np.zeros((396, 396))
 for _, row in ECs.iterrows():
@@ -95,6 +102,7 @@ import xarray as xr
 data = xr.open_dataset("/Users/alison/Documents/DPhil/multivariate/era5_data/data.nc")
 ntrain = 1000
 grid_idx = samples['grid'].values
+
 #%% match params to grid numbers
 from hazGAN import POT
 
@@ -121,9 +129,9 @@ fig, ax = plt.subplots(1, 1, figsize=(10, 8))
 sns.heatmap(samples_transpose.corr(), ax=ax, cmap='magma')
 
 # %%
-from hazGAN import scatter_density2
-x = samples_X.loc['haldia', '1':].values
-y = samples_X.loc['kolkata', '1':].values
-fig, ax = plt.subplots(1, 1, figsize=(5, 4))
-scatter_density2(x, y, ax=ax, cmap='magma')
-# %%
+
+
+
+
+
+
