@@ -55,7 +55,7 @@ u10 = gdf[gdf['channel'] == 'u10']
 u10 = u10[u10['time'] == ds.time[0].values]
 
 fig, ax = plt.subplots(1, 1, figsize=(5, 4))
-ds.isel(time=0, channel=0).U.plot(ax=ax, cmap="YlOrRd", vmin=0, vmax=1)
+ds.isel(time=0, channel=0).uniform.plot(ax=ax, cmap="YlOrRd", vmin=0, vmax=1)
 ops_gdf.plot(ax=ax, color="black")
 ops.plot(ax=ax, color="blue", marker="x", markersize=100)
 #%%

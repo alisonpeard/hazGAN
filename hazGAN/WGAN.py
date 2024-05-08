@@ -142,6 +142,7 @@ class WGAN(keras.Model):
         self.g_optimizer.build(self.generator.trainable_variables)
 
     def call(self, nsamples=5):
+        """Return uniformly distributed samples from the generator."""
         random_latent_vectors = self.latent_space_distn((nsamples, self.latent_dim))
         raw = self.generator(random_latent_vectors, training=False)
         if self.gumbel:

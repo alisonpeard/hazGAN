@@ -101,7 +101,6 @@ shape = np.array(gdf_params[[f"shape_{var}" for var in channels]].values.reshape
 params = np.stack([shape, thresh, scale], axis=-2)
 
 from itertools import product
-latlon = np.array([*product(lat, lon)])
 
 ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], U),
                  'anomaly': (['time', 'lat', 'lon', 'channel'], X),
@@ -109,7 +108,6 @@ ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], U),
                  'extremeness': (['time'], z),
                  'duration': (['time'], s),
                  'params': (['lat', 'lon', 'param', 'channel'], params),
-                 'grid': (['lat', 'lon'], grid),
                  },
                 coords={'lat': (['lat'], lat),
                         'lon': (['lon'], lon),
@@ -118,7 +116,7 @@ ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], U),
                         'param': ['shape', 'loc', 'scale']
                  },
                  attrs={'CRS': 'EPSG:4326', 'u10': '10m wind speed', 'mslp': 'negative of mean sea level pressure'})
-
+# ds = ds.stack(grid=('lat', 'lon'))
 ds.to_netcdf(os.path.join(datadir, "data.nc"))
 # %% view netcdf file
 t = np.random.uniform(0, T, 1).astype(int)[0]

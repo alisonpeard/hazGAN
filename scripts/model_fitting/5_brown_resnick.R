@@ -14,7 +14,7 @@ extCoeffBR <- function(h, par){
   a=par[2]
   gamma=(h^a)/s
   2 - 2*pnorm(sqrt(gamma)/2)
-} # from https://doi.org/10.48550/arXiv.2111.00267
+} # modified from https://doi.org/10.48550/arXiv.2111.00267
 BRIsoFit <- function(data,coord){
   emp <- fitextcoeff(t(data), as.matrix(coord), estim="ST", marge="frech",plot=F)$ext.coeff
   
