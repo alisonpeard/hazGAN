@@ -54,10 +54,14 @@ import matplotlib.pyplot as plt
 u10 = gdf[gdf['channel'] == 'u10']
 u10 = u10[u10['time'] == ds.time[0].values]
 
-fig, ax = plt.subplots(1, 1, figsize=(5, 4))
+fig, ax = plt.subplots(1, 1, figsize=(10, 8))
 ds.isel(time=0, channel=0).uniform.plot(ax=ax, cmap="YlOrRd", vmin=0, vmax=1)
-ops_gdf.plot(ax=ax, color="black")
-ops.plot(ax=ax, color="blue", marker="x", markersize=100)
+ops.plot(ax=ax, color="blue", alpha=.8, marker="o", markersize=50, label='Nearest grid centroids')
+ops_gdf.plot(ax=ax, marker='^', color="black", label='Observation points')
+for x, y, label in zip(ops.geometry.x, ops.geometry.y, ops.index):
+    ax.annotate(label.title().replace('_', ':'), xy=(x, y), xytext=(3, 3), textcoords="offset points")
+ax.legend()
+ax.set_title('Observation points and grid centroids')
 #%%
 ops['lon'] = ops.geometry.x
 ops['lat'] = ops.geometry.y

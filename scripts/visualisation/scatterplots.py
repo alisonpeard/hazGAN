@@ -14,10 +14,9 @@ import matplotlib.pyplot as plt
 
 channel = 0
 channels = ['u10', 'mslp']
-
 # %% 
 # Load estimated extremal coefficients
-ECs = pd.read_parquet("//Users/alison/Documents/DPhil/multivariate/results/brown_resnick/ECs.parquet")
+ECs = pd.read_parquet(f"//Users/alison/Documents/DPhil/multivariate/results/brown_resnick/ECs_{channels[channel]}.parquet")
 
 # load Brown-Resnick samples
 samples = pd.read_parquet(f"/Users/alison/Documents/DPhil/multivariate/results/brown_resnick/samples_{channels[channel]}.parquet")
@@ -50,7 +49,7 @@ import tensorflow as tf
 import wandb
 
 wd = "/Users/alison/Documents/DPhil/multivariate/hazGAN"
-RUNNAME = "sample-run"
+RUNNAME = "gumbel-500"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 cmaps = ["YlOrRd", "PuBu", "YlGnBu"]
@@ -60,6 +59,7 @@ config = wandb.config
 wgan = hg.WGAN(wandb.config, nchannels=2)
 wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generator.weights.h5"))
 wgan.generator.summary()
+
 # %%
 def sample_to_xr(data, ds_ref, plot=False):
     ds = ds_ref.isel(time=slice(0, ntrain)).copy(deep=True)
@@ -96,8 +96,9 @@ samples_X = samples_X.set_index('grid')
 def format_str(s):
     return s.replace('_', ' ').title()
 # %% low correlation
-i = high_EC_pair['i'].astype(int)
-j = high_EC_pair['j'].astype(int)
+pair = low_EC_pair # ['high' | 'middle' | 'low']
+i = pair['i'].astype(int)
+j = pair['j'].astype(int)
 
 fig, axs = plt.subplots(1, 4, figsize=(10, 4))
 ax = axs[0]
@@ -111,6 +112,8 @@ x = data_test.isel(grid=i, channel=0).anomaly.values
 y = data_test.isel(grid=j, channel=0).anomaly.values
 scatter_density2(x, y, cmap='magma', ax=ax)
 ax.set_title("Test Set")
+xlim = (x.min(), x.max())
+ylim = (y.min(), y.max())
 
 ax = axs[2]
 x = ds_GAN.isel(grid=i, channel=0).anomaly.values
@@ -125,76 +128,50 @@ scatter_density2(x, y, cmap='magma', ax=ax)
 ax.set_title("Brown-Resnick")
 
 for ax in axs:
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
     ax.set_xlabel(format_str(samples.loc[i, 'obs_pt']))
     ax.set_ylabel(format_str(samples.loc[j, 'obs_pt']))
     ax.label_outer()
-fig.suptitle(r"$\hat \theta =${:.2f}".format(high_EC_pair['train_EC']))
-# %% medium correlation
-i = middle_EC_pair['i'].astype(int)
-j = middle_EC_pair['j'].astype(int)
+fig.suptitle(r"$\hat \theta =${:.2f}".format(pair['train_EC']))
+
+# %% UNIFORM ########################################################################
+xlim = (-.1, 1.1)
+ylim = (-.1, 1.1)
+
+i = pair['i'].astype(int)
+j = pair['j'].astype(int)
 
 fig, axs = plt.subplots(1, 4, figsize=(10, 4))
 ax = axs[0]
-x = data_train.isel(grid=i, channel=0).anomaly.values
-y = data_train.isel(grid=j, channel=0).anomaly.values
+x = data_train.isel(grid=i, channel=0).uniform.values
+y = data_train.isel(grid=j, channel=0).uniform.values
 scatter_density2(x, y, cmap='magma', ax=ax)
 ax.set_title("Training Set")
 
 ax = axs[1]
-x = data_test.isel(grid=i, channel=0).anomaly.values
-y = data_test.isel(grid=j, channel=0).anomaly.values
+x = data_test.isel(grid=i, channel=0).uniform.values
+y = data_test.isel(grid=j, channel=0).uniform.values
 scatter_density2(x, y, cmap='magma', ax=ax)
 ax.set_title("Test Set")
 
 ax = axs[2]
-x = ds_GAN.isel(grid=i, channel=0).anomaly.values
-y = ds_GAN.isel(grid=j, channel=0).anomaly.values
+x = ds_GAN.isel(grid=i, channel=0).uniform.values
+y = ds_GAN.isel(grid=j, channel=0).uniform.values
 scatter_density2(x, y, cmap='magma', ax=ax)
 ax.set_title("hazGAN")
 
 ax = axs[-1]
-x = samples_X.loc[i, '1':].values.astype(float)
-y = samples_X.loc[j, '1':].values.astype(float)
+x = samples.loc[i, '1':].values.astype(float)
+y = samples.loc[j, '1':].values.astype(float)
 scatter_density2(x, y, cmap='magma', ax=ax)
 ax.set_title("Brown-Resnick")
 
 for ax in axs:
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
     ax.set_xlabel(format_str(samples.loc[i, 'obs_pt']))
     ax.set_ylabel(format_str(samples.loc[j, 'obs_pt']))
     ax.label_outer()
-fig.suptitle(r"$\hat \theta =${:.2f}".format(middle_EC_pair['train_EC']))
-# %%
-i = low_EC_pair['i'].astype(int)
-j = low_EC_pair['j'].astype(int)
-
-fig, axs = plt.subplots(1, 4, figsize=(10, 4))
-ax = axs[0]
-x = data_train.isel(grid=i, channel=0).anomaly.values
-y = data_train.isel(grid=j, channel=0).anomaly.values
-scatter_density2(x, y, cmap='magma', ax=ax)
-ax.set_title("Training Set")
-
-ax = axs[1]
-x = data_test.isel(grid=i, channel=0).anomaly.values
-y = data_test.isel(grid=j, channel=0).anomaly.values
-scatter_density2(x, y, cmap='magma', ax=ax)
-ax.set_title("Test Set")
-
-ax = axs[2]
-x = ds_GAN.isel(grid=i, channel=0).anomaly.values
-y = ds_GAN.isel(grid=j, channel=0).anomaly.values
-scatter_density2(x, y, cmap='magma', ax=ax)
-ax.set_title("hazGAN")
-
-ax = axs[-1]
-x = samples_X.loc[i, '1':].values.astype(float)
-y = samples_X.loc[j, '1':].values.astype(float)
-scatter_density2(x, y, cmap='magma', ax=ax)
-ax.set_title("Brown-Resnick")
-
-for ax in axs:
-    ax.set_xlabel(format_str(samples.loc[i, 'obs_pt']))
-    ax.set_ylabel(format_str(samples.loc[j, 'obs_pt']))
-    ax.label_outer()
-fig.suptitle(r"$\hat \theta =${:.2f}".format(low_EC_pair['train_EC']))
+fig.suptitle(r"$\hat \theta =${:.2f}".format(pair['train_EC']))
 # %%
