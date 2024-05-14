@@ -26,7 +26,7 @@ dependencies:
         - tensorflow-metal
         - tensorflow-probability
         - tf-keras
-        - wandb
+        - wandb==0.16.6 # stable May 2024
         - cdsapi # request from copernicus climate data store API
 
 ## -------------------

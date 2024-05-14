@@ -14,7 +14,7 @@ setup(
         #"tensorflow-macos",
         #"tensorflow",
         #"tensorflow-probability",
-        "tensorflow-metal",
+        #"tensorflow-metal",
         "scipy",
         "pandas",
         "numpy",
