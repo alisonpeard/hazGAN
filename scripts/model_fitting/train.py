@@ -12,6 +12,7 @@ $ tensorboard --logdir ./_logs
 """
 # %%
 import os
+import argparse
 import yaml
 import numpy as np
 from datetime import datetime
@@ -94,15 +95,27 @@ def main(config):
 
 # %% run this cell to train the model
 if __name__ == "__main__":
-    wandb.init(settings=wandb.Settings(code_dir="."))  # saves snapshot of code as artifact
-    runname = wandb.run.name
-    rundir = os.path.join(wd, "_wandb-runs", runname)
-    os.makedirs(rundir)
+    # parse arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
+    args = parser.parse_args()
+    dry_run = args.dry_run
 
+    # initialise wandb
+    if dry_run:
+        wandb.init(project="test", mode="disabled")
+        wandb.config.update({'nepochs': 1, 'batch_size': 1, 'train_size': 1}, allow_val_change=True)
+        runname = 'dry-run'
+    else:
+        wandb.init()  # saves snapshot of code as artifact
+        runname = wandb.run.name
+    rundir = os.path.join(wd, "_wandb-runs", runname)
+    os.makedirs(rundir, exist_ok=True)
+
+    # set seed for reproductibility
     wandb.config["seed"] = np.random.randint(0, 1e6)
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
-
     tf.config.experimental.enable_op_determinism()  # removes stochasticity from individual operations
+    
     main(wandb.config)
-
 # %%
