@@ -18,6 +18,7 @@ dependencies:
     - seaborn
     - pyyaml
     - h5py
+    - cudnn
     - pip:
         #- tensorflow-macos #==2.12
         - tensorflow[and-cuda]
