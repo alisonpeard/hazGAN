@@ -85,6 +85,30 @@ U = gdf[[f"ecdf_{c}" for c in channels]].values.reshape([T, ny, nx, nchannels])
 M = gdf[[f"{c}_median" for c in channels]].values.reshape([T, ny, nx, nchannels])
 z = gdf[["cluster", "extremeness"]].groupby("cluster").mean().values.reshape(T)
 s = gdf[["cluster", "size"]].groupby("cluster").mean().values.reshape(T)
+lifetime_max_wind = np.max((X + M)[..., 0], axis=(1,2))
+lifetime_min_pressure = np.min(-(X + M)[..., 1], axis=(1,2))
+
+def classify_tc(pressure):
+    """Classify by minimum SLP https://doi.org/10.5194/gmd-15-6759-2022"""
+    if pressure < 92500:
+        return "5"
+    elif pressure < 94500:
+        return "4"
+    elif pressure < 96000:
+        return "3"
+    elif pressure < 97500:
+        return "2"
+    elif pressure < 99000:
+        return "1"
+    elif pressure < 100500:
+        return "0"
+    else:
+        return "no storm"
+classify_tc = np.vectorize(classify_tc)
+tc_category = classify_tc(lifetime_min_pressure)
+plt.hist(tc_category)
+# %%
+
 
 # parameters
 threshs = []
@@ -100,8 +124,7 @@ scale = np.array(gdf_params[[f"scale_{var}" for var in channels]].values.reshape
 shape = np.array(gdf_params[[f"shape_{var}" for var in channels]].values.reshape([ny, nx, nchannels]))
 params = np.stack([shape, thresh, scale], axis=-2)
 
-from itertools import product
-
+# %%
 ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], U),
                  'anomaly': (['time', 'lat', 'lon', 'channel'], X),
                  'medians': (['time', 'lat', 'lon', 'channel'], M),

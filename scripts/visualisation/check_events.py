@@ -7,6 +7,7 @@ import pandas as pd
 import geopandas as gpd
 import seaborn as sns
 import matplotlib.pyplot as plt
+from hazGAN import xmin, xmax, ymin, ymax
 
 def extract_timerange(df, event):
     df = df[df['cluster'] == event].copy()
@@ -14,13 +15,13 @@ def extract_timerange(df, event):
 
 datadir = os.path.expandvars("$HOME/Documents/DPhil/multivariate/era5_data")
 #%% Load event data
-events_df = pd.read_csv(os.path.join(datadir, "event_data.csv"))
+events_df = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))
 events_df['time'] = pd.to_datetime(events_df['time'])
 events_df = events_df[events_df['time'].dt.year == 2012]
 event_indices = [*events_df['cluster'].unique()]
 event_data = {event: extract_timerange(events_df, event) for event in event_indices}
 # %% Look at event duration distribution
-events_df = pd.read_csv(os.path.join(datadir, "event_data.csv"))
+events_df = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))
 events_df['time'] = pd.to_datetime(events_df['time'])
 start, stop = events_df['time'].min(), events_df['time'].max()
 fig, ax = plt.subplots(1,1, figsize=(6.5, 4))
@@ -51,7 +52,7 @@ if False: # these take ages
     fig.suptitle('Event duration vs. extremeness')
     ax.set_title(f"{start.year}-{stop.year}")
 # %% Distribution of lags
-extremes_df = pd.read_csv(os.path.join(datadir, "fitted_data.csv"))
+extremes_df = pd.read_parquet(os.path.join(datadir, "fitted_data.parquet"))
 extremes_df['time.u10'] = pd.to_datetime(extremes_df['time.u10'])
 extremes_df['time.mslp'] = pd.to_datetime(extremes_df['time.mslp'])
 extremes_df['lag'] = pd.to_numeric(extremes_df['time.u10'] - extremes_df['time.mslp'])
@@ -78,7 +79,6 @@ if False: # these take ages
 # Cyclone Nilam October 28, 2012 - October 31, 2012
 historical = {'nilim': ('2012-10-28', '2012-10-31')}
 #%% Compare to IBTrACS hurricane records
-from hazardGANv2 import xmin, xmax, ymin, ymax
 
 ibtracs = gpd.read_file(os.path.expandvars("$HOME/Documents/DPhil/data/ibtracs/ibtracs_since1980_points.gpkg"))
 ibtracs = ibtracs.clip([xmin, ymin, xmax, ymax])
