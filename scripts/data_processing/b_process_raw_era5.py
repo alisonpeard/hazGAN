@@ -68,8 +68,23 @@ files = glob.glob(os.path.join(indir, f"*bangladesh*.nc"))
 ds = xr.open_mfdataset(files, chunks={"time": "500MB"}, engine="netcdf4")
 ds["u10"] = np.sqrt(ds["u10"] ** 2 + ds["v10"] ** 2)
 ds = ds.drop(["v10"])
-
+coarsen = ds.coarsen(latitude=2, longitude=2, coord_func={'u10': 'max', 'msl': 'min'}, boundary='trim').mean()
+coarsen.u10.values.max()
 #%%
+
+!gdalinfo /Users/alison/Documents/DPhil/data/era5/new_data/bangladesh_1950_01.nc
+!gdalwarp -of netCDF -t_srs EPSG:4326 -ts 22 18 -r max NETCDF:"/Users/alison/Documents/DPhil/data/era5/new_data/bangladesh_1950_01.nc":u10 /Users/alison/Documents/DPhil/data/era5/new_data/bangladesh_1950_01_maximad.nc
+# %%
+ds1 = xr.open_dataset("/Users/alison/Documents/DPhil/data/era5/new_data/bangladesh_1950_01_warped.nc")
+ds2 = xr.open_dataset("/Users/alison/Documents/DPhil/data/era5/new_data/bangladesh_1950_01_maximad.nc")
+# ds1 = ds1.to_array("time", name="u10").to_dataset()
+# %%
+time = ds['time']
+bands = [ds1[b] for b in iter(ds1.variables) if "Band" in b]
+ds1['u10'] = xr.concat(bands, time[:len(bands)])
+
+
+# %%
 ds = regrid(ds, 80, 95, 10, 25, 22, 18, method="bilinear")
 ds = ds.resample(time="1D").max()
 df = ds.to_dataframe().reset_index()
