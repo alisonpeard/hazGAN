@@ -11,7 +11,7 @@ import cdsapi
 import os
 import numpy as np
 
-datadir = os.path.join(os.path.expandvars("$HOME"), "multivariate", "new_data", "era5")
+datadir = os.path.join(os.path.expandvars("$HOME"), "data", "new_data", "era5")
 os.makedirs(datadir, exist_ok=True)
 
 years = np.arange(1950, 2023)[::-1]
