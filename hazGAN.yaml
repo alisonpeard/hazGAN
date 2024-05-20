@@ -29,7 +29,7 @@ dependencies:
         - tf-keras
         - wandb==0.16.6 # stable May 2024
         - cdsapi # request from copernicus climate data store API
-        - cartopy
+        - cartopy # for basemaps
 
 ## -------------------
 ## NOTES:
