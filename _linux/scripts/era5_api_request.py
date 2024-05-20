@@ -15,7 +15,7 @@ from itertools import product
 datadir = os.path.join(os.path.expandvars("$HOME"), "data", "new_data", "era5")
 os.makedirs(datadir, exist_ok=True)
 
-i = sys.argv[1] # load the index from the command line
+i = int(sys.argv[1]) # load the index from the command line
 
 years = np.arange(1950, 2023)[::-1]
 months = np.arange(1, 13)[::-1]
