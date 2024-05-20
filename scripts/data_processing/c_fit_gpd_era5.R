@@ -210,8 +210,9 @@ transformed.df <- wind.transformed.df %>% inner_join(mslp.transformed.df,
 transformed.df$thresh.q <- q # approx. extremeness measure
 ########### SAVE TO CSV FOR PYTHON #############################################
 write.csv(medians, paste0(indir, '/', 'monthly_medians.csv'), row.names=FALSE)
-write.csv(cluster.df, paste0(indir, '/', 'event_data.csv'), row.names=FALSE)
-write.csv(transformed.df, paste0(indir, '/', 'fitted_data.csv'), row.names=FALSE)
+write_parquet(cluster.df, paste0(indir, '/', 'event_data.parquet'))
+write_parquet(transformed.df, paste0(indir, '/', 'fitted_data.parquet'))
+
 print(paste0("Saved as ", indir, '/', 'fitted_data.csv.'))
 print(paste0(length(unique(transformed.df$cluster)), " events processed."))
 ########### FIGURES ############################################################

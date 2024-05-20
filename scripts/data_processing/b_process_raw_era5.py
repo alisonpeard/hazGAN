@@ -49,7 +49,7 @@ df = ds_stacked.to_dataframe()
 # save to netcdf
 year0 = ds['time'].dt.year.values.min()
 yearn = ds['time'].dt.year.values.max()
-ds.to_netcdf(os.path.join(outdir, f"rm_data_{year0}_{yearn}.nc"))
+ds.to_netcdf(os.path.join(outdir, f"data_{year0}_{yearn}.nc"))
 # %%
 # check looks okay over spatial domain
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))

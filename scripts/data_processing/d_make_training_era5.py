@@ -12,9 +12,12 @@ from calendar import month_name as month
 channels = ["u10", "mslp"]
 wd = "/Users/alison/Documents/DPhil/multivariate"
 datadir = os.path.join(wd, "era5_data")
+
+coords = pd.read_parquet('/Users/alison/Documents/DPhil/multivariate/era5_data/data_1971_2022.parquet')
+coords = coords[['grid', 'latitude', 'longitude']].groupby('grid').mean()
+coords = gpd.GeoDataFrame(coords, geometry=gpd.points_from_xy(coords['longitude'], coords['latitude'])).set_crs("EPSG:4326")
+
 df = pd.read_parquet(os.path.join(datadir, f"fitted_data.parquet"))
-coords = pd.read_parquet(os.path.join(datadir, "coords.parquet"))
-coords = gpd.GeoDataFrame(coords, geometry=gpd.points_from_xy(coords["longitude"], coords["latitude"])).set_crs("EPSG:4326")
 df = df.merge(coords, on="grid")
 df.columns = [col.replace(".", "_") for col in df.columns]
 df = df.rename(columns={"msl": "mslp"})
