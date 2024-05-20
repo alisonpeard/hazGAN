@@ -1,6 +1,7 @@
 # https://cran.r-project.org/web/packages/eva/eva.pdf
 rm(list = ls())
 library(eva)
+library(arrow)
 library(lubridate)
 library(dplyr)
 require(ggplot2)
@@ -8,7 +9,7 @@ library(extRemes)
 filename <- 'data_1950_2022.parquet'
 wd <- "/Users/alison/Documents/DPhil/multivariate"
 indir <- paste0(wd, '/', 'era5_data')
-r.func <- max # https://doi.org/10.1111/rssb.12498 for theory
+r.func <- max # https://doi.org/10.1111/rssb.12498
 ########### DEFINE FUNCTIONS ###################################################
 standardise.by.month <- function(df, var){
   df$month <- months(df$time)
@@ -35,7 +36,7 @@ progress_bar <- function(n, prefix="", suffix="") {
   }
 }
 ########### LOAD DATA AND STANDARDISE IT #######################################
-wind.df <- read.csv(paste0(indir, '/', filename))
+wind.df <- read_parquet(paste0(indir, '/', filename))
 wind.df$msl <- -wind.df$msl # negate msl so maximising both vars
 wind.df = wind.df[,c('grid', 'time', 'u10', 'msl')]
 wind.df$time <- as.Date(wind.df$time)
@@ -82,7 +83,7 @@ cluster.df <- cluster.df %>%
   ungroup()
 cluster.df$q <- q
 ########### FIT GPD TO EVENT MAXIMA ############################################
-wind.df.all <- read.csv(paste0(indir, '/', filename))
+wind.df.all <- read_parquet(paste0(indir, '/', filename))
 wind.df.all$msl <- -wind.df.all$msl # negate msl again...
 wind.df.all = wind.df.all[,c('grid', 'time', 'u10', 'msl')]
 wind.df.all$time <- as.Date(wind.df.all$time)
@@ -107,10 +108,10 @@ for(i in 1:ngrid){
   wind.df <- wind.df.all[wind.df.all$grid == GRIDCELL,]
   wind.df <- wind.df[wind.df$time %in% times,]
   
-  head(left_join(wind.df, cluster.df[,c('time', 'cluster', 'ecdf')], by=c('time'='time')))
-  
-  wind.df$cluster <- cluster.df$cluster
-  wind.df$extremeness <- cluster.df$ecdf
+  wind.df <- left_join(wind.df, cluster.df[,c('time', 'cluster', 'ecdf')], by=c('time'='time'))
+  colnames(wind.df)[colnames(wind.df) == 'ecdf'] <- 'extremeness'
+  #wind.df$cluster <- cluster.df$cluster
+  #wind.df$extremeness <- cluster.df$ecdf
 
   maxima <- wind.df %>%
     group_by(cluster) %>%
@@ -219,6 +220,3 @@ acf(grid.df$u10, main="U10 cluster maxima ACF")
 pacf(grid.df$u10, main="U10 cluster maxima PACF")
 acf(grid.df$msl, main="MSLP cluster maxima ACF")
 pacf(grid.df$msl, main="MSLP cluster maxima PACF")
-
-########### (TEMP) COMPARE TO IBTRACS ##########################################
-ibtracs <- read.csv(paste0(indir, '/ibtracs_dates.csv'))
