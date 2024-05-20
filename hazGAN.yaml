@@ -10,6 +10,7 @@ dependencies:
     - pandas
     - geopandas
     - xarray
+    - cf_xarray # multiindex encoding
     - hdf5
     - netcdf4
     - scipy
