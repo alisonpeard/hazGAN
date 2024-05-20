@@ -6,7 +6,7 @@ library(lubridate)
 library(dplyr)
 require(ggplot2)
 library(extRemes)
-filename <- 'data_1950_2022.parquet'
+filename <- 'data_1971_2022.parquet'
 wd <- "/Users/alison/Documents/DPhil/multivariate"
 indir <- paste0(wd, '/', 'era5_data')
 r.func <- max # https://doi.org/10.1111/rssb.12498
@@ -159,8 +159,10 @@ for(i in 1:ngrid){
   GRIDCELL <- grid.cells[i]
   wind.df <- wind.df.all[wind.df.all$grid == GRIDCELL,]
   wind.df <- wind.df[wind.df$time %in% times,]
-  wind.df$cluster <- cluster.df$cluster
-  wind.df$extremeness <- cluster.df$ecdf
+  wind.df <- left_join(wind.df, cluster.df[,c('time', 'cluster', 'ecdf')], by=c('time'='time'))
+  colnames(wind.df)[colnames(wind.df) == 'ecdf'] <- 'extremeness'
+  #wind.df$cluster <- cluster.df$cluster
+  #wind.df$extremeness <- cluster.df$ecdf
   
   maxima <- wind.df %>%
     group_by(cluster) %>%
