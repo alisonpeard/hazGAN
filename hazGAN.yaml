@@ -1,16 +1,16 @@
 name: hazGAN
 channels:
-    - apple
+    #- apple # apple::<package>
     - conda-forge
 dependencies:
     - python
     - pip
-    - tensorflow-deps
+    - apple::tensorflow-deps
     - numpy
     - pandas
     - geopandas
+    - fiona
     - xarray
-    - cf_xarray # multiindex encoding
     - hdf5
     - netcdf4
     - scipy
@@ -18,9 +18,12 @@ dependencies:
     - ipykernel
     - notebook
     - matplotlib
+    - cartopy # for basemaps
     - seaborn
     - pyyaml
     - h5py
+    - pyarrow>=10.0.1
+    - dask
     - pip:
         #- tensorflow-macos #==2.12
         - tensorflow>=2.16 
@@ -28,13 +31,14 @@ dependencies:
         - tensorflow-probability
         - tf-keras
         - wandb==0.16.6 # stable May 2024
-        - cdsapi # request from copernicus climate data store API
-        - cartopy # for basemaps
+        - cdsapi # copernicus climate data store API
+        - -e /Users/alison/Documents/DPhil/multivariate/hazGAN
+        - -e /Users/alison/Documents/DPhil/geospatial_utils
 
 ## -------------------
 ## NOTES:
 ## -------------------
-# mamba env create -n hazGAN -f hazGAN.yml
+# mamba env create -n hazGAN -f hazGAN.yaml
 # cd hazGAN
 # conda activate hazGAN
 # python -m ipykernel install --user --n hazGAN

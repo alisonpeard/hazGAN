@@ -91,6 +91,7 @@ s = gdf[["cluster", "size"]].groupby("cluster").mean().values.reshape(T)
 lifetime_max_wind = np.max((X + M)[..., 0], axis=(1,2))
 lifetime_min_pressure = np.min(-(X + M)[..., 1], axis=(1,2))
 
+# %%
 def classify_tc(pressure):
     """Classify by minimum SLP https://doi.org/10.5194/gmd-15-6759-2022"""
     if pressure < 92500:
@@ -111,7 +112,6 @@ classify_tc = np.vectorize(classify_tc)
 tc_category = classify_tc(lifetime_min_pressure)
 plt.hist(tc_category)
 # %%
-
 
 # parameters
 threshs = []
@@ -134,6 +134,7 @@ ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], U),
                  'extremeness': (['time'], z),
                  'duration': (['time'], s),
                  'params': (['lat', 'lon', 'param', 'channel'], params),
+                 'saffir-simpson': (['time'], tc_category),
                  },
                 coords={'lat': (['lat'], lat),
                         'lon': (['lon'], lon),

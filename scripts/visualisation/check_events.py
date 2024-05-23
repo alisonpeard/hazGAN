@@ -1,6 +1,6 @@
 
 # %%
-"""Using env tf_geo """
+"""Using env hazGAN """
 import os
 os.environ['USE_PYGEOS'] = '0'
 import pandas as pd
@@ -75,19 +75,41 @@ fig.suptitle('1950-2022)')
 if False: # these take ages
     sns.jointplot(x='u10', y='msl', data=extremes_df, kind='kde', fill=True, cmap='Blues')
     sns.jointplot(x='u10', y='msl', data=extremes_df, kind='hex', cmap='Blues')
-# %% Compare to historical events
-# Cyclone Nilam October 28, 2012 - October 31, 2012
-historical = {'nilim': ('2012-10-28', '2012-10-31')}
-#%% Compare to IBTrACS hurricane records
 
-ibtracs = gpd.read_file(os.path.expandvars("$HOME/Documents/DPhil/data/ibtracs/ibtracs_since1980_points.gpkg"))
-ibtracs = ibtracs.clip([xmin, ymin, xmax, ymax])
+#%% Compare to IBTrACS hurricane records
+IBTRACS_AGENCY_10MIN_WIND_FACTOR = {"wmo": [1.0, 0.0],
+                                    "usa": [1.0, 0.0], "tokyo": [1.0, 0.0],
+                                    "newdelhi": [0.88, 0.0], "reunion": [1.0, 0.0],
+                                    "bom": [1.0, 0.0], "nadi": [1.0, 0.0],
+                                    "wellington": [1.0, 0.0], 'cma': [1.0, 0.0],
+                                    'hko': [1.0, 0.0], 'ds824': [1.0, 0.0],
+                                    'td6': [1.0, 0.0], 'td5': [1.0, 0.0],
+                                    'neumann': [1.0, 0.0], 'mlc': [1.0, 0.0],
+                                    'hurdat_atl' : [0.88, 0.0], 'hurdat_epa' : [0.88, 0.0],
+                                    'atcf' : [0.88, 0.0],     'cphc': [0.88, 0.0]
+}
+
+ibtracs = gpd.read_file(os.path.expandvars("$HOME/Documents/DPhil/data/ibtracs/ibtracs_since1980_points.gpkg"),
+                        bbox=[xmin, ymin, xmax, ymax])
 ibtracs['time'] = pd.to_datetime(ibtracs['ISO_TIME'])
-ibtracs = ibtracs[['time', 'NAME']]
-ibtracs.columns = ['time', 'event']
-ibtracs = ibtracs.groupby(pd.Grouper(key='time', freq='D')).first().reset_index()
-#%%
-events_df = pd.read_csv(os.path.join(datadir, "event_data.csv"))
+wind_cols = [col for col in ibtracs.columns if 'WIND' in col.upper()]
+factors = {key[:3]: value for key, value in IBTRACS_AGENCY_10MIN_WIND_FACTOR.items()}
+for col in wind_cols:
+    agency = col.split('_')[0].lower()
+    scale, shift = factors[agency]
+    ibtracs[col] = ibtracs[col] * scale + shift
+ibtracs['wind'] = ibtracs[wind_cols].max(axis=1) * 0.514 # knots to mps
+ibtracs = ibtracs[['time', 'NAME', 'wind', 'LAT', 'LON']]
+ibtracs.columns = ['time', 'event', 'wind', 'lat', 'lon']
+ibtracs = ibtracs.groupby(pd.Grouper(key='time', freq='D')).agg({'event': 'first', 'wind': 'max', 'lat': 'mean', 'lon': 'mean'}).reset_index()
+ibtracs['event'] = ibtracs['event'].fillna('NOT_NAMED').apply(lambda s: s.title())
+ibtracs = ibtracs.dropna(subset=['wind'])
+amphan = ibtracs[ibtracs['event'] == 'Amphan']
+# %%
+amphan = gpd.GeoDataFrame(amphan, geometry=gpd.points_from_xy(amphan.lon, amphan.lat)).drop(columns=['lat', 'lon'])
+amphan = amphan.set_crs(epsg=4326)
+# %%
+event_df = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))
 events_df['time'] = pd.to_datetime(events_df['time'])
 events_df = events_df[events_df['time'].dt.year >= 1980].copy()
 events_df = events_df[['time', 'cluster']]
