@@ -4,11 +4,16 @@ import os
 import numpy as np
 import pandas as pd
 import xarray as xr
+import xagg as xa
 import hazGAN as hg
 import geopandas as gpd
+from sklearn.metrics import auc
+from shapely.geometry import box
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
+from matplotlib.ticker import PercentFormatter
 import cartopy.crs as ccrs
+plt.style.use('bmh')
 
 wd = os.path.join(os.getcwd(), "..", '..')  # hazGAN directory
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
@@ -43,14 +48,14 @@ ds = xr.Dataset(
 ds.isel(event=0).wind_speed.plot(cmap='viridis')
 # %% Define mangrove damage function ##########################################################################
 mangrove_df = pd.read_csv("/Users/alison/Documents/DPhil/multivariate/mangrove_data/input.csv")
-mangrove_df['Wind_landfall'] = mangrove_df['Wind_landfall'] * 0.514444  # convert to mps
+mangrove_df['Wind_landfall'] = mangrove_df['Wind_landfall'] * 1000 / 3600  # convert to mps
 mangrove_df['damage_prob'] = 0
 mangrove_df.loc[mangrove_df['Damage'] > 0, 'damage_prob'] = 1
 model = sm.GLM(mangrove_df['damage_prob'].values, sm.add_constant(mangrove_df['Wind_landfall'].values), family=sm.families.Binomial())
 results = model.fit()
 results.summary()
 # %%
-pred = pd.DataFrame({"Wind_landfall": np.arange(0, 250*0.5144, 1)})
+pred = pd.DataFrame({"Wind_landfall": np.arange(0, 250 * 1000 / 3600, 1)})
 pred['fit'] = results.predict(sm.add_constant(pred['Wind_landfall'].values), which='linear')
 pred["fit2"] = results.predict(sm.add_constant(pred['Wind_landfall'].values), which='mean')
 
@@ -59,7 +64,7 @@ plt.plot(pred['Wind_landfall'], pred['fit2'], color='blue', linewidth=2)
 plt.xlabel('Wind speed at landfall (m/s)')
 plt.ylabel('Probability of mangrove damage')
 plt.title('Mangrove damage probability curve (global)')
-# %%
+# %% 
 def damage_function(x, res):
     def func(x):
         print(x.shape)
@@ -82,11 +87,9 @@ plt.title('Wind speed for event 20')
 
 ax = plt.axes((0.5, 0, 0.5, 1), projection =ccrs.PlateCarree()) 
 ax.coastlines(resolution='50m',color='k', linewidth=.5) 
-ds['damage_prob'].isel(event=20).plot.contourf(levels=20, cmap='YlOrRd', ax=ax, cbar_kwargs={'label': 'Damage probability'})
+ds['damage_prob'].isel(event=20).plot.contourf(levels=20, cmap='YlOrRd', ax=ax, cbar_kwargs={'label': 'Damage probability', 'format': PercentFormatter(1, 0)})
 plt.title('Mangrove damage probability for event 20')
 # %% Combine with mangrove data for 2020 ##########################################################################
-import xagg as xa
-
 ds = ds.drop_vars(['wind_speed', 'mslp'])
 weightmap = xa.pixel_overlaps(ds, mangroves)
 aggregated = xa.aggregate(ds, weightmap)
@@ -97,9 +100,6 @@ mangroves = mangroves.drop(columns='PXLVAL')
 df_agg = df_agg.join(mangroves, on='poly_idx', how='left')
 gdf_agg = gpd.GeoDataFrame(df_agg, geometry='geometry')
 # %% Spatially explicit EADs ##########################################################################
-from sklearn.metrics import auc
-from shapely.geometry import box
-
 def get_return_period(x: pd.Series, lam=yearly_rate):
     # #https://georgebv.github.io/pyextremes/user-guide/6-return-periods/ 
     n = len(x)
@@ -115,17 +115,21 @@ for i in pixels:
     gdf_agg.loc[idx[i, :], 'return_period'] = get_return_period(gdf_agg.loc[idx[i, :], 'damage_prob'])
 
 # %% start with a single polygon-damage probability curve
-i = np.random.uniform(0, len(pixels))
+i = np.random.randint(0, len(pixels))
 poly = gdf_agg.loc[idx[i, :]]
 poly['exceedence'] = 1 / (yearly_rate * poly['return_period'])
 poly = poly.sort_values('exceedence', ascending=False)
-plt.plot(poly['exceedence'], poly['damage_prob'])
-plt.title(f'Damage probability curve for pixel {i}')
-plt.fill_between(poly['exceedence'], poly['damage_prob'], alpha=0.5)
-plt.xlabel('Exceedence probability')
-plt.ylabel('Damage probability')
 
-# area under the curve (i.e. EAD)from sklearn.metrics import auc
+fig, ax = plt.subplots()
+ax.plot(poly['return_period'], poly['damage_prob'])
+ax.set_title(f'Damage probability curve for pixel {i}')
+ax.fill_between(poly['return_period'], poly['damage_prob'], alpha=0.5)
+ax.set_xlim(ax.get_xlim()[::-1])
+ax.yaxis.set_major_formatter(PercentFormatter(1, 0))
+ax.set_xlabel('Return period (years)')
+ax.set_ylabel('Damage probability')
+
+# area under the curve (i.e. EAD)
 eapd = auc(poly['exceedence'], poly['damage_prob'])
 print(f'EAD for pixel {i}: {eapd}')
 # %% now do it for all pixels
@@ -143,29 +147,26 @@ gdf_ead = gpd.GeoDataFrame(gdf_ead, geometry='geometry').set_crs(4326)
 zoom = box(93, 19, 94, 20)
 zoom_gdf = gpd.GeoDataFrame(geometry=[zoom]).set_crs(4326)
 # %%
-fig = plt.figure(figsize=(12, 4))
-ax  = plt.axes((0, 0, 0.5, 1), projection =ccrs.PlateCarree()) 
-ax.coastlines(resolution='50m',color='k', linewidth=.5)
-gdf_ead.plot('EAD', cmap='YlOrRd', legend=True, ax=ax, cbar_kwargs={'label': 'EAD'})
-zoom_gdf.boundary.plot(color='k', ax=ax)
-ax.set_title('EAD (probability of damages)')
+fig, axs = plt.subplots(1, 2, figsize=(12, 4))
+ax = axs[0]
+gdf_ead.plot('EAD', cmap='YlOrRd', legend=True, legend_kwds={'label':'EAD', 'format': PercentFormatter(1, 0)}, ax=axs[0])
+zoom_gdf.boundary.plot(color='k', ax=ax, linewidth=.5)
+ax.set_title('EAD (probability)')
 
-ax = plt.axes((0.5, 0, 0.5, 1), projection =ccrs.PlateCarree())
-ax.coastlines(resolution='50m',color='k', linewidth=.5)
-gdf_ead.clip(zoom).plot('EAD', cmap='YlOrRd', legend=True, cbar_kwargs={'label': 'EAD'})
+ax = axs[1]
+gdf_ead.clip(zoom).plot('EAD', cmap='YlOrRd', legend=True, ax=ax, legend_kwds={'label': 'EAD', 'format': PercentFormatter(1, 0)})
 ax.set_title('EAD (zoomed in)')
 
 # %% SPATIALLY AGGREGATED ##########################################################################
-gdf_pm = gdf_agg.to_crs(3857)
-gdf_pm['area'] = gdf_pm['geometry'].area
-gdf_pm['damage_area'] = gdf_pm['area'] * gdf_pm['damage_prob']
-# %%
-gdf_bob = gdf_pm.groupby('time').agg({'damage_prob': 'mean', 'damage_area': 'mean'}).reset_index()
+gdf_bob = gdf_agg.groupby('event').agg({'damage_prob': 'mean'}).reset_index()
 gdf_bob['return_period'] = get_return_period(gdf_bob['damage_prob'])
 gdf_bob = gdf_bob.sort_values('return_period', ascending=True)
-plt.scatter(gdf_bob['return_period'], gdf_bob['damage_area'], s=1, color='k')
-plt.xlabel('Return period (years)')
-plt.ylabel('Average damage area (m^2)')
-plt.title('Bay of Bengal mangrove damages from wind')
+
+fig, ax = plt.subplots()
+ax.scatter(gdf_bob['return_period'], gdf_bob['damage_prob'], s=1, color='k')
+ax.set_xlabel('Return period [years]')
+ax.set_ylabel('Average damage probabillty')
+ax.yaxis.set_major_formatter(PercentFormatter(1, 0))
+ax.set_title('Bay of Bengal mangrove damages from wind')
 
 # %%
