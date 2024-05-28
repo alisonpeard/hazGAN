@@ -25,11 +25,7 @@ import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
 
-# %% DELETE ME
-x = xr.open_dataset('/Users/alison/Documents/DPhil/data/era5/new_data/bangladesh_1950_01.nc')
-x
 # %%
-#  read direct from linux server
 wd = "/Users/alison/Documents/DPhil/multivariate"
 indir = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'data', 'era5', 'new_data')
 outdir = os.path.join(wd, "era5_data")
@@ -74,7 +70,7 @@ ds.grid.plot()
 # save to netcdf
 year0 = ds['time'].dt.year.values.min()
 yearn = ds['time'].dt.year.values.max()
-ds.to_netcdf(os.path.join(outdir, f"data_{year0}_{yearn}.nc"))
+ds.chunk().to_netcdf(os.path.join(outdir, f"data_{year0}_{yearn}.nc"))
 ds # check out dimensions etc
 # %% check looks okay over spatial domain
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))
