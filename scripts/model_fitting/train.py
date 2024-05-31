@@ -62,7 +62,9 @@ def main(config):
     tf.debugging.experimental.enable_dump_debug_info(logdir, tensor_debug_mode='FULL_HEALTH', circular_buffer_size=-1)
 
     # load data
-    [train_u, test_u], *_ = hg.load_training(datadir, config.train_size, 'reflect', gumbel_marginals=config.gumbel)
+    data = hg.load_training(datadir, config.train_size, 'reflect', gumbel_marginals=config.gumbel)
+    train_u = data['train_u']
+    test_u = data['test_u']
     train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
     test = tf.data.Dataset.from_tensor_slices(test_u).batch(config.batch_size)
 
@@ -96,10 +98,11 @@ def main(config):
 # %% run this cell to train the model
 if __name__ == "__main__":
     # parse arguments
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
-    args = parser.parse_args()
-    dry_run = args.dry_run
+    # parser = argparse.ArgumentParser()
+    # parser.add_ar gument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
+    # args = parser.parse_args()
+    # dry_run = args.dry_run
+    dry_run = False
 
     # initialise wandb
     if dry_run:
@@ -118,4 +121,28 @@ if __name__ == "__main__":
     tf.config.experimental.enable_op_determinism()  # removes stochasticity from individual operations
     
     main(wandb.config)
+# %% debugging
+import matplotlib.pyplot as plt
+wandb.init(project="test", mode="disabled")
+wandb.config.update({'nepochs': 1, 'batch_size': 1, 'train_size': 1}, allow_val_change=True)
+runname = 'dry-run'
+config = wandb.config
+[train_u, test_u], *_ = hg.load_training(datadir, config.train_size, 'reflect', gumbel_marginals=config.gumbel)
+train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
+test = tf.data.Dataset.from_tensor_slices(test_u).batch(config.batch_size)
 # %%
+gan = getattr(hg, f"compile_{config.model}")(config, nchannels=2)
+# %%
+z = gan.latent_space_distn((1, config.latent_dims))
+# %%
+fake = gan.generator(z, training=False)
+plt.imshow(fake.numpy()[0,..., 0])
+# %%
+score_fake = gan.critic(fake)
+score_real = gan.critic(next(iter(train)))
+# %%
+gan.fit(
+    train,
+    epochs=config.nepochs,
+    callbacks=[WandbMetricsLogger(), hg.Visualiser(1, runname=runname)]
+)
