@@ -52,8 +52,10 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(21, 21)
     train_mask = tf.where(tf.math.is_nan(train_u))
     test_mask = tf.where(tf.math.is_nan(test_u))
 
+    # return a dictionary to keep it tidy
     training = {'train_u': train_u, 'test_u': test_u, 'train_x': train_x, 'test_x': test_x,
                 'train_m': train_m, 'test_m': test_m, 'train_z': train_z, 'test_z': test_z,
                 'params': params, 'train_mask': train_mask, 'test_mask': test_mask}
+    
     return training
 
