@@ -46,5 +46,11 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(21, 21)
         train_m = train_m.numpy()
         test_m = test_m.numpy()
 
-    return [train_u, test_u], [train_x, test_x], [train_m, test_m], [train_z, test_z], params
+    # replace nans with zeros
+    train_u = tf.where(tf.math.is_nan(train_u), tf.zeros_like(train_u), train_u)
+    test_u = tf.where(tf.math.is_nan(test_u), tf.zeros_like(test_u), test_u)
+    train_mask = tf.where(tf.math.is_nan(train_u))
+    test_mask = tf.where(tf.math.is_nan(test_u))
+
+    return [train_u, test_u], [train_x, test_x], [train_m, test_m], [train_z, test_z], params, train_mask, test_mask
 
