@@ -17,6 +17,7 @@ for year in years:
     for month in months:
         if f"bangladesh_{year}_{str(month).zfill(2)}" not in files:
             missing.append(f"{year}_{str(month).zfill(2)}")
+print(len(missing), "missing")
 print(missing)
 # %%
 
