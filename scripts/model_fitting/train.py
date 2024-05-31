@@ -122,27 +122,3 @@ if __name__ == "__main__":
     
     main(wandb.config)
 # %% debugging
-import matplotlib.pyplot as plt
-wandb.init(project="test", mode="disabled")
-wandb.config.update({'nepochs': 1, 'batch_size': 1, 'train_size': 1}, allow_val_change=True)
-runname = 'dry-run'
-config = wandb.config
-[train_u, test_u], *_ = hg.load_training(datadir, config.train_size, 'reflect', gumbel_marginals=config.gumbel)
-train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
-test = tf.data.Dataset.from_tensor_slices(test_u).batch(config.batch_size)
-# %%
-gan = getattr(hg, f"compile_{config.model}")(config, nchannels=2)
-# %%
-z = gan.latent_space_distn((1, config.latent_dims))
-# %%
-fake = gan.generator(z, training=False)
-plt.imshow(fake.numpy()[0,..., 0])
-# %%
-score_fake = gan.critic(fake)
-score_real = gan.critic(next(iter(train)))
-# %%
-gan.fit(
-    train,
-    epochs=config.nepochs,
-    callbacks=[WandbMetricsLogger(), hg.Visualiser(1, runname=runname)]
-)
