@@ -11,12 +11,12 @@ import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 
 datadir = '/Users/alison/Documents/DPhil/multivariate/era5_data'
-data = xr.open_dataset(os.path.join(datadir, "data.nc"))
+data = xr.open_dataset(os.path.join(datadir, "hazGAN_samples.nc"))
 occurence_rate = 22 # from R 
 # %% calculate return periods across each pixel
 wind = data.anomaly.sel(channel='u10')
-m = wind.time.size
-exceed_prob = 1 - (wind.rank(dim='time') / (m + 1))
+m = wind.sample.size
+exceed_prob = 1 - (wind.rank(dim='sample') / (m + 1))
 rp = 1 / (occurence_rate * exceed_prob)
 wind['return_period'] = rp
 wind['aep'] = 1 / rp
@@ -26,13 +26,13 @@ def get_rp_wind(x, y, rp):
     return interpolated
 
 res = xr.apply_ufunc(get_rp_wind, rp, wind,
-                     input_core_dims=[["time"], ['time']],
+                     input_core_dims=[["sample"], ['sample']],
                      dask = 'allowed',
-                     kwargs={'rp': 1},
+                     kwargs={'rp': 100},
                      vectorize = True)
 # %% visualise different months
-month = 10
-median = data.where(data['time.month']==month, drop=True).isel(channel=0).mean(dim=['time']).medians
+month = 8
+median = data['median'].where(data['month']==month, drop=True).isel(channel=0)[0]#.mean(dim=['time']).medians
 
 fig = plt.figure(figsize=(8, 6))
 ax  = plt.axes(projection=ccrs.PlateCarree()) 

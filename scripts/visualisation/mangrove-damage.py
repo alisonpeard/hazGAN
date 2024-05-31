@@ -22,8 +22,8 @@ mangrove_path = '/Users/alison/Documents/DPhil/data/global_mangrove_watch/v3_202
 mangroves =  gpd.read_file(mangrove_path, bbox=(80, 10, 95, 25))
 # %% load the ERA5 data or generated data
 datadir = os.path.join(wd, "..", "era5_data")  # keep data folder in parent directory
-data = xr.open_dataset(os.path.join(datadir, "data.nc"))
-
+data = xr.open_dataset(os.path.join(datadir, "data.nc")) 
+# %%
 # make a new dataset with full scale winds and pressure
 m = len(pd.unique(data['time']))
 n = len(pd.unique(data['time.year']))
@@ -36,16 +36,16 @@ lons = data['lon'].data
 
 ds = xr.Dataset(
     {
-        "wind_speed": (("event", "latitude", "longitude"), X[..., 0], {"units": "mps"}),
-        "mslp": (("event", "latitude", "longitude"), X[..., 1], {"units": "Pa"}),
+        "wind_speed": (("time", "latitude", "longitude"), X[..., 0], {"units": "mps"}),
+        "mslp": (("time", "latitude", "longitude"), X[..., 1], {"units": "Pa"}),
     },
     coords={
-        "event": np.arange(n),
+        "time": data['time'],
+        #"event": np.arange(n),
         "latitude": lats,
         "longitude": lons,
     },
 )
-ds.isel(event=0).wind_speed.plot(cmap='viridis')
 # %% Define mangrove damage function ##########################################################################
 mangrove_df = pd.read_csv("/Users/alison/Documents/DPhil/multivariate/mangrove_data/input.csv")
 mangrove_df['Wind_landfall'] = mangrove_df['Wind_landfall'] * 1000 / 3600  # convert to mps
@@ -73,22 +73,24 @@ def damage_function(x, res):
         y = y.reshape(shape)
         print(y.shape)
         return y
-    return xr.apply_ufunc(func, x, vectorize=False, input_core_dims=[['event', 'latitude', 'longitude']], output_core_dims=[['event', 'latitude', 'longitude']])
+    return xr.apply_ufunc(func, x, vectorize=False, input_core_dims=[['time', 'latitude', 'longitude']], output_core_dims=[['time', 'latitude', 'longitude']])
 
 ds['damage_prob'] = damage_function(ds.wind_speed, results)
 ds['longitude'] = np.linspace(80, 95, 21)
 ds['latitude'] = np.linspace(10, 25, 21)
 
-fig = plt.figure(figsize=(12, 4))
-ax  = plt.axes((0, 0, 0.5, 1), projection =ccrs.PlateCarree()) 
+# %%
+EVENT = np.random.randint(0, 1606) # 20
+# TIME = ds.where(ds.damage_prob == ds.damage_prob.max(), drop=True).time.values[0]
+fig = plt.figure(figsize=(12, 4), layout='tight')
+ax  = plt.axes((0, 0, 0.5, 0.9), projection =ccrs.PlateCarree()) 
 ax.coastlines(resolution='50m',color='k', linewidth=.5) 
-ds['wind_speed'].isel(event=20).plot.contourf(levels=20, cmap='viridis', ax=ax, cbar_kwargs={'label': 'Wind speed [mps]'})
-plt.title('Wind speed for event 20')
+ds['wind_speed'].isel(time=EVENT).plot.contourf(levels=20, cmap='viridis', ax=ax, cbar_kwargs={'label': 'Wind speed [mps]'})
+# plt.title('Wind speed for event 20')
 
-ax = plt.axes((0.5, 0, 0.5, 1), projection =ccrs.PlateCarree()) 
+ax = plt.axes((0.5, 0, 0.5, 0.9), projection=ccrs.PlateCarree()) 
 ax.coastlines(resolution='50m',color='k', linewidth=.5) 
-ds['damage_prob'].isel(event=20).plot.contourf(levels=20, cmap='YlOrRd', ax=ax, cbar_kwargs={'label': 'Damage probability', 'format': PercentFormatter(1, 0)})
-plt.title('Mangrove damage probability for event 20')
+ds['damage_prob'].isel(time=EVENT).plot.contourf(levels=20, cmap='YlOrRd', ax=ax, cbar_kwargs={'label': 'Mangrove damage probability', 'format': PercentFormatter(1, 0)})
 # %% Combine with mangrove data for 2020 ##########################################################################
 ds = ds.drop_vars(['wind_speed', 'mslp'])
 weightmap = xa.pixel_overlaps(ds, mangroves)
@@ -146,7 +148,7 @@ gdf_ead = gpd.GeoDataFrame(gdf_ead, geometry='geometry').set_crs(4326)
 
 zoom = box(93, 19, 94, 20)
 zoom_gdf = gpd.GeoDataFrame(geometry=[zoom]).set_crs(4326)
-# %%
+# %% need to make this better looking
 fig, axs = plt.subplots(1, 2, figsize=(12, 4))
 ax = axs[0]
 gdf_ead.plot('EAD', cmap='YlOrRd', legend=True, legend_kwds={'label':'EAD', 'format': PercentFormatter(1, 0)}, ax=axs[0])
@@ -156,6 +158,10 @@ ax.set_title('EAD (probability)')
 ax = axs[1]
 gdf_ead.clip(zoom).plot('EAD', cmap='YlOrRd', legend=True, ax=ax, legend_kwds={'label': 'EAD', 'format': PercentFormatter(1, 0)})
 ax.set_title('EAD (zoomed in)')
+
+# %% Let's try it as an xarray dataset instead
+ds_agg = xr.Dataset.from_dataframe(gdf_agg, sparse=True)
+
 
 # %% SPATIALLY AGGREGATED ##########################################################################
 gdf_bob = gdf_agg.groupby('event').agg({'damage_prob': 'mean'}).reset_index()
