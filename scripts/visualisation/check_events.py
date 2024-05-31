@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from hazGAN import xmin, xmax, ymin, ymax
 
 def extract_timerange(df, event):
-    df = df[df['cluster'] == event].copy()
+    df = df[df['storm'] == event].copy()
     return df['time'].min(), df['time'].max()
 
 datadir = os.path.expandvars("$HOME/Documents/DPhil/multivariate/era5_data")
@@ -18,35 +18,36 @@ datadir = os.path.expandvars("$HOME/Documents/DPhil/multivariate/era5_data")
 events_df = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))
 events_df['time'] = pd.to_datetime(events_df['time'])
 events_df = events_df[events_df['time'].dt.year == 2012]
-event_indices = [*events_df['cluster'].unique()]
+event_indices = [*events_df['storm'].unique()]
 event_data = {event: extract_timerange(events_df, event) for event in event_indices}
 # %% Look at event duration distribution
 events_df = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))
 events_df['time'] = pd.to_datetime(events_df['time'])
 start, stop = events_df['time'].min(), events_df['time'].max()
 fig, ax = plt.subplots(1,1, figsize=(6.5, 4))
-events_df['cluster.size'].hist(color='lightblue', edgecolor='k', bins=50, density=True, ax=ax)
+events_df['storm.size'].hist(color='lightblue', edgecolor='k', bins=50, density=True, ax=ax)
 ax.set_xlabel('Days')
 ax.set_ylabel('Density')
 fig.suptitle('Distribution of event durations')
 ax.set_title(f"{start.year}-{stop.year}")
 # %% Extremeness vs. duration
 fig, ax = plt.subplots(1, 1, figsize=(6.5, 4))
-ax.scatter(events_df['ecdf'], events_df['cluster.size'], color='k', s=1)
-ax.set_xlabel('Extremeness')
+ax.scatter(events_df['storm.rp'], events_df['storm.size'], color='k', s=1)
+ax.set_xlabel('Empirical return period')
 ax.set_ylabel('Duration (days)')
-fig.suptitle('Event duration vs. extremeness')
+fig.suptitle('Event duration vs. return period')
 ax.set_title(f"{start.year}-{stop.year}")
 # %%
 # events_df['ecdf'].hist(kind='')
 fig, ax = plt.subplots(1, 1, figsize=(6.5, 4))
 
-sns.histplot(data=events_df['ecdf'], kde=True, ax=ax)
-ax.set_title('Extremeness distribution')
+sns.histplot(data=events_df['storm.rp'], ax=ax)
+ax.set_yscale('log')
+ax.set_title('Empirical return period distribution')
 # %% Extremeness vs. duration (jointplot)
 if False: # these take ages
     fig, ax = plt.subplots(1, 1, figsize=(6.5, 4))
-    sns.jointplot(x='ecdf', y='cluster.size', data=events_df, kind='kde', fill=True, cmap='Blues', ax=ax) #
+    sns.jointplot(x='ecdf', y='storm.size', data=events_df, kind='kde', fill=True, cmap='Blues', ax=ax) #
     ax.set_xlabel('Extremeness')
     ax.set_ylabel('Duration (days)')
     fig.suptitle('Event duration vs. extremeness')
@@ -62,19 +63,15 @@ extremes_df['lag'].hist(color='lightblue', edgecolor='k', bins=100, density=Fals
 ax.set_xlabel('Days')
 ax.set_ylabel("Count")
 # ax.set_yscale('log')
-fig.suptitle(r'Lags $(T^\max_{U10} - T^\max_{MSLP})$')
+fig.suptitle(r'Lags $(T^\max_{U10} - T^\min_{MSLP})$')
 ax.set_title(f"{start.year}-{stop.year}")
 # %% Joint-distribution of maxima
 fig, ax = plt.subplots(1,1)
 ax.scatter(extremes_df['u10'], extremes_df['msl'], color='k', s=1)
 ax.set_xlabel('10m wind')
-ax.set_ylabel('Mean sea level presseure')
-ax.set_title('Cluster maxima')
+ax.set_ylabel('Mean sea level pressure')
+ax.set_title('storm maxima')
 fig.suptitle('1950-2022)')
-# %% Joint-distribution of maxima (jointplot)§
-if False: # these take ages
-    sns.jointplot(x='u10', y='msl', data=extremes_df, kind='kde', fill=True, cmap='Blues')
-    sns.jointplot(x='u10', y='msl', data=extremes_df, kind='hex', cmap='Blues')
 
 #%% Compare to IBTrACS hurricane records
 IBTRACS_AGENCY_10MIN_WIND_FACTOR = {"wmo": [1.0, 0.0],
@@ -112,7 +109,7 @@ amphan = amphan.set_crs(epsg=4326)
 event_df = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))
 events_df['time'] = pd.to_datetime(events_df['time'])
 events_df = events_df[events_df['time'].dt.year >= 1980].copy()
-events_df = events_df[['time', 'cluster']]
+events_df = events_df[['time', 'storm']]
 events_df.columns = ['time', 'event']
 assert events_df['time'].dt.year.max() == ibtracs['time'].dt.year.max(), "Must have same time range."
 
@@ -139,7 +136,7 @@ fig, ax = plt.subplots(1, 1, figsize=(6.5, 4))
 merged.value_counts('confusion_score').plot(kind='barh', color='lightblue', edgecolor='k', ax=ax)
 ax.set_ylabel('Confusion score')
 ax.set_title('Are we picking up IBTrACS hurricanes?')
-ax.set_xlabel("Count")
+ax.set_xlabel("Count [days]")
 # %% print confusion metrics
 precision = merged['confusion_score'].value_counts()['TP'] / (merged['confusion_score'].value_counts()['TP'] + merged['confusion_score'].value_counts()['FP'])
 recall = merged['confusion_score'].value_counts()['TP'] / (merged['confusion_score'].value_counts()['TP'] + merged['confusion_score'].value_counts()['FN'])

@@ -70,7 +70,7 @@ ds.grid.plot()
 # save to netcdf
 year0 = ds['time'].dt.year.values.min()
 yearn = ds['time'].dt.year.values.max()
-ds.chunk().to_netcdf(os.path.join(outdir, f"data_{year0}_{yearn}.nc"))
+ds.load().to_netcdf(os.path.join(outdir, f"data_{year0}_{yearn}.nc"))
 ds # check out dimensions etc
 # %% check looks okay over spatial domain
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))
