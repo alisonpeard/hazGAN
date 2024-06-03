@@ -188,7 +188,7 @@ class WGAN(keras.Model):
         #self.g_penalty_tracker.update_state(g_penalty)
 
         return {
-            "d_loss": self.d_loss_tracker.result(),
-            "g_loss_raw": self.g_loss_raw_tracker.result(),
-            "g_penalty": self.g_penalty_tracker.result(),
+            "critic_loss": self.d_loss_tracker.result(),
+            "generator_loss": self.g_loss_raw_tracker.result(),
+            #"g_penalty": self.g_penalty_tracker.result(),
         }
