@@ -50,7 +50,7 @@ def plot_generated_marginals(fake_data, start=0, nchannels=1, runname="", vmin=0
 
     divider = make_axes_locatable(ax)
     cax = divider.append_axes('right', size='5%', pad=0.05)
-    fig.colorbar(im, cax=cax, orientation='vertical')
+    fig.colorbar(im, cax=cax, orientation='vertical', label='Quantile')
     plt.suptitle(f'Generated marginals {runname}')
     return fig
 
