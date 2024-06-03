@@ -15,9 +15,7 @@ import os
 import argparse
 import yaml
 import numpy as np
-from datetime import datetime
 import tensorflow as tf
-from tensorflow.keras.callbacks import EarlyStopping
 tf.config.set_visible_devices([], "GPU")
 # tf.debugging.enable_check_numerics()
 
@@ -56,11 +54,6 @@ def save_config(dir):
 
 # %%
 def main(config):
-    # start logs
-    logdir = os.path.join(cwd, "_logs")
-    tf.debugging.set_log_device_placement(True)
-    tf.debugging.experimental.enable_dump_debug_info(logdir, tensor_debug_mode='FULL_HEALTH', circular_buffer_size=-1)
-
     # load data
     data = hg.load_training(datadir, config.train_size, 'reflect', gumbel_marginals=config.gumbel)
     train_u = data['train_u']
@@ -71,7 +64,6 @@ def main(config):
     # train test callbacks
     chi_score = hg.ChiScore({"train": next(iter(train)), "test": next(iter(test))},
                             frequency=config.chi_frequency, gumbel_margins=config.gumbel)
-    early_stopping = EarlyStopping(monitor="g_loss_raw", patience=20, mode="min")
 
     # compile
     with tf.device("/gpu:0"):
@@ -95,11 +87,12 @@ def main(config):
     fig = hg.plot_generated_marginals(fake_u, vmin=None, vmax=None, runname=runname)
     log_image_to_wandb(fig, f"generated_marginals", imdir)
 
+
 # %% run this cell to train the model
 if __name__ == "__main__":
     # parse arguments
     # parser = argparse.ArgumentParser()
-    # parser.add_ar gument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
+    # parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
     # args = parser.parse_args()
     # dry_run = args.dry_run
     dry_run = False
@@ -118,7 +111,7 @@ if __name__ == "__main__":
     # set seed for reproductibility
     wandb.config["seed"] = np.random.randint(0, 1e6)
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
-    tf.config.experimental.enable_op_determinism()  # removes stochasticity from individual operations
+    tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations
     
     main(wandb.config)
-# %% debugging
+# %% 
