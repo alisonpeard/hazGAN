@@ -5,14 +5,14 @@ from sklearn.preprocessing import StandardScaler
 from .extreme_value_theory import gumbel
 
 
-def load_datasets(datadir, ntrain, padding_mode='constant', image_shape=(21, 21), gumbel_marginals=False, batch_size=32):
+def load_datasets(datadir, ntrain, padding_mode='constant', image_shape=(18, 22), gumbel_marginals=False, batch_size=32):
     [train_u, test_u], *_ = load_training(datadir, ntrain, padding_mode, image_shape, gumbel_marginals=gumbel_marginals)
     train = tf.data.Dataset.from_tensor_slices(train_u).batch(batch_size)
     test = tf.data.Dataset.from_tensor_slices(test_u).batch(batch_size)
     return train, test
 
 
-def load_training(datadir, ntrain, padding_mode='constant', image_shape=(21, 21), numpy=False, gumbel_marginals=False):
+def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22), numpy=False, gumbel_marginals=False):
     """Note numpy arrays will appear upside down because of latitude."""
     data = xr.open_dataset(os.path.join(datadir, "data.nc"))
     X = tf.image.resize(data.anomaly, image_shape)

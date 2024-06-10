@@ -14,7 +14,7 @@ library(tidync)
 
 wd <- "/Users/alison/Documents/DPhil/multivariate"
 filename <- 'data_1950_2022.nc'
-indir <- paste0(wd, '/', 'era5_data')
+indir <- paste0(wd, '/', 'era5_data.nosync')
 r.func <- max # https://doi.org/10.1111/rssb.12498
 ########### DEFINE FUNCTIONS ###################################################
 standardise.by.month <- function(df, var){

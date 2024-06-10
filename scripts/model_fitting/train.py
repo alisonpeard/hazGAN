@@ -33,7 +33,7 @@ plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 data_source = "era5"
 cwd = os.getcwd()  # scripts directory
 wd = os.path.join(cwd, "..", '..')  # hazGAN directory
-datadir = os.path.join(wd, "..", f"{data_source}_data")  # keep data folder in parent directory
+datadir = os.path.join(wd, "..", f"{data_source}_data.nosync")  # keep data folder in parent directory
 imdir = os.path.join(wd, "figures", "temp")
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 

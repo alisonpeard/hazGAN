@@ -5,7 +5,8 @@ Process ERA5 data daily maximum wind speed at 10m and minimum MSLP.
 
 Input:
 ------
-    - raw ERA5 data (netcdf) of form <datadir>/era5/new_data/*bangladesh*.nc
+    - resampled ERA5 data (netcdf) of form <datadir>/era5/new_data/resampled/*bangladesh*.nc
+        (resampled using resample-era5.py script)
 
 Output:
 -------
@@ -21,45 +22,28 @@ os.environ["USE_PYGEOS"] = "0"
 import glob
 import numpy as np
 import xarray as xr
-import pandas as pd
-import geopandas as gpd
 import matplotlib.pyplot as plt
 
-# %%
+# %% -----Load data-----
 wd = "/Users/alison/Documents/DPhil/multivariate"
-indir = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'data', 'era5', 'new_data')
-outdir = os.path.join(wd, "era5_data")
+indir = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'data', 'era5', 'new_data.nosync', 'resampled')
+outdir = os.path.join(wd, "era5_data.nosync")
 
-# load all files and process to geopandas
 files = glob.glob(os.path.join(indir, f"*bangladesh*.nc"))
+
 ds = xr.open_mfdataset(files, chunks={"time": "500MB"}, engine="netcdf4")
 ds["u10"] = np.sqrt(ds["u10"] ** 2 + ds["v10"] ** 2)
 ds = ds.drop_vars(["v10"])
-ds_full = ds.copy()
-
-# grab max/min values for later checks
-wind_max = ds_full.u10.values.max()
-pressure_min = ds_full.msl.values.min()
+ds
 #%% resample to daily max
 ds_resampled = ds.resample(time="1D").max()
 ds_resampled['msl'] = ds.msl.resample(time="1D").min()
 ds = ds_resampled
 ds = ds.dropna(dim='time', how='all') # some dates are missing because API takes forever
-assert ds.u10.values.max() == wind_max, "Check max wind speed not smoothened"
-assert ds.msl.values.min() == pressure_min, "Check min pressure not smoothened"
-#%% max pool to reduce dimensions (preserves extremes)
-pool = 3
-r = ds.rolling(latitude=pool, longitude=pool)
-rolled = r.construct(latitude="lat", longitude="lon", stride=pool)
-ds = rolled.max(dim=['lat', 'lon'], keep_attrs=True)
-ds['msl'] = rolled['msl'].min(dim=['lat', 'lon'], keep_attrs=True)
-assert ds['msl'].min().values > 1000, "Check sea-level pressure values"
 
-# %% when ready replace ds with ds_resampled
-assert ds.u10.values.max() == wind_max, "Check max wind speed not smoothened"
-assert ds.msl.values.min() == pressure_min, "Check min pressure not smoothened"
 # %%
-grid = np.arange(0, 21 * 21, 1).reshape(21, 21)
+ds = ds.rename({'lon': 'longitude', 'lat': 'latitude'})
+grid = np.arange(0, 18 * 20, 1).reshape(18, 20)
 grid = xr.DataArray(
     grid, dims=["latitude", "longitude"], coords={"latitude": ds.latitude[::-1], "longitude": ds.longitude}
 )
@@ -67,15 +51,17 @@ ds['grid'] = grid
 # %%
 ds.grid.plot()
 #%%
-# save to netcdf
+# ----Save to netcdf-----
 year0 = ds['time'].dt.year.values.min()
 yearn = ds['time'].dt.year.values.max()
-ds.load().to_netcdf(os.path.join(outdir, f"data_{year0}_{yearn}.nc"))
+ds.to_netcdf(os.path.join(outdir, f"data_{year0}_{yearn}.nc"))
 ds # check out dimensions etc
-# %% check looks okay over spatial domain
+# %% ---- Visualise -----
+t0 = 16537
+
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-ds.isel(time=0).u10.plot(ax=axs[0])
-ds.isel(time=0).msl.plot(ax=axs[1])
-axs[0].set_title("10m wind")
-axs[1].set_title("sea-level pressure")
+ds.isel(time=t0).u10.plot(ax=axs[0])
+ds.isel(time=t0).msl.plot(ax=axs[1])
+# axs[0].set_title("10m wind")
+# axs[1].set_title("sea-level pressure")
 # %%

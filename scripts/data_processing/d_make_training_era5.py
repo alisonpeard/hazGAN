@@ -11,9 +11,9 @@ from calendar import month_name as month
 # %%
 channels = ["u10", "mslp"]
 wd = "/Users/alison/Documents/DPhil/multivariate"
-datadir = os.path.join(wd, "era5_data")
+datadir = os.path.join(wd, "era5_data.nosync")
 
-coords = xr.open_dataset('/Users/alison/Documents/DPhil/multivariate/era5_data/data_1950_2022.nc')
+coords = xr.open_dataset(os.path.join(datadir, 'data_1950_2022.nc'))
 coords = coords['grid'].to_dataframe().reset_index()
 coords = gpd.GeoDataFrame(coords, geometry=gpd.points_from_xy(coords['longitude'], coords['latitude'])).set_crs("EPSG:4326")
                                                                                                                 
@@ -129,18 +129,18 @@ ds.to_netcdf(os.path.join(datadir, "data.nc"))
 t = np.random.uniform(0, T, 1).astype(int)[0]
 ds_t = ds.isel(time=t)
 fig, axs = plt.subplots(1, 2, figsize=(10, 3))
-ds_t.isel(channel=0).anomaly.plot(cmap='viridis', ax=axs[0])
-ds_t.isel(channel=1).anomaly.plot(cmap='viridis', ax=axs[1])
+ds_t.isel(channel=0).anomaly.plot.contourf(cmap='viridis', ax=axs[0], levels=20)
+(-ds_t).isel(channel=1).anomaly.plot.contourf(cmap='viridis', ax=axs[1], levels=15)
 fig.suptitle("Anomaly")
 
 fig, axs = plt.subplots(1, 2, figsize=(10, 3))
-ds_t.isel(channel=0).medians.plot(cmap='viridis', ax=axs[0])
-ds_t.isel(channel=1).medians.plot(cmap='viridis', ax=axs[1])
+ds_t.isel(channel=0).medians.plot.contourf(cmap='viridis', ax=axs[0], levels=20)
+(-ds_t).isel(channel=1).medians.plot.contourf(cmap='viridis', ax=axs[1], levels=15)
 fig.suptitle(f"Median")
 
 fig, axs = plt.subplots(1, 2, figsize=(10, 3))
-(ds_t.isel(channel=0).anomaly + ds_t.isel(channel=0).medians).plot(cmap='viridis', ax=axs[0])
-(ds_t.isel(channel=1).anomaly + ds_t.isel(channel=1).medians).plot(cmap='viridis', ax=axs[1])
+(ds_t.isel(channel=0).anomaly + ds_t.isel(channel=0).medians).plot.contourf(cmap='viridis', ax=axs[0], levels=20)
+(-ds_t.isel(channel=1).anomaly - ds_t.isel(channel=1).medians).plot.contourf(cmap='viridis', ax=axs[1], levels=15)
 fig.suptitle('Anomaly + Median')
 # %%
 ds.close()
