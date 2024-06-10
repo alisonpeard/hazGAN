@@ -31,6 +31,7 @@ class Visualiser(Callback):
                         vmin=vmin,
                         vmax=vmax,
                     )
+                ax.invert_yaxis()
             fig.subplots_adjust(right=0.8)
             cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
             fig.colorbar(im, cax=cbar_ax)
