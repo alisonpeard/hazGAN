@@ -74,7 +74,9 @@ def define_generator(config, nchannels=2):
     bn2 = layers.BatchNormalization(axis=-1)(drop2)
 
     # Output layer, 17 x 21 x 128 -> 20 x 24 x nchannels
-    score = layers.Conv2DTranspose(nchannels, (4, 6), 2)(bn2)
+    #score = layers.Conv2DTranspose(nchannels, (4, 6), 2)(bn2)
+    conv3 = layers.Resizing(20, 24, interpolation='lanczos3')(bn2)
+    score = layers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same')(conv3)
     o = score if config.gumbel else tf.keras.activations.sigmoid(score) # NOTE: check
     return tf.keras.Model(z, o, name="generator")
 
