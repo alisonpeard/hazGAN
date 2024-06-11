@@ -108,6 +108,7 @@ cluster.grouped <- cluster.df %>%
 m <- nrow(cluster.grouped); m
 nyears <- length(unique(year(era5.df$time)))
 lambda <- m / nyears; lambda # yearly occurrence rate
+occurence.rate <- lambda
 p <- 1 - (rank(cluster.grouped$u10, ties.method='average')) / (m + 1) # exceedence probability
 rp <- 1 / (lambda*p)
 cluster.grouped$storm.rp <- rp

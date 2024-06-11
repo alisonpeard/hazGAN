@@ -8,9 +8,13 @@ from hazGAN import POT
 import wandb
 # %%
 wd = "/Users/alison/Documents/DPhil/multivariate/hazGAN"
-RUNNAME = "floral-sun-20"
+RUNNAME = "toasty-serenity-21"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
+occurrence_rate = 18.033
+nyears = 1000
+nsamples = occurrence_rate * nyears
+
 cmaps = ["YlOrRd", "PuBu", "YlGnBu"]
 figdir = "/Users/alison/Documents/DPhil/multivariate/hazGAN/figures/results"
 wandb.init(project="test", mode="disabled")
@@ -43,7 +47,7 @@ def sample_to_xr(data, ds_ref, plot=False):
         ds.isel(sample=0, channel=0).uniform.plot.contourf(levels=10, cmap='viridis')
     return ds
 
-samples_GAN = hg.unpad(wgan(nsamples=1000), paddings).numpy()
+samples_GAN = hg.unpad(wgan(nsamples=nsamples), paddings).numpy()
 ds_GAN = sample_to_xr(samples_GAN, ds_ref, plot=True)
 
 # %% convert to original scale
@@ -56,8 +60,8 @@ ds_GAN['anomaly'] = (('sample', 'lat', 'lon', 'channel'), sample_X)
 monthly_medians = ds_ref.medians.groupby('time.month').median()
 ds_GAN['median'] = monthly_medians
 # %%
-i = np.random.randint(0, 1000)
-ds_GAN.isel(sample=i, channel=0).anomaly.plot(levels=10, cmap='viridis')
+i = np.random.randint(0, nsamples)
+ds_GAN.isel(sample=i, channel=0).anomaly.plot(cmap='viridis') # levels=10, 
 # %%
 ds_GAN.to_netcdf(os.path.join(wd, "..", "era5_data.nosync", "hazGAN_samples.nc"))
 # %%
