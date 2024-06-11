@@ -23,8 +23,8 @@ df.columns = [col.replace(".", "_") for col in df.columns]
 df = df.rename(columns={"msl": "mslp"})
 df["storm_rp"] = df["storm_rp_u10"]
 df = df.drop(columns=["storm_rp_u10", "storm_rp_mslp"])
-
-# add event sizes
+df['day_of_storm'] = df.groupby('storm')['time_u10'].rank('dense')
+# %% add event sizes
 events = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))[["storm", "storm.size"]].groupby("storm").mean()
 events = events.to_dict()["storm.size"]
 df["size"] = df["storm"].map(events)
@@ -86,6 +86,7 @@ grid = gdf["grid"].unique().reshape([ny, nx])
 lat = gdf["latitude"].unique()
 lon = gdf["longitude"].unique()
 X = gdf[channels].values.reshape([T, ny, nx, nchannels])
+D = gdf[["day_of_storm"]].values.reshape([T, ny, nx])
 U = gdf[[f"ecdf_{c}" for c in channels]].values.reshape([T, ny, nx, nchannels])
 M = gdf[[f"{c}_median" for c in channels]].values.reshape([T, ny, nx, nchannels])
 z = gdf[["storm", "storm_rp"]].groupby("storm").mean().values.reshape(T)
@@ -112,6 +113,7 @@ params = np.stack([shape, thresh, scale], axis=-2)
 ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], U),
                  'anomaly': (['time', 'lat', 'lon', 'channel'], X),
                  'medians': (['time', 'lat', 'lon', 'channel'], M),
+                 'day_of_storm': (['time', 'lat', 'lon'], D),
                  'storm_rp': (['time'], z),
                  'duration': (['time'], s),
                  'params': (['lat', 'lon', 'param', 'channel'], params),
@@ -125,6 +127,27 @@ ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], U),
                  attrs={'CRS': 'EPSG:4326', 'u10': '10m wind speed', 'mslp': 'negative of mean sea level pressure'})
 
 ds.to_netcdf(os.path.join(datadir, "data.nc"))
+# %% day of storm
+import matplotlib as mpl
+cmap = mpl.cm.YlOrRd
+t = np.random.uniform(0, T, 1).astype(int)[0]
+
+fig, axs = plt.subplots(1, 2, figsize=(8, 3))
+ax = axs[0]
+ds_t = ds.isel(time=t, channel=0).uniform #+ ds.isel(time=t).medians
+ds_t.plot(ax=ax)
+ax.set_title(f"Storm {t}")
+
+ax = axs[1]
+ds_t = ds.isel(time=t).day_of_storm.astype(int)
+vmin = ds_t.min().values
+vmax = ds_t.max().values
+
+bounds = np.arange(0.5, 11.5, 1).tolist()
+ticks = np.arange(0, 12, 1).tolist()
+norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+ds_t.plot(cmap=cmap, norm=norm, ax=ax, cbar_kwargs={'ticks': ticks})
+ax.set_title(f"Day of storm {t}")
 # %% view netcdf file
 t = np.random.uniform(0, T, 1).astype(int)[0]
 ds_t = ds.isel(time=t)

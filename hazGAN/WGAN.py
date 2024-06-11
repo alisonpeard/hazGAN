@@ -135,6 +135,7 @@ class WGAN(keras.Model):
         self.d_optimizer.build(self.critic.trainable_variables)
         self.g_optimizer.build(self.generator.trainable_variables)
 
+
     def call(self, nsamples=5):
         """Return uniformly distributed samples from the generator."""
         random_latent_vectors = self.latent_space_distn((nsamples, self.latent_dim))
@@ -144,19 +145,19 @@ class WGAN(keras.Model):
         else:
             return raw
 
+
     def train_step(self, data):
         batch_size = tf.shape(data)[0]
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
         fake_data = self.generator(random_latent_vectors, training=False)
 
         # train critic
+        # https://github.com/igul222/improved_wgan_training/blob/master/gan_mnist.py:134
         for _ in range(self.config.training_balance):
             with tf.GradientTape() as tape:
                 score_real = self.critic(data)
                 score_fake = self.critic(fake_data)
                 d_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real)
-
-                # NOTE: https://github.com/igul222/improved_wgan_training/blob/master/gan_mnist.py
                 eps = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
                 differences = fake_data - data
                 interpolates = data + (eps * differences)  # interpolated data
@@ -177,7 +178,7 @@ class WGAN(keras.Model):
             generated_data = self.generator(random_latent_vectors)
             score = self.critic(generated_data, training=False)
             g_loss_raw = -tf.reduce_mean(score)
-            #g_penalty = self.lambda_ * chi_loss(data, generated_data) # extremal correlation structure
+            #g_penalty = self.lambda_ * chi_loss(data, generated_data) # FIX: extremal correlation structure
             g_loss = g_loss_raw #+ g_penalty 
         grads = tape.gradient(g_loss, self.generator.trainable_weights)
         self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))

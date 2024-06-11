@@ -68,6 +68,7 @@ def gaussian_blur(img, kernel_size=11, sigma=5):
         kernel = tf.tile(kernel[..., tf.newaxis], [1, 1, channels])
         return kernel
 
+    img = tf.cast(img, tf.float32)
     gaussian_kernel = gauss_kernel(tf.shape(img)[-1], kernel_size, sigma)
     gaussian_kernel = gaussian_kernel[..., tf.newaxis]
 

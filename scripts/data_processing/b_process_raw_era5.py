@@ -43,7 +43,7 @@ ds = ds.dropna(dim='time', how='all') # some dates are missing because API take
 
 # %%
 ds = ds.rename({'lon': 'longitude', 'lat': 'latitude'})
-grid = np.arange(0, 18 * 20, 1).reshape(18, 20)
+grid = np.arange(0, 18 * 22, 1).reshape(18, 22)
 grid = xr.DataArray(
     grid, dims=["latitude", "longitude"], coords={"latitude": ds.latitude[::-1], "longitude": ds.longitude}
 )

@@ -1,4 +1,7 @@
-"""Load observations/synthetic data and calculate mangrove damage probabilities."""
+"""Load observations/synthetic data and calculate mangrove damage probabilities.
+
+Visualise points: https://www.researchgate.net/publication/271193539_Oil_Spills_in_Mangroves_Planning_Response_Considerations/figures?lo=1
+"""
 # %%
 import os
 import numpy as np
@@ -21,7 +24,7 @@ plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 mangrove_path = '/Users/alison/Documents/DPhil/data/global_mangrove_watch/v3_2020/gmw_v3_2020_vec.gpkg'
 mangroves =  gpd.read_file(mangrove_path, bbox=(80, 10, 95, 25))
 # %% load the ERA5 data or generated data
-datadir = os.path.join(wd, "..", "era5_data")  # keep data folder in parent directory
+datadir = os.path.join(wd, "..", "era5_data.nosync")  # keep data folder in parent directory
 data = xr.open_dataset(os.path.join(datadir, "data.nc")) 
 # %%
 # make a new dataset with full scale winds and pressure
@@ -54,6 +57,12 @@ mangrove_df.loc[mangrove_df['Damage'] > 0, 'damage_prob'] = 1
 model = sm.GLM(mangrove_df['damage_prob'].values, sm.add_constant(mangrove_df['Wind_landfall'].values), family=sm.families.Binomial())
 results = model.fit()
 results.summary()
+# %%
+mangrove_df = mangrove_df.sort_values('HurricaneYear')
+plt.scatter(mangrove_df['Wind_landfall'], mangrove_df['Damage'], color='k', s=10)
+plt.xlabel('Wind speed at landfall (m/s)')
+plt.ylabel('Mangrove damage')
+
 # %%
 pred = pd.DataFrame({"Wind_landfall": np.arange(0, 250 * 1000 / 3600, 1)})
 pred['fit'] = results.predict(sm.add_constant(pred['Wind_landfall'].values), which='linear')

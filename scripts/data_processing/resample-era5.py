@@ -27,7 +27,7 @@ for file_long in files:
     times = ds_orig.time.values
     resampled_datasets = []
     for var, method in zip(vars, methods):
-        command = f'gdalwarp -t_srs EPSG:4326 -ts 20 18 -r {method} -overwrite -of netCDF NETCDF:\\"{file}.nc\\":{var} resampled/{file}_{var}.nc'
+        command = f'gdalwarp -t_srs EPSG:4326 -ts 22 18 -r {method} -overwrite -of netCDF NETCDF:\\"{file}.nc\\":{var} resampled/{file}_{var}.nc'
         os.system(command) # use GDAL to resample
         ds_var = xr.open_dataset(os.path.join(target_dir, f"{file}_{var}.nc"))
         bands = [var for var in ds_var.data_vars if 'Band' in var]

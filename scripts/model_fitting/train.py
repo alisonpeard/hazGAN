@@ -60,7 +60,8 @@ def main(config):
     test_u = data['test_u']
     train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
     test = tf.data.Dataset.from_tensor_slices(test_u).batch(config.batch_size)
-
+    print(f"Training data shape: {train_u.shape}")
+    
     # train test callbacks
     chi_score = hg.ChiScore({"train": next(iter(train)), "test": next(iter(test))},
                             frequency=config.chi_frequency, gumbel_margins=config.gumbel)

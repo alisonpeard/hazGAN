@@ -10,9 +10,13 @@ import calendar
 import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 
-datadir = '/Users/alison/Documents/DPhil/multivariate/era5_data'
+datadir = '/Users/alison/Documents/DPhil/multivariate/era5_data.nosync'
 data = xr.open_dataset(os.path.join(datadir, "hazGAN_samples.nc"))
 occurence_rate = 22 # from R 
+# %%
+vals = data.anomaly.values
+vals = hg.gaussian_blur(vals, kernel_size=2, sigma=0.8)
+data['anomaly'] = (['sample', 'lat', 'lon', 'channel'], vals)
 # %% calculate return periods across each pixel
 wind = data.anomaly.sel(channel='u10')
 m = wind.sample.size
@@ -22,23 +26,27 @@ wind['return_period'] = rp
 wind['aep'] = 1 / rp
 # %% interpolate return periods
 def get_rp_wind(x, y, rp):
-    interpolated = np.interp(rp, x, y)
+    interpolated = np.interp(rp, np.sort(x), np.sort(y)) # TODO: interpolate better
     return interpolated
 
+RP = 25
 res = xr.apply_ufunc(get_rp_wind, rp, wind,
                      input_core_dims=[["sample"], ['sample']],
                      dask = 'allowed',
-                     kwargs={'rp': 100},
+                     kwargs={'rp': RP},
                      vectorize = True)
+
 # %% visualise different months
-month = 8
+month = 6
 median = data['median'].where(data['month']==month, drop=True).isel(channel=0)[0]#.mean(dim=['time']).medians
+
 
 fig = plt.figure(figsize=(8, 6))
 ax  = plt.axes(projection=ccrs.PlateCarree()) 
 ax.coastlines(resolution='50m',color='k', linewidth=.5) 
-(median + res).plot.contourf(levels=20, cmap="YlOrRd", ax=ax)
+# (median + res).plot.contourf(levels=50, cmap="YlOrRd", ax=ax) #
+(median + res).plot(cmap="YlOrRd", ax=ax)
 
-ax.set_title(f'50 year RP wind speed for {calendar.month_name[month]} storm')
+ax.set_title(f'{RP} year RP wind speed for {calendar.month_name[month]} storm')
 # %%
 

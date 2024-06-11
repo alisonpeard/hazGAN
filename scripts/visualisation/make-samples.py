@@ -8,7 +8,7 @@ from hazGAN import POT
 import wandb
 # %%
 wd = "/Users/alison/Documents/DPhil/multivariate/hazGAN"
-RUNNAME = "new-dimensions"
+RUNNAME = "floral-sun-20"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 cmaps = ["YlOrRd", "PuBu", "YlGnBu"]
@@ -21,7 +21,7 @@ wgan.generator.summary()
 ntrain = config.train_size
 # %%
 import numpy as np
-ds_ref = xr.open_dataset(os.path.join(wd, "..", "era5_data", "data.nc"))
+ds_ref = xr.open_dataset(os.path.join(wd, "..", "era5_data.nosync", "data.nc"))
 def sample_to_xr(data, ds_ref, plot=False):
     nsamples = data.shape[0]
     samples = np.arange(nsamples)
@@ -59,5 +59,5 @@ ds_GAN['median'] = monthly_medians
 i = np.random.randint(0, 1000)
 ds_GAN.isel(sample=i, channel=0).anomaly.plot(levels=10, cmap='viridis')
 # %%
-ds_GAN.to_netcdf(os.path.join(wd, "..", "era5_data", "hazGAN_samples.nc"))
+ds_GAN.to_netcdf(os.path.join(wd, "..", "era5_data.nosync", "hazGAN_samples.nc"))
 # %%

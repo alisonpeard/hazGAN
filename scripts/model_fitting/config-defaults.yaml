@@ -3,9 +3,9 @@ model:
   desc: Which model to train, ['wgan' | 'dcgan'].
   value: wgan
 nepochs:
-  value: 500
-train_size:
   value: 1000
+train_size:
+  value: 600
 batch_size:
   value: 50
 chi_frequency:
@@ -19,7 +19,7 @@ lambda_:
   value: 1.
 training_balance:
   desc: How many more times to train discriminator than generator.
-  value: 4
+  value: 3
 true_label_smooth:
   desc: Multiply true labels by this to smooth discriminator's labels.
   value: 0.9
@@ -35,9 +35,9 @@ optimizer:
 
 # architecture
 lrelu:
-  value: 0.2991161912395133
+  value: 0.2
 dropout:
-  value: 0.44053850596844424
+  value: 0.4
 latent_dims:
   value: 100
 g_layers:
@@ -56,11 +56,11 @@ d_layers:
 
 # Adam parameters
 learning_rate:
-  value: 0.00013367626823798716
+  value: 0.0001
 beta_1:
-  value: 0.2269388227546783
+  value: 0.5
 beta_2:
-  value: 0.999
+  value: 0.9
 clipnorm:
   value:
 global_clipnorm:
