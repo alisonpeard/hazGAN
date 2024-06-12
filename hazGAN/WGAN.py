@@ -27,6 +27,7 @@ def process_optimizer_kwargs(config):
         "learning_rate": config.learning_rate,
         "beta_1": config.beta_1,
         "beta_2": config.beta_2,
+        "weight_decay": config.weight_decay,
         "use_ema": config.use_ema,
         "ema_momentum": config.ema_momentum,
         "ema_overwrite_frequency": config.ema_overwrite_frequency,
