@@ -10,8 +10,9 @@ from calendar import month_name as month
 
 # %%
 channels = ["u10", "mslp"]
+res = (28, 28)
 wd = "/Users/alison/Documents/DPhil/multivariate"
-datadir = os.path.join(wd, "era5_data.nosync")
+datadir = os.path.join(wd, "era5_data.nosync", f'res_{res[1]}x{res[0]}')
 
 coords = xr.open_dataset(os.path.join(datadir, 'data_1950_2022.nc'))
 coords = coords['grid'].to_dataframe().reset_index()

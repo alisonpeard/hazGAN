@@ -13,8 +13,9 @@ library(CFtime)
 library(tidync)
 
 wd <- "/Users/alison/Documents/DPhil/multivariate"
+res <- c(28, 28)
 filename <- 'data_1950_2022.nc'
-indir <- paste0(wd, '/', 'era5_data.nosync')
+indir <- paste0(wd, '/', 'era5_data.nosync', '/', paste0('res_', res[1], 'x', res[2]))
 r.func <- max # https://doi.org/10.1111/rssb.12498
 ########### DEFINE FUNCTIONS ###################################################
 standardise.by.month <- function(df, var){
@@ -105,10 +106,10 @@ cluster.grouped <- cluster.df %>%
             storm.size = storm.size)
 
 # empirical return period calculation
-m <- nrow(cluster.grouped); m
+m <- nrow(cluster.grouped); paste0("Number of storms: ", m)
 nyears <- length(unique(year(era5.df$time)))
-lambda <- m / nyears; lambda # yearly occurrence rate
-occurence.rate <- lambda
+lambda <- m / nyears; paste0("Yearly rate: ", lambda) # yearly occurrence rate
+occurrence.rate <- lambda
 p <- 1 - (rank(cluster.grouped$u10, ties.method='average')) / (m + 1) # exceedence probability
 rp <- 1 / (lambda*p)
 cluster.grouped$storm.rp <- rp
@@ -116,6 +117,7 @@ hist(rp, breaks=50)
 
 cluster.df <- left_join(cluster.df, cluster.grouped[c('storm', 'storm.rp', 'storm.size')], by=c('storm'))
 cluster.df$q <- q
+print('Declustered dataframe:')
 head(cluster.df[order(-cluster.df$storm.rp),])
 ########### FIT GPD TO EVENT MAXIMA ############################################
 src <- tidync(paste0(indir, '/', filename))
@@ -267,6 +269,7 @@ pacf(grid.df$msl, main="MSLP cluster maxima PACF")
 
 
 #####
+print(occurrence.rate)
 missing.days <- (nyears * 365) - length(unique(era5.df.all$time))
 missing.years <- missing.days / 365
 
