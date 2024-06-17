@@ -76,7 +76,7 @@ def pairwise_extremal_coeffs(uniform):
     n, h, w = shape[0], shape[1], shape[2]
     uniform = tf.reshape(uniform, (n, h * w))
     frechet = inv_frechet(uniform)
-    n = tf.cast(n, tf.float32)
+    n = tf.cast(n, frechet.dtype)
     ecs = n / minner_product(tf.transpose(frechet), frechet)
     ecs = tf.where(tf.math.is_inf(ecs), tf.fill(tf.shape(ecs), np.nan), ecs)
     return ecs
@@ -106,6 +106,37 @@ def get_all_correlations(x):
             corrs[i, j] = corr
             corrs[j, i] = corr
     return corrs
+
+# Cross-channel correlations
+def get_extremal_corrs_nd(marginals, sample_inds):
+    """Calculate extremal coefficients across D-dimensional uniform data."""
+    _, _, _, d = marginals.shape
+    coefs = get_extremal_coeffs_nd(marginals, sample_inds)
+    return {key: d - val for key, val in coefs.items()}
+
+
+def get_extremal_coeffs_nd(marginals, sample_inds):
+    """Calculate extremal coefficients across D-dimensional uniform data."""
+    n, h, w, d = marginals.shape
+    data = marginals.reshape(n, h * w, d)
+    data = data[:, sample_inds, :]
+    frechet = inv_frechet(data)
+    ecs = {}
+    for i in range(len(sample_inds)):
+        ecs[sample_inds[i]] = raw_extremal_coeff_nd(frechet[:, i, :])
+    return ecs
+
+
+def raw_extremal_coeff_nd(frechets):
+    n, d = frechets.shape
+    minima = np.min(frechets, axis=1)  # minimum for each row
+    minima = np.sum(minima)
+    if minima > 0:
+        theta = n / minima
+    else:
+        print("Warning: all zeros in minima array.")
+        theta = d
+    return theta
 
 
 # tests
@@ -155,32 +186,4 @@ test_minner_product()
 #     return theta
 
 
-# def get_extremal_corrs_nd(marginals, sample_inds):
-#     """Calculate extremal coefficients across D-dimensional uniform data."""
-#     _, _, _, d = marginals.shape
-#     coefs = get_extremal_coeffs_nd(marginals, sample_inds)
-#     return {key: d - val for key, val in coefs.items()}
 
-
-# def get_extremal_coeffs_nd(marginals, sample_inds):
-#     """Calculate extremal coefficients across D-dimensional uniform data."""
-#     n, h, w, d = marginals.shape
-#     data = marginals.reshape(n, h * w, d)
-#     data = data[:, sample_inds, :]
-#     frechet = inv_frechet(data)
-#     ecs = {}
-#     for i in range(len(sample_inds)):
-#         ecs[sample_inds[i]] = raw_extremal_coeff_nd(frechet[:, i, :])
-#     return ecs
-
-
-# def raw_extremal_coeff_nd(frechets):
-#     n, d = frechets.shape
-#     minima = np.min(frechets, axis=1)  # minimum for each row
-#     minima = np.sum(minima)
-#     if minima > 0:
-#         theta = n / minima
-#     else:
-#         print("Warning: all zeros in minima array.")
-#         theta = d
-#     return theta

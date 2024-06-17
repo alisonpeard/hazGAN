@@ -9,7 +9,7 @@ from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from .utils import *
 
 
-channel_labels = {0: r'wind speed [ms$^{-1}$]', 1: 'sig. wave height [m]', 2: 'total precipitation [m]'}
+channel_labels = {0: r'wind speed [ms$^{-1}$]', 1: r'mean sea level pressure [check units]'}
 variable_labels = {'wind_data': r'wind speed [ms$^{-1}$]', 'wave_data': 'sig. wave height [m]', 'precip_data': 'total precipitation [m]'}
 longitude = np.linspace(80.0, 95.0, 3)
 latitude = np.linspace(10.0, 25.0, 4)

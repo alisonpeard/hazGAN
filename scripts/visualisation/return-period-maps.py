@@ -2,7 +2,7 @@
 Make wind speed/mslp maps for different return periods and month of the year using training data.
 """
 #%%
-import os
+import os 
 import numpy as np
 import xarray as xr
 import hazGAN as hg
@@ -70,12 +70,19 @@ plt.suptitle(f'Wind speeds for {calendar.month_name[month]} storms', y=1, fontsi
 plt.colorbar(im, ax=axs, extend='both', orientation='horizontal', label='Wind speed [m/s]',
              aspect=80, shrink=0.8)
 # %% ----Compare this to independent RP maps-----
+# TODO: this is wrong because the params are for exceedances only
+# instead I need to just take the uniform data, convert it back to 
+# standard Gumbel and calculate 1 / (1 - exp(-exp(-u))) to get the return period
 from scipy.stats import genpareto
 month = 10
 median = data['median'].where(data['month']==month, drop=True).isel(channel=0)[0]
 
-def get_wind(params, RP):
-    return genpareto.ppf(1-1/RP, *params)
+def get_rp_wind(uniform):
+    rp = 1 / (1 - np.exp(-np.exp(-uniform)))
+    return rp
+
+# def get_wind(params, RP):
+#     return genpareto.ppf(1-1/RP, *params)
 
 fig, axs = plt.subplots(1, 4, figsize=(18, 4), subplot_kw={'projection': ccrs.PlateCarree()})
 RPs = [5, 25, 50, 100]

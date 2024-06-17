@@ -3,11 +3,11 @@ model:
   desc: Which model to train, ['wgan' | 'dcgan'].
   value: wgan
 nepochs:
-  value: 1000
+  value: 500
 train_size:
-  value: 600
+  value: 1000
 batch_size:
-  value: 50
+  value: 32
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
   value: 5
@@ -19,7 +19,7 @@ lambda_:
   value: 1.
 training_balance:
   desc: How many more times to train discriminator than generator.
-  value: 3
+  value: 5
 true_label_smooth:
   desc: Multiply true labels by this to smooth discriminator's labels.
   value: 0.9
@@ -62,7 +62,7 @@ beta_1:
 beta_2:
   value: 0.9 
 weight_decay:
-  value: 0.0001
+  value: 0.01
 global_clipnorm:
   value: False
 use_ema:

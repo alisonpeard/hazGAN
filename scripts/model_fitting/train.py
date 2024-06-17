@@ -23,6 +23,7 @@ import wandb
 from wandb.keras import WandbMetricsLogger
 import hazGAN as hg
 
+
 global rundir
 global runname
 global debug
@@ -65,6 +66,13 @@ def main(config):
     # train test callbacks
     chi_score = hg.ChiScore({"train": next(iter(train)), "test": next(iter(test))},
                             frequency=config.chi_frequency, gumbel_margins=config.gumbel)
+    reduce_on_plateau = tf.keras.callbacks.ReduceLROnPlateau(
+        monitor="generator_loss",
+        factor=0.1,
+        patience=20,
+        mode="min",
+        verbose=1
+        )
 
     # compile
     with tf.device("/gpu:0"):
@@ -72,7 +80,7 @@ def main(config):
         gan.fit(
             train,
             epochs=config.nepochs,
-            callbacks=[WandbMetricsLogger(), hg.Visualiser(1, runname=runname)]
+            callbacks=[WandbMetricsLogger(), hg.Visualiser(1, runname=runname), reduce_on_plateau]
         )
 
     # reproducibility

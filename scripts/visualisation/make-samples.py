@@ -1,6 +1,7 @@
 """Generate and save an xarray of samples to use in other visualisations (save regenerating every time)"""
 # %%
 import os
+import numpy as np
 import xarray as xr
 import tensorflow as tf
 import hazGAN as hg
@@ -12,7 +13,7 @@ RUNNAME = "toasty-serenity-21"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 occurrence_rate = 18.033
-nyears = 1000
+nyears = 100
 nsamples = occurrence_rate * nyears
 
 cmaps = ["YlOrRd", "PuBu", "YlGnBu"]
@@ -24,8 +25,8 @@ wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generato
 wgan.generator.summary()
 ntrain = config.train_size
 # %%
-import numpy as np
 ds_ref = xr.open_dataset(os.path.join(wd, "..", "era5_data.nosync", "data.nc"))
+
 def sample_to_xr(data, ds_ref, plot=False):
     nsamples = data.shape[0]
     samples = np.arange(nsamples)
@@ -40,16 +41,16 @@ def sample_to_xr(data, ds_ref, plot=False):
         'lat': ds_ref.lat.values,
         'lon': ds_ref.lon.values,
         'channel': ['u10', 'mslp'],
-        'param': ['shape', 'loc', 'scale']
+        'param': ['shape', 'loc', 'scale'],
+        'month': np.unique(ds_ref['time.month'].values)
         }
-        )
+    )
     if plot:
         ds.isel(sample=0, channel=0).uniform.plot.contourf(levels=10, cmap='viridis')
     return ds
 
 samples_GAN = hg.unpad(wgan(nsamples=nsamples), paddings).numpy()
 ds_GAN = sample_to_xr(samples_GAN, ds_ref, plot=True)
-
 # %% convert to original scale
 sample_U = ds_GAN.uniform.values
 X = ds_ref.isel(time=slice(0, ntrain)).anomaly.values
@@ -58,7 +59,7 @@ sample_X = POT.inv_probability_integral_transform(sample_U, X, U, ds_ref.isel(ti
 ds_GAN['anomaly'] = (('sample', 'lat', 'lon', 'channel'), sample_X)
 # %% add monthly info
 monthly_medians = ds_ref.medians.groupby('time.month').median()
-ds_GAN['median'] = monthly_medians
+ds_GAN['medians'] = (('month', 'lat', 'lon', 'channel'), monthly_medians.values)
 # %%
 i = np.random.randint(0, nsamples)
 ds_GAN.isel(sample=i, channel=0).anomaly.plot(cmap='viridis') # levels=10, 
