@@ -2,16 +2,27 @@
 import os
 import numpy as np
 import xarray as xr
+import argparse
 
-redo = False
+# parse args for resolution with argparse
+parser = argparse.ArgumentParser(description='Resample ERA5 data')
+parser.add_argument('-r', '--resolution', type=int, nargs=2, default=[22, 18], help='Resolution of output data (lon, lat)')
+parser.add_argument('-redo', action='store_true', default=False, help='Redo resampling')
+args = parser.parse_args()
+res = args.resolution
+redo = args.redo
+
+# set up directories
 source_dir = "/Users/alison/Documents/DPhil/data/era5/new_data.nosync"
 target_dir = "/Users/alison/Documents/DPhil/data/era5/new_data.nosync/resampled"
+target_dir = os.path.join(target_dir, f"res_{res[1]}x{res[0]}")
+os.makedirs(target_dir, exist_ok=True)
 
 os.chdir(source_dir)
 files = os.listdir(source_dir)
 vars = ['u10', 'v10', 'msl']
 methods = ['max', 'max', 'min']
-print(files)
+
 # %%
 for file_long in files:
     file = file_long.split('.')[0]
@@ -27,7 +38,7 @@ for file_long in files:
     times = ds_orig.time.values
     resampled_datasets = []
     for var, method in zip(vars, methods):
-        command = f'gdalwarp -t_srs EPSG:4326 -ts 22 18 -r {method} -overwrite -of netCDF NETCDF:\\"{file}.nc\\":{var} resampled/{file}_{var}.nc'
+        command = f'gdalwarp -t_srs EPSG:4326 -ts {res[0]} {res[1]} -r {method} -overwrite -of netCDF NETCDF:\\"{file}.nc\\":{var} resampled/res_{res[1]}x{res[0]}/{file}_{var}.nc'
         os.system(command) # use GDAL to resample
         ds_var = xr.open_dataset(os.path.join(target_dir, f"{file}_{var}.nc"))
         bands = [var for var in ds_var.data_vars if 'Band' in var]
