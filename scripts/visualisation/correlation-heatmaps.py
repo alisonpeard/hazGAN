@@ -10,7 +10,8 @@ import matplotlib.pyplot as plt
 from itertools import combinations
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
-datadir = '/Users/alison/Documents/DPhil/multivariate/era5_data.nosync'
+res = (18, 22)
+datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/era5_data/res_{res[0]}x{res[1]}'
 data = xr.open_dataset(os.path.join(datadir, "data.nc"))
 samples_ds = xr.open_dataset(os.path.join(datadir, "hazGAN_samples.nc"))
 occurence_rate = 18.033 # from R 
@@ -99,6 +100,14 @@ ax[2].set_title('GAN');
 fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
 fig.suptitle(r'$\hat \theta$ across all three channels');
 plt.scatter(test_corrs, gan_corrs);
+
+rmse_chi_train_test = np.sqrt(np.nanmean((excoefs_train - excoefs_test) ** 2))
+rmse_chi_train = np.sqrt(np.nanmean((excoefs_gan - excoefs_train) ** 2))
+rmse_chi_test = np.sqrt(np.nanmean((excoefs_gan - excoefs_test) ** 2))
+
+print("RMSE chi train-test: ", rmse_chi_train_test)
+print("RMSE chi train: ", rmse_chi_train)
+print("RMSE chi test: ", rmse_chi_test)
 
 # %% -----Spatial correlations------
 channel = 0

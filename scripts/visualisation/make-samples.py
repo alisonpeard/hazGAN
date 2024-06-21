@@ -8,8 +8,8 @@ import hazGAN as hg
 from hazGAN import POT
 import wandb
 # %%
-wd = "/Users/alison/Documents/DPhil/multivariate/hazGAN"
-RUNNAME = "toasty-serenity-21"
+wd = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN"
+RUNNAME = "zesty-brook-24"  # "toasty-serenity-21"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 occurrence_rate = 18.033
@@ -25,7 +25,7 @@ wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generato
 wgan.generator.summary()
 ntrain = config.train_size
 # %%
-ds_ref = xr.open_dataset(os.path.join(wd, "..", "era5_data.nosync", "data.nc"))
+ds_ref = xr.open_dataset(os.path.join(wd, "..", "era5_data", "res_18x22", "data.nc"))
 
 def sample_to_xr(data, ds_ref, plot=False):
     nsamples = data.shape[0]
@@ -64,5 +64,5 @@ ds_GAN['medians'] = (('month', 'lat', 'lon', 'channel'), monthly_medians.values)
 i = np.random.randint(0, nsamples)
 ds_GAN.isel(sample=i, channel=0).anomaly.plot(cmap='viridis') # levels=10, 
 # %%
-ds_GAN.to_netcdf(os.path.join(wd, "..", "era5_data.nosync", "hazGAN_samples.nc"))
+ds_GAN.to_netcdf(os.path.join(wd, "..", "paper1.nosync", "res_18x22", "hazGAN_samples.nc"))
 # %%
