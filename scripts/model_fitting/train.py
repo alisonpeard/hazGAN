@@ -32,9 +32,10 @@ plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
 # some static variables
 data_source = "era5"
+res = (18, 22)
 cwd = os.getcwd()  # scripts directory
 wd = os.path.join(cwd, "..", '..')  # hazGAN directory
-datadir = os.path.join(wd, "..", f"{data_source}_data.nosync")  # keep data folder in parent directory
+datadir = os.path.join(wd, "..", f"{data_source}_data.nosync", f"res_{res[0]}x{res[1]}")  # keep data folder in parent directory
 imdir = os.path.join(wd, "figures", "temp")
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 
@@ -96,6 +97,9 @@ def main(config):
     fig = hg.plot_generated_marginals(fake_u, vmin=None, vmax=None, runname=runname)
     log_image_to_wandb(fig, f"generated_marginals", imdir)
 
+    gan.critic.summary()
+    gan.generator.summary()
+
 
 # %% run this cell to train the model
 if __name__ == "__main__":
@@ -104,7 +108,7 @@ if __name__ == "__main__":
     # parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
     # args = parser.parse_args()
     # dry_run = args.dry_run
-    dry_run = False
+    dry_run = True
 
     # initialise wandb
     if dry_run:

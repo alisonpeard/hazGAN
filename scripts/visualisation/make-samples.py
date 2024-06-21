@@ -17,7 +17,7 @@ nyears = 100
 nsamples = occurrence_rate * nyears
 
 cmaps = ["YlOrRd", "PuBu", "YlGnBu"]
-figdir = "/Users/alison/Documents/DPhil/multivariate/hazGAN/figures/results"
+figdir = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/figures/results"
 wandb.init(project="test", mode="disabled")
 config = wandb.config
 wgan = hg.WGAN(wandb.config, nchannels=2)
