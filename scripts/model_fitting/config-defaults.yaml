@@ -3,19 +3,19 @@ model:
   desc: Which model to train, ['wgan' | 'dcgan'].
   value: wgan
 nepochs:
-  value: 500
+  value: 200 #500
 train_size:
   value: 1000
 batch_size:
   value: 32
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
-  value: 5
+  value: 10
 
 # training features
 lambda_gp:
   value: 10.
-lambda_:
+lambda_chi:
   value: 1.
 training_balance:
   desc: How many more times to train discriminator than generator.
@@ -43,16 +43,16 @@ latent_dims:
 g_layers:
   desc: Number of channels in the hidden layers for the generator.
   value: [25600, 512, 256]
-complexity_0:
-  value: 1
-complexity_1:
-  value: 1
-complexity_2:
-  value: 2
 d_layers:
   desc: Number of channels in the hidden layers for the discriminator.
-  value: [64, 128, 256]
-
+  value: [128, 256, 512]
+g_complexity:
+  value: 1
+d_complexity:
+  value: 1
+interpolation:
+  desc: Interpolation method for upsampling, ['nearest', 'bilinear'].
+  value: nearest
 
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
 learning_rate:
