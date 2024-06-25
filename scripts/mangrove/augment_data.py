@@ -14,6 +14,10 @@ bob_crs = 24346
 path = '/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v2/input_fixedCNTRY_rmOutlier.csv'
 df = pd.read_csv(path)
 [*df.columns]
+# %%
+subset = df[df['stormName'] == 'Alex']
+subset = subset[subset['mangrovePxl'] == 17]
+subset
 # %% -----Add Athanisou's slope data------
 gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.center_centerLon, df.center_centerLat)).set_crs(epsg=4326)
 slopepath = "/Users/alison/Documents/DPhil/data/athanisou-slopes-2019/nearshore_slopes.csv"
@@ -22,20 +26,14 @@ slope_gdf = gpd.GeoDataFrame(slope_df, geometry=gpd.points_from_xy(slope_df.X, s
 gdf = gpd.sjoin_nearest(gdf.to_crs(bob_crs), slope_gdf[['slope', 'geometry']].to_crs(bob_crs), how='left', distance_col='distance').to_crs(4326)
 gdf.sort_values(by='slope', ascending=True).plot('slope', cmap='YlOrRd', legend=True)
 
-# %%
-# import ibtracs data
+# %% -----Import IBTrACs data------
 ibtracs = pd.read_csv('/Users/alison/Documents/DPhil/data/ibtracs/ibtracs_since1980.csv')
-ibtracs = ibtracs[ibtracs['DIST2LAND'] == 0]
-ibtracs = ibtracs[['NAME', 'ISO_TIME', 'DIST2LAND', 'LON', 'LAT']]
-ibtracs
-# %%
+ibtracs = ibtracs.groupby(['SID']).agg({'NAME': 'first', 'ISO_TIME': list}).reset_index()
+ibtracs = ibtracs[['NAME', 'ISO_TIME']].rename(columns={'ISO_TIME': 'times'})
 gdf['stormName'] = gdf['stormName'].str.upper() 
-gdf = pd.merge(gdf, ibtracs, left_on='stormName', right_on='NAME', how='left')
-# %%  now groupb
-gdf = gdf[gdf['landingLat'] == gdf['LAT']]
-gdf = gdf[gdf['landingLon'] == gdf['LON']]
-gdf = gdf.drop(columns=['DIST2LAND', 'LON', 'LAT'])
-gdf['time'] = pd.to_datetime(gdf['ISO_TIME'])
+gdf = pd.merge(gdf, ibtracs, left_on='stormName', right_on='NAME', how='inner')
+gdf = gdf.groupby(['center_centerLat', 'center_centerLon', 'stormName']).agg({'NAME': 'first', 'times': 'first'}).reset_index()
+
 # %% Create and ERA5 API request for pressure and wind
 import cdsapi
 c = cdsapi.Client()
@@ -61,19 +59,42 @@ def get_era5_data(i, year, month, day, hour, lat, lon, eps=0.1):
             },
             f'/Users/alison/Documents/DPhil/data/era5/mangrove_damage_locations/mangrove_damage_locations_{i}.nc'
         )
-# %%
-for i, row in gdf[['time', 'center_centerLat', 'center_centerLon']].iterrows():
-    year = row['time'].year
-    month = row['time'].month
-    day = row['time'].day
-    hour = str(row['time'].hour).zfill(2)
-    hour = f"{hour}:00"
-    lat = row['center_centerLat']
-    lon = row['center_centerLon']
-    get_era5_data(i, year, month, day, hour, lat, lon)
+
+# %% -----Grab max wind lifetime and min lifetime pressure-----
+import glob
+import xarray as xr
+
+filedir = '/Users/alison/Documents/DPhil/data/era5/mangrove_damage_locations'
+for i, row in gdf[['NAME', 'times', 'center_centerLat', 'center_centerLon']].iterrows():
+    name = row['NAME']
+    if not os.exists(f'{filedir}/mangrove_damage_locations_{name}_{i}.nc'):
+        lat = row['center_centerLat']
+        lon = row['center_centerLon']
+        times = row['times']
+        j = 0
+        for time in times:
+            time = pd.to_datetime(time)
+            year = time.year
+            month = time.month
+            day = time.day
+            hour = str(time.hour).zfill(2)
+            hour = f"{hour}:00"
+            get_era5_data(f"{i}_{name}_{j}", year, month, day, hour, lat, lon)
+            j += 1
+
+        files = glob.glob(f"{filedir}/mangrove_damage_locations_{i}_{name}_*.nc")
+        ds = xr.open_mfdataset(files, chunks={"time": "500MB"}, engine="netcdf4")
+        max_wind = (ds['u10']**2 + ds['v10']**2)**0.5
+        max_wind = max_wind.max(dim='time', keep_attrs=True).rename('wind')
+        min_press = ds['msl'].min(dim='time', keep_attrs=True).rename('mslp')
+        ds = xr.merge([max_wind, min_press])
+        ds.to_netcdf(f'{filedir}/mangrove_damage_locations_{name}_{i}.nc')
+
+        for file in files:
+            os.remove(file)
+
 # %%
 # load one of the files
-import xarray as xr
 ds = xr.open_dataset('/Users/alison/Documents/DPhil/data/era5/mangrove_damage_locations/_20.nc')
 ds
 # %%
