@@ -35,7 +35,7 @@ data_source = "era5"
 res = (18, 22)
 cwd = os.getcwd()  # scripts directory
 wd = os.path.join(cwd, "..", '..')  # hazGAN directory
-datadir = os.path.join(wd, "..", f"{data_source}_data.nosync", f"res_{res[0]}x{res[1]}")  # keep data folder in parent directory
+datadir = os.path.join(wd, "..", f"{data_source}_data", f"res_{res[0]}x{res[1]}")  # keep data folder in parent directory
 imdir = os.path.join(wd, "figures", "temp")
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 
@@ -68,9 +68,9 @@ def main(config):
     chi_score = hg.ChiScore({"train": next(iter(train)), "test": next(iter(test))},
                             frequency=config.chi_frequency, gumbel_margins=config.gumbel)
     reduce_on_plateau = tf.keras.callbacks.ReduceLROnPlateau(
-        monitor="generator_loss",
+        monitor="chi_score_test",
         factor=0.1,
-        patience=20,
+        patience=10,
         mode="min",
         verbose=1
         )
@@ -81,7 +81,7 @@ def main(config):
         gan.fit(
             train,
             epochs=config.nepochs,
-            callbacks=[WandbMetricsLogger(), hg.Visualiser(1, runname=runname), reduce_on_plateau]
+            callbacks=[chi_score, WandbMetricsLogger(), hg.Visualiser(1, runname=runname), reduce_on_plateau]
         )
 
     # reproducibility
@@ -103,12 +103,12 @@ def main(config):
 
 # %% run this cell to train the model
 if __name__ == "__main__":
-    # parse arguments
+    # parse arguments (for linux)
     # parser = argparse.ArgumentParser()
     # parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
     # args = parser.parse_args()
     # dry_run = args.dry_run
-    dry_run = True
+    dry_run = False
 
     # initialise wandb
     if dry_run:

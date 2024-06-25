@@ -3,7 +3,7 @@ from tensorflow.keras.callbacks import Callback
 from tensorflow.nn import sigmoid_cross_entropy_with_logits as cross_entropy
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
-from .extreme_value_theory import chi_loss, inv_gumbel
+from .extreme_value_theory import chi_loss, inv_gumbel, pairwise_extremal_coeffs
 
 
 class Visualiser(Callback):
@@ -41,7 +41,7 @@ class Visualiser(Callback):
 
 class ChiScore(Callback):
     """
-    Custom metric for evtGAN to compare tail dependence (?) coefficients.
+    Custom metric for evtGAN to compare extremal coefficients across space.
     """
 
     def __init__(self, validation_data: dict, frequency=1, gumbel_margins=False):
@@ -51,15 +51,28 @@ class ChiScore(Callback):
                 validation_data[name] = inv_gumbel(data) # transform to uniform if gumbel margins
         self.validation_data = validation_data
         self.frequency = frequency
-        for name in validation_data.keys():
+        for name, data in validation_data.items():
+            for c in range(tf.shape(data)[-1].numpy()):
+                data_c = data[..., c]
+                extcoeffs = pairwise_extremal_coeffs(data_c)
+                setattr(self, f"extcoeffs_{name}_channel_{c}", extcoeffs)
             setattr(self, f"chi_score_{name}", None)
 
     def on_epoch_end(self, epoch, logs={}):
         if epoch % self.frequency == 0:
             for name, data in self.validation_data.items():
                 batch_size = tf.shape(data)[0]
-                generated_data = self.model(batch_size)
-                rmse = chi_loss(data, generated_data)
+                generated_data = self.model(batch_size) # handles inverse gumbel in __call__
+
+                def compute_chi_diff(i):
+                    generated_data_i = generated_data[..., i]
+                    extcoeff = pairwise_extremal_coeffs(generated_data_i)
+                    extcoeff_data = getattr(self, f"extcoeffs_{name}_channel_{i}")
+                    return tf.sqrt(tf.reduce_mean(tf.square(extcoeff - extcoeff_data)))
+
+                c = tf.shape(data)[-1]
+                chi_diffs = tf.map_fn(compute_chi_diff, tf.range(c), dtype=tf.float32)
+                rmse = tf.reduce_mean(chi_diffs)
                 setattr(self, f"chi_score_{name}", rmse)
                 logs[f"chi_score_{name}"] = rmse
 

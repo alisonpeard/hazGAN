@@ -3,7 +3,7 @@ model:
   desc: Which model to train, ['wgan' | 'dcgan'].
   value: wgan
 nepochs:
-  value: 200 #500
+  value: 500 
 train_size:
   value: 1000
 batch_size:
@@ -16,7 +16,7 @@ chi_frequency:
 lambda_gp:
   value: 10.
 lambda_chi:
-  value: 1.
+  value: 0.001
 training_balance:
   desc: How many more times to train discriminator than generator.
   value: 5

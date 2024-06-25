@@ -53,20 +53,6 @@ def channel_chi_diff(real, fake, channel=0):
     return tf.sqrt(tf.reduce_mean(tf.square(diff)))
 
 
-def minner_product(a, b):
-    "Use broadcasting to get sum of minima in style of dot product."
-    x = tf.reduce_sum(
-        tf.minimum(tf.expand_dims(a, axis=-1), tf.expand_dims(b, axis=0)), axis=1
-    )
-    return x
-
-
-def test_minner_product():
-    x = np.array([[1, 2], [1, 1]])
-    assert np.array_equal(minner_product(x.T, x), np.array([[2, 2], [2, 3]]))
-
-
-
 def pairwise_extremal_coeffs(uniform):
     """Calculate extremal coefficients for each pair of pixels across single channel."""
     assert (
@@ -80,6 +66,20 @@ def pairwise_extremal_coeffs(uniform):
     ecs = n / minner_product(tf.transpose(frechet), frechet)
     ecs = tf.where(tf.math.is_inf(ecs), tf.fill(tf.shape(ecs), np.nan), ecs)
     return ecs
+
+
+def minner_product(a, b):
+    "Use broadcasting to get sum of minima in style of dot product."
+    x = tf.reduce_sum(
+        tf.minimum(tf.expand_dims(a, axis=-1), tf.expand_dims(b, axis=0)), axis=1
+    )
+    return x
+
+
+def test_minner_product():
+    x = np.array([[1, 2], [1, 1]])
+    assert np.array_equal(minner_product(x.T, x), np.array([[2, 2], [2, 3]]))
+
 
 
 # Other metrics
