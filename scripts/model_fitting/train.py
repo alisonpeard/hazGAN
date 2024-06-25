@@ -68,8 +68,8 @@ def main(config):
     chi_score = hg.ChiScore({"train": next(iter(train)), "test": next(iter(test))},
                             frequency=config.chi_frequency, gumbel_margins=config.gumbel)
     reduce_on_plateau = tf.keras.callbacks.ReduceLROnPlateau(
-        monitor="chi_score_test",
-        factor=0.1,
+        monitor="generator_loss",
+        factor=0.5,
         patience=10,
         mode="min",
         verbose=1
