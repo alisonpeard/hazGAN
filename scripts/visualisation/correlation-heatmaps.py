@@ -46,9 +46,9 @@ for c0, c1 in combinations(channels, 2):
     gan_corrs[mask.mask] = np.nan
 
     fig, ax = plt.subplots(1, 3, figsize=(10, 3))
-    im = ax[0].imshow(train_corrs, vmin=-1, vmax=1, cmap="coolwarm")
-    ax[1].imshow(test_corrs, vmin=-1, vmax=1, cmap="coolwarm")
-    ax[2].imshow(gan_corrs, vmin=-1, vmax=1, cmap="coolwarm")
+    im = ax[0].imshow(train_corrs, vmin=0, vmax=1, cmap="coolwarm")
+    ax[1].imshow(test_corrs, vmin=0, vmax=1, cmap="coolwarm")
+    ax[2].imshow(gan_corrs, vmin=0, vmax=1, cmap="coolwarm")
     
     divider = make_axes_locatable(ax[2])
     cax = divider.append_axes('right', size='5%', pad=0.05)
@@ -73,7 +73,7 @@ def get_channel_ext_coefs(x):
     excoefs = np.array([*excoefs.values()]).reshape(h, w)
     return excoefs
 
-# correlations for all three variables
+# correlations across all variables
 excoefs_train = get_channel_ext_coefs(train)
 excoefs_test = get_channel_ext_coefs(test)
 excoefs_gan = get_channel_ext_coefs(samples)
@@ -92,6 +92,7 @@ im = ax[2].imshow(excoefs_gan, cmap=cmap, vmin=1, vmax=3)
 for a in ax:
     a.set_yticks([])
     a.set_xticks([])
+    a.invert_yaxis()
     
 ax[0].set_title('Train')
 ax[1].set_title('Test')

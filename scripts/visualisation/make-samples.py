@@ -9,7 +9,7 @@ from hazGAN import POT
 import wandb
 # %%
 wd = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN"
-RUNNAME = "zesty-brook-24"  # "toasty-serenity-21"
+RUNNAME = "glad-sea-32"  # "toasty-serenity-21"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 occurrence_rate = 18.033
@@ -46,7 +46,7 @@ def sample_to_xr(data, ds_ref, plot=False):
         }
     )
     if plot:
-        ds.isel(sample=0, channel=0).uniform.plot.contourf(levels=10, cmap='viridis')
+        ds.isel(sample=0, channel=0).uniform.plot.contourf(levels=20, cmap='viridis')
     return ds
 
 samples_GAN = hg.unpad(wgan(nsamples=nsamples), paddings).numpy()
