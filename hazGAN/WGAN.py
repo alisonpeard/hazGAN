@@ -50,7 +50,6 @@ def compile_wgan(config, nchannels=2):
 # G(z)
 def define_generator(config, nchannels=2):
     """
-    TODO: Get rid of dense layers so its resolutiuon invariant - Harris (2022).
     >>> generator = define_generator()
     """
     z = tf.keras.Input(shape=(100,))
@@ -129,6 +128,7 @@ class WGAN(keras.Model):
         self.d_loss_tracker = keras.metrics.Mean(name="d_loss")
         self.g_loss_raw_tracker = keras.metrics.Mean(name="g_loss_raw")
         self.g_penalty_tracker = keras.metrics.Mean(name="g_penalty")
+        self.value_function = keras.metrics.Mean(name="value_function")
 
 
     def compile(self, d_optimizer, g_optimizer):
@@ -160,7 +160,7 @@ class WGAN(keras.Model):
             with tf.GradientTape() as tape:
                 score_real = self.critic(data)
                 score_fake = self.critic(fake_data)
-                d_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real)
+                d_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality (Gulrajani 2017))
                 eps = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
                 differences = fake_data - data
                 interpolates = data + (eps * differences)  # interpolated data
@@ -181,18 +181,20 @@ class WGAN(keras.Model):
             generated_data = self.generator(random_latent_vectors)
             score = self.critic(generated_data, training=False)
             g_loss_raw = -tf.reduce_mean(score)
-            #g_penalty = self.lambda_chi * chi_loss(data, generated_data) # FIX: extremal correlation structure
-            g_loss = g_loss_raw #+ g_penalty 
+            g_penalty = self.lambda_chi * chi_loss(data, generated_data) # FIX: extremal correlation structure
+            g_loss = g_loss_raw + g_penalty 
         grads = tape.gradient(g_loss, self.generator.trainable_weights)
         self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
 
         # update metrics and return their values
         self.d_loss_tracker(d_loss)
         self.g_loss_raw_tracker.update_state(g_loss_raw)
-        #self.g_penalty_tracker.update_state(g_penalty)
+        self.g_penalty_tracker.update_state(g_penalty)
+        self.value_function.update_state(-d_loss)
 
         return {
             "critic_loss": self.d_loss_tracker.result(),
             "generator_loss": self.g_loss_raw_tracker.result(),
-            #"g_penalty": self.g_penalty_tracker.result(),
+            "g_penalty": self.g_penalty_tracker.result(),
+            "value_function": self.value_function.result(),
         }
