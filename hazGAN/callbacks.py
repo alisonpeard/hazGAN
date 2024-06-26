@@ -43,7 +43,6 @@ class ChiScore(Callback):
     """
     Custom metric for evtGAN to compare extremal coefficients across space.
     """
-
     def __init__(self, validation_data: dict, frequency=1, gumbel_margins=False):
         super().__init__()
         if gumbel_margins:

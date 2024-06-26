@@ -52,7 +52,7 @@ def define_generator(config, nchannels=2):
     """
     >>> generator = define_generator()
     """
-    z = tf.keras.Input(shape=(100,))
+    z = tf.keras.Input(shape=(config.latent_dims,))
 
     # First fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
     fc = layers.Dense(config["g_complexity"] * config["g_layers"][0])(z)
@@ -181,8 +181,12 @@ class WGAN(keras.Model):
             generated_data = self.generator(random_latent_vectors)
             score = self.critic(generated_data, training=False)
             g_loss_raw = -tf.reduce_mean(score)
-            g_penalty = self.lambda_chi * chi_loss(data, generated_data) # FIX: extremal correlation structure
-            g_loss = g_loss_raw + g_penalty 
+            if self.lambda_chi > 0:
+                g_penalty = self.lambda_chi * chi_loss(data, generated_data) # FIX: extremal correlation structure
+                g_loss = g_loss_raw + g_penalty 
+            else:
+                g_penalty = 0.
+                g_loss = g_loss_raw
         grads = tape.gradient(g_loss, self.generator.trainable_weights)
         self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
 
