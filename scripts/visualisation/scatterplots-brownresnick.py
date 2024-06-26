@@ -16,8 +16,8 @@ import matplotlib.pyplot as plt
 channel = 0
 channels = ['u10', 'mslp']
 
-datadir = '/Users/alison/Documents/DPhil/multivariate/era5_data.nosync'
-resdir = '/Users/alison/Documents/DPhil/multivariate/results/brown_resnick'
+datadir = '/Users/alison/Documents/DPhil/paper1.nosync/era5_data'
+resdir = '/Users/alison/Documents/DPhil/paper1.nosync/results/brown_resnick'
 # %% -----Load data-----
 # load train/test data
 data = xr.open_dataset(os.path.join(datadir, "data.nc"))

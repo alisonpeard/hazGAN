@@ -162,10 +162,9 @@ fig.suptitle(r"Pairwise $\hat \theta$ for channel {}".format(channel))
 diffs = abs(ecs_gen - ecs_test)
 vmin = diffs.min()
 vmax = diffs.max()
-
 fig, ax = plt.subplots(1, 1, figsize=(5, 5))
 im = ax.imshow(diffs, cmap="coolwarm", vmin=vmin, vmax=vmax)
 fig.colorbar(im)
-ax.set_title("Difference in extremal coefficients")# %%
+ax.set_title(r"$\hat\theta_{\text{GAN}}-\hat\theta_{\text{test}}$")# %%
 
 # %%
