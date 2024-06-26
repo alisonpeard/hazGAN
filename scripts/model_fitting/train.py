@@ -1,14 +1,16 @@
 """
-Run in conda env tf_geo (tf 2.12.0, python 3.10)
-Note, requires config to create new model too.
+-----Requirements-----
+    - env: hazGAN
+    - GAN configuratino: config-defaults.yaml
+    - data: era5_data/res_18x22/data.nc
 
+-----Output-----
+    - saved_models: generator.weights.h5, critic.weights.h5
+
+-----To use saved weights-----
 >>> new_gan = WGAN.WGAN(config)
->>> new_gan.generator.load_weights(os.path.join(wd, 'saved_models', f'{finish_time}_generator_weights'))
->>> new_gan.critic.load_weights(os.path.join(wd, 'saved_models', f'{finish_time}_critic_weights'))
-
-$ conda activate hazGAN
-# python 2_train.py
-$ tensorboard --logdir ./_logs
+>>> new_gan.generator.load_weights(os.path.join(wd, 'saved_models', runname, 'generator_weights'))
+>>> new_gan.critic.load_weights(os.path.join(wd, 'saved_models', runname, 'critic_weights'))
 """
 # %%
 import os
@@ -22,7 +24,6 @@ tf.config.set_visible_devices([], "GPU")
 import wandb
 from wandb.keras import WandbMetricsLogger
 import hazGAN as hg
-
 
 global rundir
 global runname
@@ -65,12 +66,20 @@ def main(config):
     print(f"Training data shape: {train_u.shape}")
     
     # train test callbacks
-    chi_score = hg.ChiScore({"train": next(iter(train)), "test": next(iter(test))},
-                            frequency=config.chi_frequency, gumbel_margins=config.gumbel)
+    visualiser = hg.Visualiser(1, runname=runname)
+    
+    chi_score = hg.ChiScore({
+            "train": next(iter(train)),
+            "test": next(iter(test))
+            },
+        frequency=config.chi_frequency,
+        gumbel_margins=config.gumbel
+        )
+    
     reduce_on_plateau = tf.keras.callbacks.ReduceLROnPlateau(
         monitor="generator_loss",
-        factor=0.5,
-        patience=10,
+        factor=config.lr_factor,
+        patience=config.lr_patience,
         mode="min",
         verbose=1
         )
@@ -81,7 +90,12 @@ def main(config):
         gan.fit(
             train,
             epochs=config.nepochs,
-            callbacks=[chi_score, WandbMetricsLogger(), hg.Visualiser(1, runname=runname), reduce_on_plateau]
+            callbacks=[
+                chi_score,
+                WandbMetricsLogger(),
+                visualiser,
+                reduce_on_plateau
+                ]
         )
 
     # reproducibility
