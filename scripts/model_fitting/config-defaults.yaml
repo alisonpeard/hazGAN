@@ -13,10 +13,14 @@ chi_frequency:
   value: 10
 
 # training features
+lr_factor:
+  value: 0.5
+lr_patience:
+  value: 10
 lambda_gp:
   value: 10.
 lambda_chi:
-  value: 0.001
+  value: 0
 training_balance:
   desc: How many more times to train discriminator than generator.
   value: 5
@@ -39,7 +43,7 @@ lrelu:
 dropout:
   value: 0.4
 latent_dims:
-  value: 100
+  value: 128
 g_layers:
   desc: Number of channels in the hidden layers for the generator.
   value: [25600, 512, 256]
@@ -49,9 +53,9 @@ d_layers:
 g_complexity:
   value: 1
 d_complexity:
-  value: 1
+  value: 2  
 interpolation:
-  desc: Interpolation method for upsampling, ['nearest', 'bilinear'].
+  desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
   value: nearest
 
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
@@ -67,7 +71,7 @@ global_clipnorm:
   value: False
 use_ema:
   desc: Use exponential moving average in training, causes issues when re-loading weights.
-  value: False # only set to true if not loading weights
+  value: True # only set to true if not loading weights
 ema_momentum:
   value: 0.9
 ema_overwrite_frequency:
