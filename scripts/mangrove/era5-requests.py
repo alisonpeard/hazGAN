@@ -63,11 +63,14 @@ def get_era5_data(i, year, month, day, hour, lat, lon, eps=0.1):
 # %% -----Grab max wind lifetime and min lifetime pressure-----
 import glob
 import xarray as xr
+from tqdm import tqdm
 
 filedir = '/Users/alison/Documents/DPhil/data/era5/mangrove_damage_locations'
-for i, row in gdf[['NAME', 'times', 'center_centerLat', 'center_centerLon']].iterrows():
+# add progress bar
+for i, row in tqdm(gdf[['NAME', 'times', 'center_centerLat', 'center_centerLon']].iterrows(), total=gdf.shape[0]):
     name = row['NAME']
-    if not os.exists(f'{filedir}/mangrove_damage_locations_{name}_{i}.nc'):
+    if not os.path.exists(f'{filedir}/mangrove_damage_locations_{name}_{i}.nc'):
+        print(f'Requesting {name} {i}')
         lat = row['center_centerLat']
         lon = row['center_centerLon']
         times = row['times']
@@ -92,8 +95,10 @@ for i, row in gdf[['NAME', 'times', 'center_centerLat', 'center_centerLon']].ite
 
         for file in files:
             os.remove(file)
+    else:
+        print(f'File for {name} {i} already exists')
 
-# %%
+# %% --------Old code--------
 # load one of the files
 ds = xr.open_dataset('/Users/alison/Documents/DPhil/data/era5/mangrove_damage_locations/_20.nc')
 ds
