@@ -67,10 +67,10 @@ from tqdm import tqdm
 
 filedir = '/Users/alison/Documents/DPhil/data/era5/mangrove_damage_locations'
 # add progress bar
-for i, row in tqdm(gdf[['NAME', 'times', 'center_centerLat', 'center_centerLon']].iterrows(), total=gdf.shape[0]):
+for i, row in (pbar := tqdm(gdf[['NAME', 'times', 'center_centerLat', 'center_centerLon']].iterrows(), total=gdf.shape[0])):
     name = row['NAME']
     if not os.path.exists(f'{filedir}/mangrove_damage_locations_{name}_{i}.nc'):
-        print(f'Requesting {name} {i}')
+        pbar.set_description(f'Requesting {name} {i}')
         lat = row['center_centerLat']
         lon = row['center_centerLon']
         times = row['times']
@@ -96,7 +96,7 @@ for i, row in tqdm(gdf[['NAME', 'times', 'center_centerLat', 'center_centerLon']
         for file in files:
             os.remove(file)
     else:
-        print(f'File for {name} {i} already exists')
+        pbar.set_description(f'File for {name} {i} already exists')
 
 # %% --------Old code--------
 # load one of the files

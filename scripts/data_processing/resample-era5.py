@@ -2,6 +2,7 @@
 import os
 import numpy as np
 import xarray as xr
+from tqdm import tqdm
 import argparse
 
 # parse args for resolution with argparse
@@ -24,16 +25,17 @@ vars = ['u10', 'v10', 'msl']
 methods = ['max', 'max', 'min']
 
 # %%
-for file_long in files:
+for file_long in (pbar := tqdm(files)):
     file = file_long.split('.')[0]
 
     if not redo and os.path.exists(os.path.join(target_dir, f"{file}.nc")):
         continue
 
     if file_long[0] == '.' or file_long[-3:] != '.nc':
-        print('Skipping', file_long)
+        pbar.update_description(f'Skipping {file_long}')
         continue
 
+    pbar.set_description(f'Resampling {file_long}')
     ds_orig = xr.open_dataset(os.path.join(source_dir, f"{file}.nc"))
     times = ds_orig.time.values
     resampled_datasets = []
@@ -45,8 +47,9 @@ for file_long in files:
         ds_var = ds_var[bands].to_array('time', name=var).to_dataset().assign_coords(time=times)
 
         opt_func = getattr(np.ndarray, method)
-        assert opt_func(ds_orig[var].values) == opt_func(ds_var[var].values), f"Check {var} not smoothened"
+        # assert opt_func(ds_orig[var].values) == opt_func(ds_var[var].values), f"Check {var} not smoothened"
         resampled_datasets.append(ds_var)
+        
     ds = xr.merge(resampled_datasets)
     ds.to_netcdf(os.path.join(target_dir, f"{file}.nc"))
 

@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 channel = 0
 channels = ['u10', 'mslp']
 
-datadir = '/Users/alison/Documents/DPhil/paper1.nosync/era5_data'
+datadir = '/Users/alison/Documents/DPhil/paper1.nosync/era5_data/res_18x22'
 resdir = '/Users/alison/Documents/DPhil/paper1.nosync/results/brown_resnick'
 # %% -----Load data-----
 # load train/test data
@@ -63,7 +63,7 @@ samples_X = samples_X.set_index('grid')
 def format_str(s):
     return s.replace('_', ' ').title()
 
-pair = middle_EC_pair # ['high' | 'middle' | 'low']
+pair = low_EC_pair # ['high' | 'middle' | 'low']
 
 xlim = (-.1, 1.1)
 ylim = (-.1, 1.1)
