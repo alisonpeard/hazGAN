@@ -11,6 +11,8 @@
 >>> new_gan = WGAN.WGAN(config)
 >>> new_gan.generator.load_weights(os.path.join(wd, 'saved_models', runname, 'generator_weights'))
 >>> new_gan.critic.load_weights(os.path.join(wd, 'saved_models', runname, 'critic_weights'))
+or
+>>> new_gan.load_weights(os.path.join(rundir, 'checkpoint.weights.h5'))
 """
 # %%
 import os
@@ -83,6 +85,15 @@ def main(config):
         mode="min",
         verbose=1
         )
+    
+    checkpoint = tf.keras.callbacks.ModelCheckpoint(
+        os.path.join(rundir, "checkpoint.weights.h5"),
+        monitor="generator_loss",
+        save_best_only=True,
+        save_weights_only=True,
+        mode="min",
+        verbose=1
+        )
 
     # compile
     with tf.device("/gpu:0"):
@@ -94,7 +105,8 @@ def main(config):
                 chi_score,
                 WandbMetricsLogger(),
                 visualiser,
-                reduce_on_plateau
+                checkpoint
+                # reduce_on_plateau
                 ]
         )
 
@@ -122,7 +134,7 @@ if __name__ == "__main__":
     # parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
     # args = parser.parse_args()
     # dry_run = args.dry_run
-    dry_run = False
+    dry_run = True
 
     # initialise wandb
     if dry_run:
