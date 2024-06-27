@@ -23,7 +23,7 @@ dependencies:
         - tensorflow[and-cuda]
         - tensorflow-probability
         - tf-keras
-        - tensorrt           # for NVIDIA GPU
+        #- tensorrt           # for NVIDIA GPU -- gives error on cluster
         - wandb==0.16.6      # stable May 2024
         - cdsapi             # request from copernicus climate data store API
         - -e ..

@@ -1,13 +1,11 @@
 program: train.py
 name: June2024a
 method: bayes
-project: hazGAN
+project: delet # hazGAN
 metric:
   name: chi_score_test
   goal: minimize
 parameters:
-  seed:
-    values: [0, 1, 2, 6, 7, 42]
   batch_size:
     values: [32, 64, 128]
   training_balance:
@@ -36,4 +34,9 @@ parameters:
     values: [5, 10, 20]
 run_cap: 100
 
-# >> wandb sweep sweep.yml
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - "--device"
+  - "gpu"

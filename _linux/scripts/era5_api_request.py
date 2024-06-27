@@ -12,7 +12,7 @@ import sys
 import numpy as np
 from itertools import product
 
-datadir = os.path.join(os.path.expandvars("$HOME"), "data", "new_data", "era5")
+datadir = os.path.join(os.path.expandvars("$HOME"), "mistral", "era5", "bay_of_bengal__monthly") 
 os.makedirs(datadir, exist_ok=True)
 
 i = int(sys.argv[1]) # load the index from the command line

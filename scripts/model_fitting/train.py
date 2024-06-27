@@ -30,6 +30,7 @@ import hazGAN as hg
 global rundir
 global runname
 global debug
+global device
 
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
@@ -88,7 +89,7 @@ def main(config):
     
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         os.path.join(rundir, "checkpoint.weights.h5"),
-        monitor="generator_loss",
+        monitor="chi_score_test",
         save_best_only=True,
         save_weights_only=True,
         mode="min",
@@ -96,7 +97,7 @@ def main(config):
         )
 
     # compile
-    with tf.device("/gpu:0"):
+    with tf.device(f"/{device}:0"):
         gan = getattr(hg, f"compile_{config.model}")(config, nchannels=2)
         gan.fit(
             train,
@@ -130,14 +131,17 @@ def main(config):
 # %% run this cell to train the model
 if __name__ == "__main__":
     # parse arguments (for linux)
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
-    # args = parser.parse_args()
-    # dry_run = args.dry_run
-    dry_run = True
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
+    parser.add_argument('--device', dest="device", type=str, default="cpu", help='Device to use')
+    args = parser.parse_args()
+    dry_run = args.dry_run
+    device = args.device
+    # dry_run = False
 
     # initialise wandb
     if dry_run:
+        print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({'nepochs': 1, 'batch_size': 1, 'train_size': 1}, allow_val_change=True)
         runname = 'dry-run'

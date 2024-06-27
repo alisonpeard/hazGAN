@@ -3,9 +3,9 @@ model:
   desc: Which model to train, ['wgan' | 'dcgan'].
   value: wgan
 nepochs:
-  value: 500 
+  value: 500 #30000 or 1,500,000/train_size
 train_size:
-  value: 1000
+  value: 560 # 50
 batch_size:
   value: 32
 chi_frequency:
@@ -16,7 +16,7 @@ chi_frequency:
 lr_factor:
   value: 0.5
 lr_patience:
-  value: 10
+  value: 20
 lambda_gp:
   value: 10.
 lambda_chi:
@@ -53,7 +53,7 @@ d_layers:
 g_complexity:
   value: 1
 d_complexity:
-  value: 2  
+  value: 1
 interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
   value: nearest

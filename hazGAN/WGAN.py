@@ -127,7 +127,7 @@ class WGAN(keras.Model):
         ]
         self.d_loss_tracker = keras.metrics.Mean(name="d_loss")
         self.g_loss_raw_tracker = keras.metrics.Mean(name="g_loss_raw")
-        self.g_penalty_tracker = keras.metrics.Mean(name="g_penalty")
+        self.generator_penalty_tracker = keras.metrics.Mean(name="generator_penalty")
         self.value_function = keras.metrics.Mean(name="value_function")
 
 
@@ -182,10 +182,10 @@ class WGAN(keras.Model):
             score = self.critic(generated_data, training=False)
             g_loss_raw = -tf.reduce_mean(score)
             if self.lambda_chi > 0:
-                g_penalty = self.lambda_chi * chi_loss(data, generated_data) # FIX: extremal correlation structure
-                g_loss = g_loss_raw + g_penalty 
+                generator_penalty = self.lambda_chi * chi_loss(data, generated_data) # FIX: extremal correlation structure
+                g_loss = g_loss_raw + generator_penalty 
             else:
-                g_penalty = 0.
+                generator_penalty = 0.
                 g_loss = g_loss_raw
         grads = tape.gradient(g_loss, self.generator.trainable_weights)
         self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
@@ -193,12 +193,12 @@ class WGAN(keras.Model):
         # update metrics and return their values
         self.d_loss_tracker(d_loss)
         self.g_loss_raw_tracker.update_state(g_loss_raw)
-        self.g_penalty_tracker.update_state(g_penalty)
+        self.generator_penalty_tracker.update_state(generator_penalty)
         self.value_function.update_state(-d_loss)
 
         return {
             "critic_loss": self.d_loss_tracker.result(),
             "generator_loss": self.g_loss_raw_tracker.result(),
-            "g_penalty": self.g_penalty_tracker.result(),
+            "generator_penalty": self.generator_penalty_tracker.result(),
             "value_function": self.value_function.result(),
         }
