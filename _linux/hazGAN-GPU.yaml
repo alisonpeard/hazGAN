@@ -1,0 +1,45 @@
+name: hazGAN-GPU
+channels:
+    - conda-forge
+dependencies:
+    - python
+    - pip
+    - numpy
+    - pandas
+    - geopandas
+    - xarray
+    - hdf5
+    - netcdf4
+    - scipy
+    - scikit-learn
+    - ipykernel
+    - notebook
+    - matplotlib
+    - seaborn
+    - pyyaml
+    - h5py
+    - cudnn
+    - pip:
+        - tensorflow[and-cuda]
+        - tensorflow-probability
+        - tf-keras
+        - tensorrt           # for NVIDIA GPU
+        - wandb==0.16.6      # stable May 2024
+        - cdsapi             # request from copernicus climate data store API
+        - -e ..
+
+
+# ---------Notes----------
+# mamba env create -n hazGAN -f _/linux/hazGAN.yaml
+# cd hazGAN
+# conda activate hazGAN
+# python -m ipykernel install --user --n hazGAN
+
+# ---------Uninstall----------
+# conda env remove -n hazGAN
+# conda info --envs
+
+# ---------References----------
+# 1. Source: https://github.com/tcapelle/apple_m1_pro_python/tree/main
+# 2. Metal compatibility: https://pypi.org/project/tensorflow-metal/
+# 3. https://developer.apple.com/metal/tensorflow-plugin/

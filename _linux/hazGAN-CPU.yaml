@@ -1,0 +1,51 @@
+name: hazGAN
+channels:
+    #- apple # apple::<package>
+    - conda-forge
+dependencies:
+    - python
+    - pip
+    - numpy
+    - pandas
+    - geopandas
+    - fiona
+    - xarray
+    - xagg
+    - rioxarray
+    - hdf5
+    - netcdf4
+    - scipy
+    - scikit-learn
+    - ipykernel
+    - notebook
+    - matplotlib
+    - cartopy # for basemaps
+    - seaborn
+    - pyyaml
+    - h5py
+    - pyarrow>=10.0.1
+    - dask
+    - pip:
+        #- tensorflow-macos #==2.12
+        - tensorflow>=2.16 
+        - tensorflow-probability
+        - tf-keras
+        - wandb==0.16.6 # stable May 2024
+        - cdsapi # copernicus climate data store API
+        - -e ..
+
+# ---------Notes----------
+# mamba env create -n hazGAN -f hazGAN.yaml
+# cd hazGAN
+# conda activate hazGAN
+# python -m ipykernel install --user --n hazGAN
+# python -m pip install -e .
+
+# ---------Uninstall----------
+# conda env remove -n hazGAN
+# conda info --envs
+
+# ---------References----------
+# 1. Source: https://github.com/tcapelle/apple_m1_pro_python/tree/main
+# 2. Metal compatibility: https://pypi.org/project/tensorflow-metal/
+# 3. https://developer.apple.com/metal/tensorflow-plugin/
