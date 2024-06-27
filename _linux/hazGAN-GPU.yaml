@@ -19,8 +19,9 @@ dependencies:
     - pyyaml
     - h5py
     - cudnn
+    - tensorflow-gpu
     - pip:
-        - tensorflow[and-cuda]
+        # - tensorflow[and-cuda]
         - tensorflow-probability
         - tf-keras
         - tensorrt           # for NVIDIA GPU -- gives error on cluster
