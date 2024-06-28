@@ -20,7 +20,7 @@ lr_patience:
 lambda_gp:
   value: 10.
 lambda_chi:
-  value: 0.01
+  value: 0
 training_balance:
   desc: How many more times to train discriminator than generator.
   value: 5

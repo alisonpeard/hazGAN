@@ -26,8 +26,8 @@ parameters:
     values: [True, False]
   interpolation:
     values: [nearest, bilinear]
-  lambda_chi:
-    values: [0, 0.001, 0.01]
+  # lambda_chi:
+    # values: [0, 0.001, 0.01]
   lr_factor:
     values: [0.01, 0.1, 0.5]
   lr_patience:
