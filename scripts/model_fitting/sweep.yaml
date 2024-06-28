@@ -1,5 +1,5 @@
 program: train.py
-name: cluster-test
+name: cluster-testy
 method: bayes
 project: hazGAN
 metric:

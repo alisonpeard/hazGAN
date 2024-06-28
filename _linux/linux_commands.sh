@@ -53,3 +53,6 @@ export LD_LIBRARY_PATH=/soge-home/users/spet5107/micromamba/envs/gpu-test/lib/py
 nvidia-smi
 Failed to initialize NVML: Driver/library version mismatch
 NVML library version: 550.90
+
+# Train single script
+python train.py --device cpu --cluster --dry-run
