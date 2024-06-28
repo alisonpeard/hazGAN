@@ -55,6 +55,8 @@ def get_era5_data(i, year, month, day, hour, lat, lon, eps=0.1):
 # do this for each storm 
 
 
+export LD_LIBRARY_PATH=/soge-home/users/spet5107/micromamba/envs/hazGAN-GPU/lib/python3.12/site-packages/tensorrt_libs:${LD_LIBRARY_PATH}
+
 # %% -----Grab max wind lifetime and min lifetime pressure-----
 import glob
 import xarray as xr
