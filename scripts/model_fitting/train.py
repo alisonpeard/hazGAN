@@ -20,7 +20,6 @@ import argparse
 import yaml
 import numpy as np
 import tensorflow as tf
-tf.config.set_visible_devices([], "GPU")
 # tf.debugging.enable_check_numerics()
 
 import wandb
@@ -53,6 +52,20 @@ def save_config(dir):
     yaml.dump(configdict, configfile)
     configfile.close()
 
+
+def config_tf_devices():
+    """Use GPU if available"""
+    gpus = tf.config.list_logical_devices("GPU")
+    gpu_names = [x.name for x in gpus]
+    if len(gpu_names) == 0:
+        print("No GPU found, using CPU")
+        cpus = tf.config.list_logical_devices("CPU")
+        cpu_names = [x.name for x in cpus]
+        return cpu_names[0]
+    else:
+        print(f"Using GPU: {gpu_names[0]}")
+        return gpu_names[0]
+
 # %%
 def main(config):
     # load data
@@ -63,7 +76,7 @@ def main(config):
     test = tf.data.Dataset.from_tensor_slices(test_u).batch(config.batch_size)
     print(f"Training data shape: {train_u.shape}")
     
-    # train test callbacks
+    # define callbacks
     visualiser = hg.Visualiser(1, runname=runname)
     
     chi_score = hg.ChiScore({
@@ -92,7 +105,7 @@ def main(config):
         )
 
     # compile
-    with tf.device(f"/{device}:0"):
+    with tf.device(device): # (f"/{device}:0"):
         gan = getattr(hg, f"compile_{config.model}")(config, nchannels=2)
         gan.fit(
             train,
@@ -128,13 +141,14 @@ if __name__ == "__main__":
     # parse arguments (for linux)
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
-    parser.add_argument('--device', dest="device", type=str, default="cpu", help='Device to use')
     parser.add_argument('--cluster', dest="cluster", action='store_true', default=False, help='Running on cluster')
     args = parser.parse_args()
     dry_run = args.dry_run
-    device = args.device
     cluster = args.cluster
     # dry_run = False
+
+    # setup device
+    device = config_tf_devices()
 
     # set up directories
     if cluster:
