@@ -19,12 +19,13 @@ dependencies:
     - pyyaml
     - h5py
     - cudnn
-    - tensorflow-gpu
+    - cudatoolkit
+    # - tensorflow-gpu
     - pip:
-        # - tensorflow[and-cuda]
+        - tensorflow[and-cuda]
         - tensorflow-probability
         - tf-keras
-        - tensorrt           # for NVIDIA GPU -- gives error on cluster
+        - tensorrt           # for NVIDIA GPU -- gives error on cluster unless on GPU
         - wandb==0.16.6      # stable May 2024
         #- cdsapi             # request from copernicus climate data store API
         #- -e ..
