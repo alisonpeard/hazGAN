@@ -1,11 +1,13 @@
 program: train.py
-name: cluster-test
+name: cluster
 method: bayes
 project: hazGAN
 metric:
   name: chi_score_train
   goal: minimize
 parameters:
+  ntrain:
+    values: [50, 100, 500, 100]
   batch_size:
     values: [32, 64, 128]
   training_balance:
