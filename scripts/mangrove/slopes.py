@@ -32,15 +32,20 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 from cartopy import feature
 
+fig, axs = plt.subplots(1,2, figsize=(10, 5), subplot_kw={'projection': ccrs.PlateCarree()})
 
-fig, axs = plt.subplots(1 2, figsize=(10, 5), subplot_kw={'projection': ccrs.PlateCarree()})
 slope_gdf.plot(ax=axs[0], column='slope', cmap='YlOrRd', legend=True)
 mangrove_centroids.plot(ax=axs[1], column='slope', cmap='YlOrRd', legend=True)
 
 for ax in axs:
     ax.add_feature(feature.LAND,facecolor='wheat') 
     ax.add_feature(feature.OCEAN)   
-    ax.coastlines(resolution='50m',color='k', linewidth=.5) 
+    ax.coastlines(resolution='50m',color='k', linewidth=.5, alpha=.8) 
+
 axs[0].set_title('Slope points [tan(beta)]')
-axs[1].set_title('Nearest slope at mangrove patch centroid')
+axs[1].set_title('Nearest slope at mangrove\npatch centroid')
+# %%
+mangroves['slope'].hist(bins=50, color='lightgrey', edgecolor='k')
+plt.title('Slope distribution at mangrove patches')
+plt.yscale('log')
 # %%

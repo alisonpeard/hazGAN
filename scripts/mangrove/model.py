@@ -24,6 +24,7 @@ response = ['intensity']
 # %%
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
+gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.center_centerLon, df.center_centerLat)).set_crs(epsg=4326)
 
 gdf = gdf.dropna()
 X = gdf[regressors]
@@ -57,3 +58,5 @@ model.feature_names_in_
 # %%
 gdf.head()
 
+
+# %%
