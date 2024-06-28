@@ -1,5 +1,5 @@
 program: train.py
-name: cluster-testy
+name: cluster-test
 method: bayes
 project: hazGAN
 metric:
@@ -11,7 +11,7 @@ parameters:
   training_balance:
     values: [1, 2, 5, 10]
   latent_dims:
-    values: [100, 128, 200]
+    values: [64, 128, 256]
   g_complexity:
     values: [1, 2]
   d_complexity:
@@ -25,9 +25,9 @@ parameters:
   use_ema:
     values: [True, False]
   interpolation:
-    values: [nearest, bilinear]
+    values: [nearest]
   # lambda_chi:
-    # values: [0, 0.001, 0.01]
+    # values: [0, 0.001, 0.01] # leads to nan gradients
   lr_factor:
     values: [0.01, 0.1, 0.5]
   lr_patience:
@@ -38,6 +38,4 @@ command:
   - ${env}
   - ${interpreter}
   - ${program}
-  - "--device"
-  - "cpu"
   - "--cluster"
