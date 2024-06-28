@@ -23,7 +23,7 @@ import tensorflow as tf
 # tf.debugging.enable_check_numerics()
 
 import wandb
-#from wandb.keras import WandbMetricsLogger
+from wandb.keras import WandbMetricsLogger
 import hazGAN as hg
 
 global rundir
@@ -111,7 +111,7 @@ def main(config):
             epochs=config.nepochs,
             callbacks=[
                 chi_score,
-                #WandbMetricsLogger(),
+                WandbMetricsLogger(),
                 # visualiser,
                 checkpoint
                 # reduce_on_plateau
