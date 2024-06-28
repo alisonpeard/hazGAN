@@ -113,7 +113,7 @@ def main(config):
             callbacks=[
                 chi_score,
                 WandbMetricsLogger(),
-                visualiser,
+                # visualiser,
                 checkpoint
                 # reduce_on_plateau
                 ]
@@ -131,9 +131,6 @@ def main(config):
     fake_u = hg.unpad(gan(nsamples=1000), paddings).numpy()
     fig = hg.plot_generated_marginals(fake_u, vmin=None, vmax=None, runname=runname)
     log_image_to_wandb(fig, f"generated_marginals", imdir)
-
-    gan.critic.summary()
-    gan.generator.summary()
 
 
 # %% run this cell to train the model
