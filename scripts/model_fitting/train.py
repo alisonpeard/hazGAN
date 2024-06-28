@@ -23,13 +23,12 @@ import tensorflow as tf
 # tf.debugging.enable_check_numerics()
 
 import wandb
-from wandb.keras import WandbMetricsLogger
+#from wandb.keras import WandbMetricsLogger
 import hazGAN as hg
 
 global rundir
 global runname
-global debug
-global device
+global force_cpu
 
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
@@ -57,7 +56,7 @@ def config_tf_devices():
     """Use GPU if available"""
     gpus = tf.config.list_logical_devices("GPU")
     gpu_names = [x.name for x in gpus]
-    if len(gpu_names) == 0:
+    if (len(gpu_names) == 0) or force_cpu:
         print("No GPU found, using CPU")
         cpus = tf.config.list_logical_devices("CPU")
         cpu_names = [x.name for x in cpus]
@@ -112,7 +111,7 @@ def main(config):
             epochs=config.nepochs,
             callbacks=[
                 chi_score,
-                WandbMetricsLogger(),
+                #WandbMetricsLogger(),
                 # visualiser,
                 checkpoint
                 # reduce_on_plateau
@@ -139,10 +138,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
     parser.add_argument('--cluster', dest="cluster", action='store_true', default=False, help='Running on cluster')
+    parser.add_argument('--force-cpu', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
     args = parser.parse_args()
     dry_run = args.dry_run
     cluster = args.cluster
-    # dry_run = False
+    force_cpu = args.force_cpu
+    # cluster = False
+    # dry_run = True
+    # force_cpu = False
 
     # setup device
     device = config_tf_devices()
@@ -151,7 +154,7 @@ if __name__ == "__main__":
     if cluster:
         wd = os.path.join('/soge-home', 'projects', 'mistral', 'alison', 'hazGAN')
     else:
-        wd = os.path.join('~', 'Documents', 'DPhil', 'paper1.nosync')  # hazGAN directory
+        wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')  # hazGAN directory
 
     datadir = os.path.join(wd, 'training', f"res_{res[0]}x{res[1]}")  # keep data folder in parent directory
     print(f"Loading data from {datadir}")

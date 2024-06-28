@@ -27,14 +27,14 @@ dependencies:
     - pyarrow>=10.0.1
     - dask
     - pip:
-        #- tensorflow-macos #==2.12
-        - tensorflow>=2.16 
+        # - tensorflow-macos #==2.12
+        - tensorflow>=2.16 # for python 3.10
         - tensorflow-metal
         - tensorflow-probability
         - tf-keras
         - wandb==0.16.6 # stable May 2024
         - cdsapi # copernicus climate data store API
-        - -e /Users/alison/Documents/DPhil/multivariate/hazGAN
+        - -e /Users/alison/Documents/DPhil/paper1.nosync/hazGAN
         - -e /Users/alison/Documents/DPhil/geospatial_utils
 
 # ---------Notes----------
