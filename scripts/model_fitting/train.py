@@ -37,12 +37,7 @@ plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 # some static variables
 data_source = "era5"
 res = (18, 22)
-cwd = os.getcwd()  # scripts directory
-wd = os.path.join(cwd, "..", '..')  # hazGAN directory
-datadir = os.path.join(wd, "..", f"{data_source}_data", f"res_{res[0]}x{res[1]}")  # keep data folder in parent directory
-imdir = os.path.join(wd, "figures", "temp")
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
-
 
 def log_image_to_wandb(fig, name: str, dir: str):
     impath = os.path.join(dir, f"{name}.png")
@@ -134,10 +129,21 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
     parser.add_argument('--device', dest="device", type=str, default="cpu", help='Device to use')
+    parser.add_argument('--cluster', dest="cluster", action='store_true', default=False, help='Running on cluster')
     args = parser.parse_args()
     dry_run = args.dry_run
     device = args.device
+    cluster = args.cluster
     # dry_run = False
+
+    # set up directories
+    if cluster:
+        wd = os.path.join('soge-home', 'projects', 'mistral', 'alison', 'hazGAN')
+    else:
+        wd = os.path.join('~', 'Documents', 'DPhil', 'paper1.nosync')  # hazGAN directory
+
+    datadir = os.path.join(wd, 'training', f"res_{res[0]}x{res[1]}")  # keep data folder in parent directory
+    imdir = os.path.join(wd, "figures", "temp")
 
     # initialise wandb
     if dry_run:

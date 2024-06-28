@@ -1,9 +1,9 @@
 program: train.py
-name: June2024a
+name: cluster-test
 method: bayes
-project: delet # hazGAN
+project: hazGAN
 metric:
-  name: chi_score_test
+  name: chi_score_train
   goal: minimize
 parameters:
   batch_size:
@@ -39,4 +39,5 @@ command:
   - ${interpreter}
   - ${program}
   - "--device"
-  - "gpu"
+  - "cpu"
+  - "--cluster"

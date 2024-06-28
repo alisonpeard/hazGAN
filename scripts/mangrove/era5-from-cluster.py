@@ -31,31 +31,29 @@ gdf['stormName'] = gdf['stormName'].str.upper()
 gdf = pd.merge(gdf, ibtracs, left_on='stormName', right_on='NAME', how='inner')
 gdf = gdf.groupby(['center_centerLat', 'center_centerLon', 'stormName']).agg({'NAME': 'first', 'times': 'first'}).reset_index()
 
-# %% Create and ERA5 API request for pressure and wind
+# %% TODO: Create and ERA5 API request for pressure and wind
 import cdsapi
 c = cdsapi.Client()
 
+home = os.path.expandvars("$HOME")
+datapath = f'/soge-home/data/analysis/era5/0.28125x0.28125/hourly'
+vars = ['10m_u_component_of_wind', '10m_v_component_of_wind', 'mean_sea_level_pressure', 'total_precipitation']
+
 def get_era5_data(i, year, month, day, hour, lat, lon, eps=0.1):
-    # NOTE: should get max lifetime wind rather than just the wind at the time of landfall
-    if not os.path.exists(f'/Users/alison/Documents/DPhil/data/era5/mangrove_damage_locations/mangrove_damage_locations_{i}.nc'):
-        c.retrieve(
-            'reanalysis-era5-single-levels',
-            {
-                'product_type': 'reanalysis',
-                'variable': [
-                    '10m_u_component_of_wind', '10m_v_component_of_wind', 'mean_sea_level_pressure'
-                ],
-                'year': year,
-                'month': month,
-                'day': day,
-                'time': hour,
-                'area': [
-                    lat - eps, lon - eps, lat + eps, lon + eps
-                ],
-                'format': 'netcdf'
-            },
-            f'/Users/alison/Documents/DPhil/data/era5/mangrove_damage_locations/mangrove_damage_locations_{i}.nc'
-        )
+    if not os.path.exists(f'{home}/mistral/alison/era5/mangrove_era5/mangrove_damage_locations_{i}.nc'):
+        
+
+        # for var in vars
+            # load netcdf 
+            # subset by lat, lon, and within time range
+            # extract max for wind, precipitation, min for pressure within time range
+            # create a single dataarray
+
+        # combine all the dataarrays into a single dataset
+        # save the dataset
+
+# do this for each storm 
+
 
 # %% -----Grab max wind lifetime and min lifetime pressure-----
 import glob
