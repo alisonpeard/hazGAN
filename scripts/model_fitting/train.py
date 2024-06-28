@@ -152,11 +152,12 @@ if __name__ == "__main__":
 
     # set up directories
     if cluster:
-        wd = os.path.join('soge-home', 'projects', 'mistral', 'alison', 'hazGAN')
+        wd = os.path.join('/soge-home', 'projects', 'mistral', 'alison', 'hazGAN')
     else:
         wd = os.path.join('~', 'Documents', 'DPhil', 'paper1.nosync')  # hazGAN directory
 
     datadir = os.path.join(wd, 'training', f"res_{res[0]}x{res[1]}")  # keep data folder in parent directory
+    print(f"Loading data from {datadir}")
     imdir = os.path.join(wd, "figures", "temp")
 
     # initialise wandb
