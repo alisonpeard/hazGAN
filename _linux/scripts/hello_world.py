@@ -1,6 +1,8 @@
 """Hello World for CPU/GPU testing with tensorflow.
 
 Source: https://github.com/ovh/ai-training-examples/blob/main/notebooks/getting-started/tensorflow/basic_cpu_benchmark.ipynb
+
+>> python hello_world.py --device GPU
 """
 import tensorflow as tf
 import argparse 
