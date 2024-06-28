@@ -3,8 +3,8 @@
 Source: https://github.com/ovh/ai-training-examples/blob/main/notebooks/getting-started/tensorflow/basic_cpu_benchmark.ipynb
 
 ---- Cluster examples ----
->> srun -p Short --pty python hello_world.py
->> srun -p GPU --gres=gpu:tesla:1 --pty python hello_world.py --GPU
+>> srun -p Short --pty python hello_world.py --device CPU
+>> srun -p GPU --gres=gpu:tesla:1 --pty python hello_world.py --device GPU
 """
 import tensorflow as tf
 import argparse 
