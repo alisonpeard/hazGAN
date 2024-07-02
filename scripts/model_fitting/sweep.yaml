@@ -4,7 +4,7 @@ method: bayes
 project: hazGAN
 metric:
   name: value_function
-  goal: minimize
+goal: minimize
 parameters:
   ntrain:
     values: [50, 100, 500, 100]

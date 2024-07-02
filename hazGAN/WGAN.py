@@ -12,7 +12,7 @@ from tensorflow.keras import optimizers
 from tensorflow.keras import layers
 from inspect import signature
 import tensorflow_probability as tfp
-from .extreme_value_theory import chi_loss, inv_gumbel, ChiRMSE
+from .extreme_value_theory import chi_loss, ChiRMSE, inv_gumbel
 
 
 tf.random.gumbel = tfp.distributions.Gumbel(0, 1).sample # so can sample as normal
@@ -47,8 +47,7 @@ def compile_wgan(config, nchannels=2):
     wgan = WGAN(config,nchannels=nchannels)
     wgan.compile(
         d_optimizer=d_optimizer,
-        g_optimizer=g_optimizer,
-        metrics=[ChiRMSE()]
+        g_optimizer=g_optimizer
         )
     return wgan
 
@@ -131,12 +130,21 @@ class WGAN(keras.Model):
             *self.generator.trainable_variables,
             *self.critic.trainable_variables,
         ]
-        self.d_loss_tracker = keras.metrics.Mean(name="d_loss")
-        self.g_loss_raw_tracker = keras.metrics.Mean(name="g_loss_raw")
-        self.generator_penalty_tracker = keras.metrics.Mean(name="generator_penalty")
-        self.value_function = keras.metrics.Mean(name="value_function")
+        # trackers average over batches
+        self.critic_loss_tracker = keras.metrics.Mean(name="critic_loss")
+        self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
+        self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
+        self.value_function_tracker = keras.metrics.Mean(name="value_function")
 
 
+    # @property
+    # def metrics(self):
+    #     return [
+    #         # self.chi_rmse_tracker,
+    #         self.generator_loss_tracker,
+    #         self.value_function_tracker
+    #         ]
+    
     def compile(self, d_optimizer, g_optimizer, *args, **kwargs):
         super().compile(*args, **kwargs)
         self.d_optimizer = d_optimizer
@@ -166,7 +174,7 @@ class WGAN(keras.Model):
             with tf.GradientTape() as tape:
                 score_real = self.critic(data)
                 score_fake = self.critic(fake_data)
-                d_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality (Gulrajani 2017))
+                critic_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality (Gulrajani 2017))
                 eps = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
                 differences = fake_data - data
                 interpolates = data + (eps * differences)  # interpolated data
@@ -176,9 +184,9 @@ class WGAN(keras.Model):
                 gradients = tape_gp.gradient(score, [interpolates])[0]
                 slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]))
                 gradient_penalty = tf.reduce_mean((slopes - 1.0) ** 2)
-                d_loss += self.lambda_gp * gradient_penalty
+                critic_loss += self.lambda_gp * gradient_penalty
 
-            grads = tape.gradient(d_loss, self.critic.trainable_weights)
+            grads = tape.gradient(critic_loss, self.critic.trainable_weights)
             self.d_optimizer.apply_gradients(zip(grads, self.critic.trainable_weights))
 
         # train generator
@@ -186,25 +194,24 @@ class WGAN(keras.Model):
         with tf.GradientTape() as tape:
             generated_data = self.generator(random_latent_vectors)
             score = self.critic(generated_data, training=False)
-            g_loss_raw = -tf.reduce_mean(score)
+            generator_loss_raw = -tf.reduce_mean(score)
+            chi_rmse = chi_loss(data, generated_data)
             if self.lambda_chi > 0:
-                generator_penalty = self.lambda_chi * chi_loss(data, generated_data)
-                g_loss = g_loss_raw #+ generator_penalty 
+                generator_loss = generator_loss_raw #+ self.lambda_chi * chi_rmse
             else:
-                generator_penalty = 0.
-                g_loss = g_loss_raw
-        grads = tape.gradient(g_loss, self.generator.trainable_weights)
+                generator_loss = generator_loss_raw
+        grads = tape.gradient(generator_loss, self.generator.trainable_weights)
         self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
 
         # update metrics and return their values
-        self.d_loss_tracker(d_loss)
-        self.g_loss_raw_tracker.update_state(g_loss_raw)
-        self.generator_penalty_tracker.update_state(generator_penalty)
-        self.value_function.update_state(-d_loss)
+        self.critic_loss_tracker(critic_loss)
+        self.generator_loss_tracker.update_state(generator_loss_raw)
+        self.chi_rmse_tracker.update_state(chi_rmse)
+        self.value_function_tracker.update_state(-critic_loss)
 
         return {
-            "critic_loss": self.d_loss_tracker.result(),
-            "generator_loss": self.g_loss_raw_tracker.result(),
-            "generator_penalty": self.generator_penalty_tracker.result(),
-            "value_function": self.value_function.result(),
+            "chi_rmse": self.chi_rmse_tracker.result(),
+            "critic_loss": self.critic_loss_tracker.result(),
+            "generator_loss": self.generator_loss_tracker.result(),
+            "value_function": self.value_function_tracker.result()
         }

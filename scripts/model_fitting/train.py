@@ -20,15 +20,21 @@ $
 """
 # %%
 import os
+import sys
 import argparse
 import yaml
 import numpy as np
 import tensorflow as tf
-# tf.debugging.enable_check_numerics()
+tf.keras.backend.clear_session()
+
+# debugging ops
+# tf.debugging.set_log_device_placement(True)
+# tf.debugging.enable_check_numerics() # check for NaN/Inf in tensors
 
 import wandb
 from wandb.keras import WandbMetricsLogger
 import hazGAN as hg
+
 
 global rundir
 global runname
@@ -69,6 +75,10 @@ def config_tf_devices():
         print(f"Using GPU: {gpu_names[0]}")
         return gpu_names[0]
 
+# %% minimal example
+wandb.init(project='test', mode='disabled')
+config = wandb.config
+gan = hg.compile_wgan(config, nchannels=2)
 # %%
 def main(config):
     # load data
@@ -139,17 +149,19 @@ def main(config):
 # %% run this cell to train the model
 if __name__ == "__main__":
     # parse arguments (for linux)
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
-    parser.add_argument('--cluster', dest="cluster", action='store_true', default=False, help='Running on cluster')
-    parser.add_argument('--force-cpu', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
-    args = parser.parse_args()
-    dry_run = args.dry_run
-    cluster = args.cluster
-    force_cpu = args.force_cpu
-    # cluster = False
-    # dry_run = True
-    # force_cpu = False
+    if sys.__stdin__.isatty():
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
+        parser.add_argument('--cluster', dest="cluster", action='store_true', default=False, help='Running on cluster')
+        parser.add_argument('--force-cpu', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
+        args = parser.parse_args()
+        dry_run = args.dry_run
+        cluster = args.cluster
+        force_cpu = args.force_cpu
+    else:
+        dry_run = True
+        cluster = False
+        force_cpu = False
 
     # setup device
     device = config_tf_devices()

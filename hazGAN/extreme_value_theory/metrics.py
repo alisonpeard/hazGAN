@@ -30,16 +30,15 @@ def chi_loss(real, fake):
     fake : tf.Tensor, [b, h, w, c]
         Generated data.
     """
-
+    # TODO: vectorise this instead of using tf.vectorized_map
     c = tf.shape(real)[-1]
-
     def compute_chi_diff(i):
         return channel_chi_diff(real, fake, i)
-
-    chi_diffs = tf.map_fn(compute_chi_diff, tf.range(c), dtype=tf.float32)
+    chi_diffs = tf.vectorized_map(compute_chi_diff, tf.range(c)) # , fn_output_signature=tf.float32
     return tf.reduce_mean(chi_diffs)
 
 
+@tf.function
 def channel_chi_diff(real, fake, channel=0):
     real = real[..., channel]
     fake = fake[..., channel]
@@ -50,26 +49,29 @@ def channel_chi_diff(real, fake, channel=0):
         ecs_real - ecs_fake,
         tf.zeros_like(ecs_real),
     )
-    # divide diff by number of non-nan values
-    diff /= tf.reduce_sum(tf.cast(tf.math.is_finite(diff), tf.float32))
-    return tf.sqrt(tf.reduce_mean(tf.square(diff)))
+    non_nan_count = tf.reduce_sum(tf.cast(tf.math.is_finite(diff), tf.float32))
+    return tf.sqrt(tf.reduce_sum(tf.square(diff)) / (non_nan_count + 1e-8))
 
 
+@tf.function
 def pairwise_extremal_coeffs(uniform):
     """Calculate extremal coefficients for each pair of pixels across single channel."""
     assert (
         len(uniform.shape) == 3
-    ), "Function all_extremal_coeffs fors for 3-dimensional tensors only."
+            ), "Function all_extremal_coeffs fors for 3-dimensional tensors only."
     shape = tf.shape(uniform)
     n, h, w = shape[0], shape[1], shape[2]
     uniform = tf.reshape(uniform, (n, h * w))
     frechet = inv_frechet(uniform)
     n = tf.cast(n, frechet.dtype)
-    ecs = n / minner_product(tf.transpose(frechet), frechet)
-    ecs = tf.where(tf.math.is_inf(ecs), tf.fill(tf.shape(ecs), np.nan), ecs)
+    minima = minner_product(tf.transpose(frechet), frechet)
+    minima = tf.cast(minima, tf.float32)
+    ecs = tf.math.divide_no_nan(n, minima)
+    ecs = tf.where(tf.math.is_inf(ecs), tf.fill(tf.shape(ecs), tf.constant(np.nan)), ecs)
     return ecs
 
 
+@tf.function
 def minner_product(a, b):
     "Use broadcasting to get sum of minima in style of dot product."
     x = tf.reduce_sum(
@@ -81,7 +83,7 @@ def minner_product(a, b):
 def test_minner_product():
     x = np.array([[1, 2], [1, 1]])
     assert np.array_equal(minner_product(x.T, x), np.array([[2, 2], [2, 3]]))
-
+test_minner_product()
 
 
 # Other metrics
@@ -141,8 +143,7 @@ def raw_extremal_coeff_nd(frechets):
     return theta
 
 
-# tests
-test_minner_product()
+
 
 
 ########################################################################################
