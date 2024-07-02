@@ -1,10 +1,10 @@
 program: train.py
-name: cluster-3
+name: local-1
 method: bayes
 project: hazGAN
 metric:
-  name: value_function
-goal: minimize
+  goal: minimize
+  name: chi_rmse
 parameters:
   ntrain:
     values: [50, 100, 500, 100]
@@ -33,9 +33,8 @@ parameters:
   lr_patience:
     values: [5, 10, 20]
 run_cap: 100
-
 command:
   - ${env}
   - ${interpreter}
   - ${program}
-  - "--cluster"
+  #- "--cluster"

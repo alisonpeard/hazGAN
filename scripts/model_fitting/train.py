@@ -124,11 +124,9 @@ def main(config):
             train,
             epochs=config.nepochs,
             callbacks=[
-                # chi_score,
                 WandbMetricsLogger(),
                 # visualiser,
                 checkpoint
-                # reduce_on_plateau
                 ]
         )
 
@@ -149,19 +147,19 @@ def main(config):
 # %% run this cell to train the model
 if __name__ == "__main__":
     # parse arguments (for linux)
-    if sys.__stdin__.isatty():
-        parser = argparse.ArgumentParser()
-        parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
-        parser.add_argument('--cluster', dest="cluster", action='store_true', default=False, help='Running on cluster')
-        parser.add_argument('--force-cpu', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
-        args = parser.parse_args()
-        dry_run = args.dry_run
-        cluster = args.cluster
-        force_cpu = args.force_cpu
-    else:
-        dry_run = True
-        cluster = False
-        force_cpu = False
+    # if sys.__stdin__.isatty():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
+    parser.add_argument('--cluster', dest="cluster", action='store_true', default=False, help='Running on cluster')
+    parser.add_argument('--force-cpu', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
+    args = parser.parse_args()
+    dry_run = args.dry_run
+    cluster = args.cluster
+    force_cpu = args.force_cpu
+    # else:
+    #     dry_run = True
+    #     cluster = False
+    #     force_cpu = False
 
     # setup device
     device = config_tf_devices()
@@ -183,7 +181,7 @@ if __name__ == "__main__":
         wandb.config.update({'nepochs': 1, 'batch_size': 1, 'train_size': 1}, allow_val_change=True)
         runname = 'dry-run'
     else:
-        wandb.init()  # saves snapshot of code as artifact
+        wandb.init(project="hazGAN", allow_val_change=True)  # saves snapshot of code as artifact
         runname = wandb.run.name
     rundir = os.path.join(wd, "_wandb-runs", runname)
     os.makedirs(rundir, exist_ok=True)
