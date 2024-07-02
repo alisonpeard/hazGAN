@@ -135,15 +135,7 @@ class WGAN(keras.Model):
         self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
         self.value_function_tracker = keras.metrics.Mean(name="value_function")
-
-
-    # @property
-    # def metrics(self):
-    #     return [
-    #         # self.chi_rmse_tracker,
-    #         self.generator_loss_tracker,
-    #         self.value_function_tracker
-    #         ]
+        
     
     def compile(self, d_optimizer, g_optimizer, *args, **kwargs):
         super().compile(*args, **kwargs)
@@ -195,7 +187,7 @@ class WGAN(keras.Model):
             generated_data = self.generator(random_latent_vectors)
             score = self.critic(generated_data, training=False)
             generator_loss_raw = -tf.reduce_mean(score)
-            chi_rmse = chi_loss(data, generated_data)
+            chi_rmse = chi_loss(data, generated_data) # think this is safe
             if self.lambda_chi > 0:
                 generator_loss = generator_loss_raw #+ self.lambda_chi * chi_rmse
             else:
