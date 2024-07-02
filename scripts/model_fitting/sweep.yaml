@@ -1,9 +1,9 @@
 program: train.py
-name: cluster
+name: cluster-3
 method: bayes
 project: hazGAN
 metric:
-  name: chi_score_train
+  name: value_function
   goal: minimize
 parameters:
   ntrain:
@@ -28,8 +28,6 @@ parameters:
     values: [True, False]
   interpolation:
     values: [nearest]
-  # lambda_chi:
-    # values: [0, 0.001, 0.01] # leads to nan gradients
   lr_factor:
     values: [0.01, 0.1, 0.5]
   lr_patience:

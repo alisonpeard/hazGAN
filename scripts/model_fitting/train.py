@@ -13,6 +13,10 @@
 >>> new_gan.critic.load_weights(os.path.join(wd, 'saved_models', runname, 'critic_weights'))
 or
 >>> new_gan.load_weights(os.path.join(rundir, 'checkpoint.weights.h5'))
+
+-----Linux cluster examples-----
+$srun -p Short --pty python train.py --dry-run --cluster # dry run
+$ 
 """
 # %%
 import os
@@ -104,13 +108,13 @@ def main(config):
         )
 
     # compile
-    with tf.device(device): # (f"/{device}:0"):
+    with tf.device(device):
         gan = getattr(hg, f"compile_{config.model}")(config, nchannels=2)
         gan.fit(
             train,
             epochs=config.nepochs,
             callbacks=[
-                chi_score,
+                # chi_score,
                 WandbMetricsLogger(),
                 # visualiser,
                 checkpoint

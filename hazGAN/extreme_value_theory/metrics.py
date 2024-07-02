@@ -2,19 +2,21 @@ import numpy as np
 import tensorflow as tf
 from .base import *
 
+class ChiRMSE(tf.keras.metrics.Metric):
+    """https://neptune.ai/blog/keras-metrics"""
+    def __init__(self, name='chi_rmse', *args, **kwargs):
+        super(ChiRMSE, self).__init__(name=name, *args, **kwargs)
+        self.chi_rmse = chi_loss
 
-# Potential loss functions
-# @tf.function
-def kstest_loss(x):
-    """KS test statistic for uniformity. Small => uniform."""
-    shape = tf.shape(x)
-    n, h, w, c = shape[0], shape[1], shape[2], shape[3]
-    sorted_x = tf.sort(x, axis=0)
-    indices = tf.range(n, dtype=tf.float32) / tf.cast(n, dtype=tf.float32)
-    ecdf = tf.reshape(tf.cast(indices, dtype=tf.float32), (n, 1, 1, 1))
-    d = tf.reduce_max(tf.abs(ecdf - sorted_x), axis=0)
-    return d
+    def update_state(self, real, fake):
+        self.chi_rmse = self.chi_rmse(real, fake)
 
+    def result(self):
+        return self.chi_rmse
+    
+    def reset_states(self):
+        self.chi_rmse = 100
+    
 
 @tf.function
 def chi_loss(real, fake):
@@ -145,6 +147,18 @@ test_minner_product()
 
 ########################################################################################
 # TODO: OLD
+# Potential loss functions
+# @tf.function
+def kstest_loss(x):
+    """KS test statistic for uniformity. Small => uniform."""
+    shape = tf.shape(x)
+    n, h, w, c = shape[0], shape[1], shape[2], shape[3]
+    sorted_x = tf.sort(x, axis=0)
+    indices = tf.range(n, dtype=tf.float32) / tf.cast(n, dtype=tf.float32)
+    ecdf = tf.reshape(tf.cast(indices, dtype=tf.float32), (n, 1, 1, 1))
+    d = tf.reduce_max(tf.abs(ecdf - sorted_x), axis=0)
+    return d
+
 # def get_extremal_correlations(marginals, sample_inds):
 #     coeffs = get_extremal_coeffs(marginals, sample_inds)
 #     coors = {indices: 2 - coef for indices, coef in coeffs.items()}

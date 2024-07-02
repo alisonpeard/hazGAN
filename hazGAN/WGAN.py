@@ -12,9 +12,11 @@ from tensorflow.keras import optimizers
 from tensorflow.keras import layers
 from inspect import signature
 import tensorflow_probability as tfp
-from .extreme_value_theory import chi_loss, inv_gumbel
+from .extreme_value_theory import chi_loss, inv_gumbel, ChiRMSE
+
 
 tf.random.gumbel = tfp.distributions.Gumbel(0, 1).sample # so can sample as normal
+
 
 def get_optimizer_kwargs(optimizer):
     optimizer = getattr(optimizers, optimizer)
@@ -42,8 +44,12 @@ def compile_wgan(config, nchannels=2):
     optimizer = getattr(optimizers, config.optimizer)
     d_optimizer = optimizer(**kwargs)
     g_optimizer = optimizer(**kwargs)
-    wgan = WGAN(config, nchannels=nchannels)
-    wgan.compile(d_optimizer=d_optimizer, g_optimizer=g_optimizer)
+    wgan = WGAN(config,nchannels=nchannels)
+    wgan.compile(
+        d_optimizer=d_optimizer,
+        g_optimizer=g_optimizer,
+        metrics=[ChiRMSE()]
+        )
     return wgan
 
 
@@ -127,12 +133,12 @@ class WGAN(keras.Model):
         ]
         self.d_loss_tracker = keras.metrics.Mean(name="d_loss")
         self.g_loss_raw_tracker = keras.metrics.Mean(name="g_loss_raw")
-        #self.generator_penalty_tracker = keras.metrics.Mean(name="generator_penalty")
+        self.generator_penalty_tracker = keras.metrics.Mean(name="generator_penalty")
         self.value_function = keras.metrics.Mean(name="value_function")
 
 
-    def compile(self, d_optimizer, g_optimizer):
-        super().compile()
+    def compile(self, d_optimizer, g_optimizer, *args, **kwargs):
+        super().compile(*args, **kwargs)
         self.d_optimizer = d_optimizer
         self.g_optimizer = g_optimizer
         self.d_optimizer.build(self.critic.trainable_variables)
@@ -182,10 +188,10 @@ class WGAN(keras.Model):
             score = self.critic(generated_data, training=False)
             g_loss_raw = -tf.reduce_mean(score)
             if self.lambda_chi > 0:
-                #generator_penalty = self.lambda_chi #* chi_loss(data, generated_data) # FIX: extremal correlation structure
+                generator_penalty = self.lambda_chi * chi_loss(data, generated_data)
                 g_loss = g_loss_raw #+ generator_penalty 
             else:
-                #generator_penalty = 0.
+                generator_penalty = 0.
                 g_loss = g_loss_raw
         grads = tape.gradient(g_loss, self.generator.trainable_weights)
         self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
@@ -193,12 +199,12 @@ class WGAN(keras.Model):
         # update metrics and return their values
         self.d_loss_tracker(d_loss)
         self.g_loss_raw_tracker.update_state(g_loss_raw)
-        #self.generator_penalty_tracker.update_state(generator_penalty)
+        self.generator_penalty_tracker.update_state(generator_penalty)
         self.value_function.update_state(-d_loss)
 
         return {
             "critic_loss": self.d_loss_tracker.result(),
             "generator_loss": self.g_loss_raw_tracker.result(),
-            #"generator_penalty": self.generator_penalty_tracker.result(),
+            "generator_penalty": self.generator_penalty_tracker.result(),
             "value_function": self.value_function.result(),
         }
