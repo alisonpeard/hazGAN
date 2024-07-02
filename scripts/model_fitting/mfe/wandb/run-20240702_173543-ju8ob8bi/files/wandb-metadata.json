@@ -1,0 +1,52 @@
+{
+    "os": "macOS-12.5.1-arm64-arm-64bit",
+    "python": "3.10.13",
+    "heartbeatAt": "2024-07-02T16:35:44.224988",
+    "startedAt": "2024-07-02T16:35:43.615438",
+    "docker": null,
+    "cuda": null,
+    "args": [
+        "--filter_size=4",
+        "--seed=49"
+    ],
+    "state": "running",
+    "program": "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/scripts/model_fitting/mfe/train.py",
+    "codePathLocal": "train.py",
+    "codePath": "scripts/model_fitting/mfe/train.py",
+    "git": {
+        "remote": "git@github.com:alisonpeard/hazGAN.git",
+        "commit": "13162fa9c6fd332fddb590bab4e5b9d7c01fb0f6"
+    },
+    "email": "alison.peard@gmail.com",
+    "root": "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN",
+    "host": "Alisons-MacBook-Pro.local",
+    "username": "alison",
+    "executable": "/Users/alison/micromamba/envs/hazGAN/bin/python",
+    "cpu_count": 8,
+    "cpu_count_logical": 8,
+    "cpu_freq": {
+        "current": 3504,
+        "min": 600,
+        "max": 3504
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 3504,
+            "min": 600,
+            "max": 3504
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 460.4317207336426,
+            "used": 438.60983657836914
+        }
+    },
+    "gpuapple": {
+        "type": "arm",
+        "vendor": "Apple"
+    },
+    "memory": {
+        "total": 16.0
+    }
+}

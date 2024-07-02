@@ -149,9 +149,9 @@ if __name__ == "__main__":
     # parse arguments (for linux)
     # if sys.__stdin__.isatty():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dry-run', dest="dry_run", action='store_true', default=False, help='Dry run')
-    parser.add_argument('--cluster', dest="cluster", action='store_true', default=False, help='Running on cluster')
-    parser.add_argument('--force-cpu', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
+    parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
+    parser.add_argument('--cluster', '-c', dest="cluster", action='store_true', default=False, help='Running on cluster')
+    parser.add_argument('--force-cpu', '-f', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
     args = parser.parse_args()
     dry_run = args.dry_run
     cluster = args.cluster

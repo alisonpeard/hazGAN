@@ -1,0 +1,6 @@
+wandb_version: 1
+
+filter_size:
+  value: 3
+seed:
+  value: 69
