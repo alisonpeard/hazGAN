@@ -31,15 +31,22 @@ def chi_loss(real, fake):
         Generated data.
     """
     # TODO: vectorise this instead of using tf.vectorized_map
-    c = tf.shape(real)[-1]
+    # c = tf.shape(real)[-1]
     def compute_chi_diff(i):
         return channel_chi_diff(real, fake, i)
-    chi_diffs = tf.vectorized_map(compute_chi_diff, tf.range(c)) # , fn_output_signature=tf.float32
+    # chi_diffs = tf.vectorized_map(compute_chi_diff, tf.range(c)) # , fn_output_signature=tf.float32
+
+    # hardcoded for 2 channels -- TODO
+    chi_diff_0 = compute_chi_diff(0)
+    chi_diff_1 = compute_chi_diff(1)
+    chi_diffs = 0.5 * (chi_diff_0 + chi_diff_1)
+
     return tf.reduce_mean(chi_diffs)
 
 
 @tf.function
 def channel_chi_diff(real, fake, channel=0):
+    # TODO: this isn't very numerically stable
     real = real[..., channel]
     fake = fake[..., channel]
     ecs_real = pairwise_extremal_coeffs(real)
@@ -49,8 +56,11 @@ def channel_chi_diff(real, fake, channel=0):
         ecs_real - ecs_fake,
         tf.zeros_like(ecs_real),
     )
-    non_nan_count = tf.reduce_sum(tf.cast(tf.math.is_finite(diff), tf.float32))
-    return tf.sqrt(tf.reduce_sum(tf.square(diff)) / (non_nan_count + 1e-8))
+    n = tf.cast(tf.shape(real)[0], tf.float32)
+    nan_count = tf.reduce_sum(tf.cast(tf.math.is_nan(diff), tf.float32))
+    non_nan_count = n - nan_count
+    diff = tf.where(tf.math.is_nan(diff), tf.zeros_like(diff), diff)
+    return tf.sqrt(tf.reduce_sum(tf.square(diff)) / (non_nan_count))
 
 
 @tf.function

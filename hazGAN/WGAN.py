@@ -188,8 +188,8 @@ class WGAN(keras.Model):
             score = self.critic(generated_data, training=False)
             generator_loss_raw = -tf.reduce_mean(score)
             chi_rmse = chi_loss(data, generated_data) # think this is safe
-            if self.lambda_chi > 0:
-                generator_loss = generator_loss_raw #+ self.lambda_chi * chi_rmse
+            if self.lambda_chi > 0: # NOTE: this doesn't work with GPU
+                generator_loss = generator_loss_raw + self.lambda_chi * chi_rmse
             else:
                 generator_loss = generator_loss_raw
         grads = tape.gradient(generator_loss, self.generator.trainable_weights)

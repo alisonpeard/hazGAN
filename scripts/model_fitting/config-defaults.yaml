@@ -3,7 +3,7 @@ model:
   desc: Which model to train, ['wgan' | 'dcgan'].
   value: wgan
 nepochs:
-  value: 2 #3000 # or 1,500,000/train_size
+  value: 3000 # or 1,500,000/train_size
 train_size:
   value: 560 # 50
 batch_size:
@@ -18,25 +18,26 @@ lr_factor:
 lr_patience:
   value: 20
 lambda_chi:
-  value: 1
+  value: 0
 lambda_gp:
   value: 10.
 lambda_chi:
+  desc: Weight of penalty on extremal coefficient rmse in generator loss
   value: 0
 training_balance:
-  desc: How many more times to train discriminator than generator.
+  desc: How many more times to train discriminator than generator
   value: 5
 true_label_smooth:
-  desc: Multiply true labels by this to smooth discriminator's labels.
+  desc: Multiply true labels by this to smooth discriminator's labels
   value: 0.9
 latent_space_distn:
-  desc: Distribution of latent space, ['normal', 'uniform', 'gumbel', 't'].
+  desc: Distribution of latent space, ['normal', 'uniform', 'gumbel', 't']
   value: gumbel
 gumbel:
-  desc: Train on Gumbel marginals instead of uniform marginals.
+  desc: Train on Gumbel marginals instead of uniform marginals
   value: True
 optimizer:
-  desc: Optimizer to use, ['SGD', 'Adam'].
+  desc: Optimizer to use, ['SGD', 'Adam']
   value: Adam
 
 # architecture
