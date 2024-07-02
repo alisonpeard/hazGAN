@@ -75,10 +75,7 @@ def config_tf_devices():
         print(f"Using GPU: {gpu_names[0]}")
         return gpu_names[0]
 
-# %% minimal example
-wandb.init(project='test', mode='disabled')
-config = wandb.config
-gan = hg.compile_wgan(config, nchannels=2)
+
 # %%
 def main(config):
     # load data
@@ -147,19 +144,19 @@ def main(config):
 # %% run this cell to train the model
 if __name__ == "__main__":
     # parse arguments (for linux)
-    # if sys.__stdin__.isatty():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
-    parser.add_argument('--cluster', '-c', dest="cluster", action='store_true', default=False, help='Running on cluster')
-    parser.add_argument('--force-cpu', '-f', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
-    args = parser.parse_args()
-    dry_run = args.dry_run
-    cluster = args.cluster
-    force_cpu = args.force_cpu
-    # else:
-    #     dry_run = True
-    #     cluster = False
-    #     force_cpu = False
+    if sys.__stdin__.isatty():
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
+        parser.add_argument('--cluster', '-c', dest="cluster", action='store_true', default=False, help='Running on cluster')
+        parser.add_argument('--force-cpu', '-f', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
+        args = parser.parse_args()
+        dry_run = args.dry_run
+        cluster = args.cluster
+        force_cpu = args.force_cpu
+    else:
+        dry_run = True
+        cluster = False
+        force_cpu = False
 
     # setup device
     device = config_tf_devices()
@@ -175,13 +172,13 @@ if __name__ == "__main__":
     imdir = os.path.join(wd, "figures", "temp")
 
     # initialise wandb
-    if dry_run:
+    if dry_run: # doesn't work with sweeps
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({'nepochs': 1, 'batch_size': 1, 'train_size': 1}, allow_val_change=True)
         runname = 'dry-run'
     else:
-        wandb.init(project="hazGAN", allow_val_change=True)  # saves snapshot of code as artifact
+        wandb.init()  # saves snapshot of code as artifact
         runname = wandb.run.name
     rundir = os.path.join(wd, "_wandb-runs", runname)
     os.makedirs(rundir, exist_ok=True)

@@ -6,8 +6,6 @@ metric:
   goal: minimize
   name: chi_rmse
 parameters:
-  ntrain:
-    values: [50, 100, 500, 100]
   batch_size:
     values: [32, 64, 128]
   training_balance:
@@ -38,5 +36,3 @@ command:
   - ${interpreter}
   - ${program}
   #- "--cluster"
-  - "--dry-run"
-  - ${args}
