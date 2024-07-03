@@ -1,7 +1,7 @@
 project: hazGAN
 program: train.py
 method: bayes
-name: local-1
+name: local-02-July-09500
 metric:
   goal: minimize
   name: chi_rmse

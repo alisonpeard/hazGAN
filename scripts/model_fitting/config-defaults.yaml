@@ -3,14 +3,14 @@ model:
   desc: Which model to train, ['wgan' | 'dcgan'].
   value: wgan
 nepochs:
-  value: 3000 # or 1,500,000/train_size
+  value: 1500 # or 1,500,000/train_size
 train_size:
   value: 560 # 50
 batch_size:
   value: 32
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
-  value: 10
+  value: 1
 
 # training features
 lr_factor:
