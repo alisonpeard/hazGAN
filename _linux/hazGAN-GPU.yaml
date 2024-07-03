@@ -18,6 +18,7 @@ dependencies:
     - h5py
     - cudnn
     - cudatoolkit
+    - nvidia::cuda-nvcc # https://discuss.tensorflow.org/t/installation-instruction-on-website-are-incomplete/16146
     - pip:
         - tensorflow[and-cuda]
         - tensorflow-probability
