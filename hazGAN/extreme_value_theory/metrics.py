@@ -1,22 +1,6 @@
 import numpy as np
 import tensorflow as tf
 from .base import *
-
-# might need later
-# class ChiRMSE(tf.keras.metrics.Metric):
-#     """https://neptune.ai/blog/keras-metrics"""
-#     def __init__(self, name='chi_rmse', *args, **kwargs):
-#         super(ChiRMSE, self).__init__(name=name, *args, **kwargs)
-#         self.chi_rmse = chi_loss
-
-#     def update_state(self, real, fake):
-#         self.chi_rmse = self.chi_rmse(real, fake)
-
-#     def result(self):
-#         return self.chi_rmse
-    
-#     def reset_states(self):
-#         self.chi_rmse = 100
     
 
 @tf.function
