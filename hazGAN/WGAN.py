@@ -15,7 +15,16 @@ import tensorflow_probability as tfp
 from .extreme_value_theory import chi_loss, inv_gumbel
 
 
-tf.random.gumbel = tfp.distributions.Gumbel(0, 1).sample # so can sample as normal
+# tf.random.gumbel = tfp.distributions.Gumbel(0, 1).sample # so can sample as normal
+def sample_uniform(shape):
+    return tf.random.state_less_uniform(shape, minval=0, maxval=1)
+
+def sample_gumbel(shape, eps=1e-20):
+    """Sample from Gumbel(0, 1)"""
+    U = sample_uniform(shape)
+    return -tf.math.log(-tf.math.log(U + eps) + eps)
+
+tf.random.gumbel = sample_gumbel
 
 
 def get_optimizer_kwargs(optimizer):
@@ -168,7 +177,7 @@ class WGAN(keras.Model):
                 score_real = self.critic(data)
                 score_fake = self.critic(fake_data)
                 critic_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality (Gulrajani 2017))
-                eps = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
+                eps = sample_uniform([batch_size, 1, 1, 1], 0.0, 1.0)
                 differences = fake_data - data
                 interpolates = data + (eps * differences)  # interpolated data
                 with tf.GradientTape() as tape_gp:
