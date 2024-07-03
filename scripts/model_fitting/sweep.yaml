@@ -1,7 +1,8 @@
 project: hazGAN
 program: train.py
+name: cluster-6
 method: bayes
-name: local-02-July-09500
+name: lcluster-02-July-105100
 metric:
   goal: minimize
   name: chi_rmse
@@ -35,4 +36,4 @@ command:
   - ${env}
   - ${interpreter}
   - ${program}
-  #- "--cluster"
+  - "--cluster"
