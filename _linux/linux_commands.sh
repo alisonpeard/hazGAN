@@ -14,7 +14,7 @@ which nvcc      # check where your cuda installation is
 bash /ouce-home/projects/mistral/bin/quotas
 
 # example .bashrc file from Tom
-source/less mistral/docs/example.bashrc
+source | less mistral/docs/example.bashrc
 
 # create a symlink
 ln -s \path\to\file \alias\
