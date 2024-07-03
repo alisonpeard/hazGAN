@@ -121,6 +121,7 @@ def main(config):
             train,
             epochs=config.nepochs,
             callbacks=[
+                chi_score,
                 WandbMetricsLogger(),
                 # visualiser,
                 checkpoint

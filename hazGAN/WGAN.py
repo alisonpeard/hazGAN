@@ -12,7 +12,7 @@ from tensorflow.keras import optimizers
 from tensorflow.keras import layers
 from inspect import signature
 import tensorflow_probability as tfp
-from .extreme_value_theory import chi_loss, ChiRMSE, inv_gumbel
+from .extreme_value_theory import chi_loss, inv_gumbel
 
 
 tf.random.gumbel = tfp.distributions.Gumbel(0, 1).sample # so can sample as normal
@@ -123,13 +123,17 @@ class WGAN(keras.Model):
         self.latent_dim = config.latent_dims
         self.lambda_chi = config.lambda_chi
         self.lambda_gp = config.lambda_gp
-        self.gumbel = config.gumbel
         self.config = config
         self.latent_space_distn = getattr(tf.random, config.latent_space_distn)
         self.trainable_vars = [
             *self.generator.trainable_variables,
             *self.critic.trainable_variables,
         ]
+        if config.gumbel:
+            self.inv = inv_gumbel
+        else:
+            self.inv = lambda x: x
+
         # trackers average over batches
         self.critic_loss_tracker = keras.metrics.Mean(name="critic_loss")
         self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
@@ -149,10 +153,7 @@ class WGAN(keras.Model):
         """Return uniformly distributed samples from the generator."""
         random_latent_vectors = self.latent_space_distn((nsamples, self.latent_dim))
         raw = self.generator(random_latent_vectors, training=False)
-        if self.gumbel:
-            return inv_gumbel(raw)
-        else:
-            return raw
+        return self.inv(raw)
 
 
     def train_step(self, data):
@@ -187,7 +188,7 @@ class WGAN(keras.Model):
             generated_data = self.generator(random_latent_vectors)
             score = self.critic(generated_data, training=False)
             generator_loss_raw = -tf.reduce_mean(score)
-            chi_rmse = chi_loss(data, generated_data) # think this is safe
+            chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # think this is safe inside GradientTape
             if self.lambda_chi > 0: # NOTE: this doesn't work with GPU
                 generator_loss = generator_loss_raw + self.lambda_chi * chi_rmse
             else:

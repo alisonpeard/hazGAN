@@ -2,20 +2,21 @@ import numpy as np
 import tensorflow as tf
 from .base import *
 
-class ChiRMSE(tf.keras.metrics.Metric):
-    """https://neptune.ai/blog/keras-metrics"""
-    def __init__(self, name='chi_rmse', *args, **kwargs):
-        super(ChiRMSE, self).__init__(name=name, *args, **kwargs)
-        self.chi_rmse = chi_loss
+# might need later
+# class ChiRMSE(tf.keras.metrics.Metric):
+#     """https://neptune.ai/blog/keras-metrics"""
+#     def __init__(self, name='chi_rmse', *args, **kwargs):
+#         super(ChiRMSE, self).__init__(name=name, *args, **kwargs)
+#         self.chi_rmse = chi_loss
 
-    def update_state(self, real, fake):
-        self.chi_rmse = self.chi_rmse(real, fake)
+#     def update_state(self, real, fake):
+#         self.chi_rmse = self.chi_rmse(real, fake)
 
-    def result(self):
-        return self.chi_rmse
+#     def result(self):
+#         return self.chi_rmse
     
-    def reset_states(self):
-        self.chi_rmse = 100
+#     def reset_states(self):
+#         self.chi_rmse = 100
     
 
 @tf.function
@@ -30,10 +31,12 @@ def chi_loss(real, fake):
     fake : tf.Tensor, [b, h, w, c]
         Generated data.
     """
-    # TODO: vectorise this instead of using tf.vectorized_map
-    # c = tf.shape(real)[-1]
+    
     def compute_chi_diff(i):
         return channel_chi_diff(real, fake, i)
+    
+    # TODO: vectorise this instead of using tf.vectorized_map
+    # c = tf.shape(real)[-1]
     # chi_diffs = tf.vectorized_map(compute_chi_diff, tf.range(c)) # , fn_output_signature=tf.float32
 
     # hardcoded for 2 channels -- TODO
@@ -51,16 +54,8 @@ def channel_chi_diff(real, fake, channel=0):
     fake = fake[..., channel]
     ecs_real = pairwise_extremal_coeffs(real)
     ecs_fake = pairwise_extremal_coeffs(fake)
-    diff = tf.where(
-        tf.math.is_finite(ecs_real - ecs_fake),
-        ecs_real - ecs_fake,
-        tf.zeros_like(ecs_real),
-    )
-    n = tf.cast(tf.shape(real)[0], tf.float32)
-    nan_count = tf.reduce_sum(tf.cast(tf.math.is_nan(diff), tf.float32))
-    non_nan_count = n - nan_count
-    diff = tf.where(tf.math.is_nan(diff), tf.zeros_like(diff), diff)
-    return tf.sqrt(tf.reduce_sum(tf.square(diff)) / (non_nan_count))
+    diff = ecs_real - ecs_fake
+    return tf.sqrt(tf.reduce_mean(tf.square(diff)))
 
 
 @tf.function
@@ -73,17 +68,18 @@ def pairwise_extremal_coeffs(uniform):
     n, h, w = shape[0], shape[1], shape[2]
     uniform = tf.reshape(uniform, (n, h * w))
     frechet = inv_frechet(uniform)
-    n = tf.cast(n, frechet.dtype)
+
     minima = minner_product(tf.transpose(frechet), frechet)
-    minima = tf.cast(minima, tf.float32)
-    ecs = tf.math.divide_no_nan(n, minima)
-    ecs = tf.where(tf.math.is_inf(ecs), tf.fill(tf.shape(ecs), tf.constant(np.nan)), ecs)
+
+    n = tf.cast(n, frechet.dtype)
+    minima = tf.cast(minima,frechet.dtype)
+    ecs = tf.math.divide_no_nan(n, minima) # returns zero if denominator is zero
     return ecs
 
 
 @tf.function
 def minner_product(a, b):
-    "Use broadcasting to get sum of minima in style of dot product."
+    "Use broadcasting to get sum of pairwise minima."
     x = tf.reduce_sum(
         tf.minimum(tf.expand_dims(a, axis=-1), tf.expand_dims(b, axis=0)), axis=1
     )
