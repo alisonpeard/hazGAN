@@ -15,8 +15,8 @@ or
 >>> new_gan.load_weights(os.path.join(rundir, 'checkpoint.weights.h5'))
 
 -----Linux cluster examples-----
-$srun -p Short --pty python train.py --dry-run --cluster # dry run
-$ 
+>>> srun -p Short --pty python train.py --dry-run --cluster
+>>> srun -p GPU --gres=gpu:tesla:1 --pty train.py --dry-run --cluster
 """
 # %%
 import os
