@@ -17,7 +17,8 @@ from .extreme_value_theory import chi_loss, inv_gumbel
 
 # tf.random.gumbel = tfp.distributions.Gumbel(0, 1).sample # so can sample as normal
 def sample_uniform(shape):
-    return tf.random.state_less_uniform(shape, minval=0, maxval=1)
+    # return tf.random.stateless_uniform(shape, minval=0, maxval=1)
+    return tf.random.uniform(shape, minval=0, maxval=1)
 
 def sample_gumbel(shape, eps=1e-20):
     """Sample from Gumbel(0, 1)"""
