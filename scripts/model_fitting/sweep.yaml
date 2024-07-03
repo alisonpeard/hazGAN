@@ -1,8 +1,7 @@
 project: hazGAN
 program: train.py
-name: cluster-6
 method: bayes
-name: lcluster-02-July-105100
+name: cluster-gpu-02-July-134800
 metric:
   goal: minimize
   name: chi_rmse
@@ -26,7 +25,7 @@ parameters:
   use_ema:
     values: [True, False]
   interpolation:
-    values: [nearest]
+    values: [bilinear]
   lr_factor:
     values: [0.01, 0.1, 0.5]
   lr_patience:

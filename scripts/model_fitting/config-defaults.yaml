@@ -10,7 +10,7 @@ batch_size:
   value: 32
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
-  value: 1
+  value: 10
 
 # training features
 lr_factor:
@@ -59,7 +59,7 @@ d_complexity:
   value: 1
 interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
-  value: nearest
+  value: bilinear
 
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
 learning_rate:
