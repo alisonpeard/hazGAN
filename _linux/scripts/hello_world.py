@@ -22,7 +22,7 @@ DEVICES_NB = len(DEVICES)
 if DEVICES_NB == 0:
     raise SystemError(f'No {device} device found')
 else:
-    print(f'{DEVICES_NB} {device} device(s) have been found on your notebook :')
+    print(f'{DEVICES_NB} {device} device(s) have been found:')
 
 for nb in range(DEVICES_NB):
     name = DEVICES_NAMES[nb]

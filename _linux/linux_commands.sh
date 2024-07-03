@@ -1,9 +1,14 @@
 # $HOME
 /soge-home/users/spet5107
 
+# -----CUDA------
+# StackOverflow: https://stackoverflow.com/questions/31326015/how-to-verify-cudnn-installation
+# https://developer.nvidia.com/cudnn-downloads - download from here using wget
 # check gpu
 nvidia-smi
-nvcc --version
+nvcc --version  # get your cuda version
+which nvcc      # check where your cuda installation is
+
 
 # check my quotas
 bash /ouce-home/projects/mistral/bin/quotas

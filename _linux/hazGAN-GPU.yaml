@@ -4,7 +4,7 @@ channels:
 dependencies:
     - python
     - pip
-    - numpy
+    - numpy==1.26.4
     - pandas
     - geopandas
     - xarray
@@ -13,29 +13,27 @@ dependencies:
     - scipy
     - scikit-learn
     - ipykernel
-    - notebook
     - matplotlib
-    - seaborn
     - pyyaml
     - h5py
     - cudnn
     - cudatoolkit
-    # - tensorflow-gpu
     - pip:
         - tensorflow[and-cuda]
         - tensorflow-probability
         - tf-keras
         - tensorrt           # for NVIDIA GPU -- gives error on cluster unless on GPU
         - wandb==0.16.6      # stable May 2024
-        #- cdsapi             # request from copernicus climate data store API
         #- -e ..
 
 
 # ---------Notes----------
-# mamba env create -n hazGAN -f _/linux/hazGAN.yaml
-# cd hazGAN
-# conda activate hazGAN
-# python -m ipykernel install --user --n hazGAN
+# srun -p GPU --gres=gpu:tesla:1 --pty /bin/bash
+# micromamba create -f hazGAN-GPU.yaml
+# micromamba activate hazGAN
+# export LD_LIBRARY_PATH=/soge-home/users/spet5107/micromamba/envs/hazGAN-GPU/lib:$LD_LIBRARY_PATH
+# cd scripts
+# python hello_world.py --device GPU
 
 # ---------Uninstall----------
 # conda env remove -n hazGAN
