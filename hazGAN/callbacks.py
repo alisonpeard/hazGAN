@@ -1,9 +1,19 @@
+import wandb
 import tensorflow as tf
 from tensorflow.keras.callbacks import Callback
 from tensorflow.nn import sigmoid_cross_entropy_with_logits as cross_entropy
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
 from .extreme_value_theory import chi_loss, inv_gumbel, pairwise_extremal_coeffs
+
+
+class WandbMetricsLogger(Callback):
+    """
+    Custom Wandb callback to log metrics.
+
+    Source: https://community.wandb.ai/t/sweeps-not-showing-val-loss-with-keras/4495"""
+    def on_epoch_end(self, epoch, logs=None):
+        wandb.log(logs)
 
 
 class Visualiser(Callback):

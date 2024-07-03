@@ -27,13 +27,9 @@ import numpy as np
 import tensorflow as tf
 tf.keras.backend.clear_session()
 
-# debugging ops
-# tf.debugging.set_log_device_placement(True)
-# tf.debugging.enable_check_numerics() # check for NaN/Inf in tensors
-
 import wandb
-from wandb.keras import WandbMetricsLogger
 import hazGAN as hg
+from hazGAN import WandbMetricsLogger
 
 
 global rundir
@@ -144,8 +140,8 @@ def main(config):
 
 # %% run this cell to train the model
 if __name__ == "__main__":
+    if sys.__stdin__.isatty(): 
     # parse arguments (for linux)
-    if sys.__stdin__.isatty():
         parser = argparse.ArgumentParser()
         parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
         parser.add_argument('--cluster', '-c', dest="cluster", action='store_true', default=False, help='Running on cluster')
