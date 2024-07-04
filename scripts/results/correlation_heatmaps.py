@@ -11,9 +11,11 @@ from itertools import combinations
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
 res = (18, 22)
+RUNNAME = "clean-sweep-3"
 datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/res_{res[0]}x{res[1]}'
+samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 data = xr.open_dataset(os.path.join(datadir, "data.nc"))
-samples_ds = xr.open_dataset(os.path.join(datadir, "hazGAN_samples.nc"))
+samples_ds = xr.open_dataset(os.path.join(samplesdir, f"{RUNNAME}_samples.nc"))
 occurence_rate = 18.033 # from R 
 ntrain = 1000
 train_ds = data.isel(time=slice(0, ntrain))
@@ -109,9 +111,9 @@ rmse_chi_train_test = np.sqrt(np.nanmean((excoefs_train - excoefs_test) ** 2))
 rmse_chi_train = np.sqrt(np.nanmean((excoefs_gan - excoefs_train) ** 2))
 rmse_chi_test = np.sqrt(np.nanmean((excoefs_gan - excoefs_test) ** 2))
 
-print("RMSE chi train-test: ", rmse_chi_train_test)
-print("RMSE chi train: ", rmse_chi_train)
-print("RMSE chi test: ", rmse_chi_test)
+print(f"RMSE chi train-test: {rmse_chi_train_test:.4f}")
+print(f"RMSE chi train: {rmse_chi_train:.4f}")
+print(f"RMSE chi test: {rmse_chi_test:.4f}")
 
 # %% -----Spatial correlations------
 channel = 0
@@ -142,9 +144,9 @@ rmse_chi_train_test = np.sqrt(np.nanmean((ecs_train - ecs_test) ** 2))
 rmse_chi_train = np.sqrt(np.nanmean((ecs_gen - ecs_train) ** 2))
 rmse_chi_test = np.sqrt(np.nanmean((ecs_gen - ecs_test) ** 2))
 
-print("RMSE chi train-test: ", rmse_chi_train_test)
-print("RMSE chi train: ", rmse_chi_train)
-print("RMSE chi test: ", rmse_chi_test)
+print(f"RMSE chi train-test: {rmse_chi_train_test:.4f}")
+print(f"RMSE chi train: {rmse_chi_train:.4f}")
+print(f"RMSE chi test: {rmse_chi_test:.4f}")
 
 vmin = min(ecs_gen.min(), ecs_train.min(), ecs_test.min())
 vmax = max(ecs_gen.max(), ecs_train.max(), ecs_test.max())

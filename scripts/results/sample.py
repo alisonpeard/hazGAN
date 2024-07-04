@@ -9,7 +9,7 @@ from hazGAN import POT
 import wandb
 # %%
 wd = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN"
-RUNNAME = "swept-sweep-10"  # "toasty-serenity-21"
+RUNNAME = "clean-sweep-3"  # "toasty-serenity-21"
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 occurrence_rate = 18.033
@@ -64,5 +64,5 @@ ds_GAN['medians'] = (('month', 'lat', 'lon', 'channel'), monthly_medians.values)
 i = np.random.randint(0, nsamples)
 ds_GAN.isel(sample=i, channel=0).anomaly.plot(cmap='viridis') # levels=10, 
 # %%
-ds_GAN.to_netcdf(os.path.join(wd, "..", "training", "res_18x22", "hazGAN_samples.nc"))
+ds_GAN.to_netcdf(os.path.join(wd, "..", "samples", f"{RUNNAME}_samples.nc"))
 # %%
