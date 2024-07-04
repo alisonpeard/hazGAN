@@ -29,6 +29,7 @@ dependencies:
 
 
 # ---------Notes----------
+# This actually ran just fine with my usual hazGAN environment so maybe not so vital
 # srun -p GPU --gres=gpu:tesla:1 --pty /bin/bash
 # micromamba create -f hazGAN-GPU.yaml
 # micromamba activate hazGAN
