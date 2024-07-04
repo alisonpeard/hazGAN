@@ -11,7 +11,7 @@ from itertools import combinations
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
 res = (18, 22)
-datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/era5_data/res_{res[0]}x{res[1]}'
+datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/res_{res[0]}x{res[1]}'
 data = xr.open_dataset(os.path.join(datadir, "data.nc"))
 samples_ds = xr.open_dataset(os.path.join(datadir, "hazGAN_samples.nc"))
 occurence_rate = 18.033 # from R 
@@ -78,8 +78,11 @@ excoefs_train = get_channel_ext_coefs(train)
 excoefs_test = get_channel_ext_coefs(test)
 excoefs_gan = get_channel_ext_coefs(samples)
 
-fig, ax = plt.subplots(1, 4, figsize=(12, 3.5), gridspec_kw={'wspace': .02,
-                                                             'width_ratios': [1, 1, 1, .05]})
+fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
+                       gridspec_kw={
+                           'wspace': .02,
+                           'width_ratios': [1, 1, 1, .05]}
+                           )
 
 cmap = plt.cm.coolwarm_r
 cmap.set_over('darkblue')
