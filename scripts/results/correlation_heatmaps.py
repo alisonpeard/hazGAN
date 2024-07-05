@@ -4,20 +4,30 @@ Make correlation/extremal correlation heatmaps and compare them across the train
 #%%
 import os 
 import numpy as np
+import yaml
 import xarray as xr
 import hazGAN as hg
 import matplotlib.pyplot as plt
 from itertools import combinations
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
+
+def open_config(runname, dir):
+    configfile = open(os.path.join(dir, runname, "config-defaults.yaml"), "r")
+    config = yaml.load(configfile, Loader=yaml.FullLoader)
+    config = {key: value["value"] for key, value in config.items()}
+    return config
+
+# %%
 res = (18, 22)
 RUNNAME = "clean-sweep-3"
 datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/res_{res[0]}x{res[1]}'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
+config = open_config("clean-sweep-3", "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
 data = xr.open_dataset(os.path.join(datadir, "data.nc"))
 samples_ds = xr.open_dataset(os.path.join(samplesdir, f"{RUNNAME}_samples.nc"))
 occurence_rate = 18.033 # from R 
-ntrain = 1000
+ntrain = config['train_size']
 train_ds = data.isel(time=slice(0, ntrain))
 test_ds = data.isel(time=slice(ntrain, 2*ntrain))
 samples_ds = samples_ds.rename({'sample': 'time'})

@@ -14,8 +14,8 @@ res = args.resolution
 redo = args.redo
 
 # set up directories
-source_dir = "/Users/alison/Documents/DPhil/data/era5/new_data.nosync"
-target_dir = "/Users/alison/Documents/DPhil/data/era5/new_data.nosync/resampled"
+source_dir = "/Users/alison/Documents/DPhil/data/era5/bay_of_bengal__monthly.nosync/original"
+target_dir = "/Users/alison/Documents/DPhil/data/era5/bay_of_bengal__monthly.nosync/resampled"
 target_dir = os.path.join(target_dir, f"res_{res[1]}x{res[0]}")
 os.makedirs(target_dir, exist_ok=True)
 

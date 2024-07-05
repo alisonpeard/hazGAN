@@ -5,13 +5,13 @@ Process ERA5 data daily maximum wind speed at 10m and minimum MSLP.
 
 Input:
 ------
-    - resampled ERA5 data (netcdf) of form <datadir>/era5/new_data/resampled/*bangladesh*.nc
+    - resampled ERA5 data (netcdf) of form <datadir>/era5/bay_of_bengal__monthly/resampled/*bangladesh*.nc
         (resampled using resample-era5.py script)
 
 Output:
 -------
-    - netcdf file of processed data (max wind speed, min MSLP) in <outdir>/era5_data/data_{year0}_{yearn}.nc
-    - parquet file of processed data in outdir/era5_data/data_{year0}_{yearn}.parquet
+    - netcdf file of processed data (max wind speed, min MSLP) in <outdir>/training/res_<>x<>/data_{year0}_{yearn}.nc
+    - parquet file of processed data in outdir/training/res_<>x<>/data_{year0}_{yearn}.parquet
 """
 
 # %%
@@ -25,10 +25,10 @@ import xarray as xr
 import matplotlib.pyplot as plt
 
 # %% -----Load data-----
-wd = "/Users/alison/Documents/DPhil/multivariate"
+wd = "/Users/alison/Documents/DPhil/paper1.nosync"
 res = (28, 28)
-indir = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'data', 'era5', 'new_data.nosync', 'resampled', f'res_{res[1]}x{res[0]}')
-outdir = os.path.join(wd, "era5_data.nosync", f'res_{res[1]}x{res[0]}')
+indir = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'data', 'era5', 'bay_of_bengal__monthly.nosync', 'resampled', f'res_{res[1]}x{res[0]}')
+outdir = os.path.join(wd, "training", f'res_{res[1]}x{res[0]}')
 
 files = glob.glob(os.path.join(indir, f"*bangladesh*.nc"))
 

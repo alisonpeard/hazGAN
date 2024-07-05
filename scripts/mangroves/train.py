@@ -1,3 +1,16 @@
+"""
+To load model elsewhere, you can use the following snippet:
+>>> from joblib import load
+>>> modelpath = '/Users/alison/Documents/DPhil/paper1.nosync/results/mangroves/model.pkl'
+>>> with open(modelpath, "rb") as f:
+>>>     model = load(f)
+
+
+-----Input files-----
+  - /Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v3__mine/era5_and_slope_0.csv
+-----Output files-----
+  - /Users/alison/Documents/DPhil/paper1.nosync/results/mangroves/model.pkl
+"""
 #%%
 import os
 import numpy as np
@@ -10,22 +23,23 @@ import matplotlib.pyplot as plt
 
 bob_crs = 24346
 # %%
-path = '/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v3__mine/era5_and_slope.csv'
+path = '/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v3__mine/era5_and_slope_0.csv'
 df = pd.read_csv(path)
 [*df.columns]
 # %% ------Train a model------
 # TODO: pressure, precipitation checks
-regressors = ['slope',
-            #   'landingWindMaxLocal2',
-            #   'landingPressure'
-              'wind',
-              'mslp',
-              'stormFrequency_mean',
-            #   'elevation_mean',
-            #   'totalPrec_total',
-            #   'landingSpeed',
-              'coastDist',
-              ]
+regressors = [
+    # 'slope',
+    # 'landingWindMaxLocal2',
+    # 'landingPressure'
+    'wind',
+    'mslp',
+    # 'stormFrequency_mean',
+    # 'elevation_mean',
+    # 'totalPrec_total',
+    # 'landingSpeed',
+    # 'coastDist'
+    ]
 response = ['intensity']
 # %%
 gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.center_centerLon, df.center_centerLat)).set_crs(epsg=4326)
@@ -55,8 +69,11 @@ plt.xticks(rotation=45)
 
 # %%
 model.feature_names_in_
-# %%
-gdf.head()
-
+# %% pickle model to use later -- try other methods later
+# Here you can replace pickle with joblib or cloudpickle
+from joblib import dump
+modelpath = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync', 'results', 'mangroves', 'model.pkl')
+with open(modelpath, "wb") as f:
+    dump(model, f, protocol=5)
 
 # %%

@@ -64,5 +64,5 @@ ds_GAN['medians'] = (('month', 'lat', 'lon', 'channel'), monthly_medians.values)
 i = np.random.randint(0, nsamples)
 ds_GAN.isel(sample=i, channel=0).anomaly.plot(cmap='viridis') # levels=10, 
 # %%
-ds_GAN.to_netcdf(os.path.join(wd, "..", "samples", f"{RUNNAME}_samples.nc"))
+ds_GAN.to_netcdf(os.path.join(wd, "..", "samples", f"{RUNNAME}.nc"))
 # %%
