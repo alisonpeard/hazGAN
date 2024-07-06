@@ -51,12 +51,20 @@ def sample_to_xr(data, ds_ref, plot=False):
 
 samples_GAN = hg.unpad(wgan(nsamples=nsamples), paddings).numpy()
 ds_GAN = sample_to_xr(samples_GAN, ds_ref, plot=True)
+# %% sample fully independent uniform data of same size
+samples_independent = np.random.uniform(size=(nsamples, 18, 22, 2))
+samples_dependent = np.random.uniform(size=(nsamples))
+samples_dependent = np.repeat(samples_dependent, 18*22*2, axis=0).reshape(nsamples, 18, 22, 2)
 # %% convert to original scale
 sample_U = ds_GAN.uniform.values
 X = ds_ref.isel(time=slice(0, ntrain)).anomaly.values
 U = ds_ref.isel(time=slice(0, ntrain)).uniform.values
 sample_X = POT.inv_probability_integral_transform(sample_U, X, U, ds_ref.isel(time=slice(0, ntrain)).params.values)
+sample_ind = POT.inv_probability_integral_transform(samples_independent, X, U, ds_ref.isel(time=slice(0, ntrain)).params.values)
+sample_dep = POT.inv_probability_integral_transform(samples_dependent, X, U, ds_ref.isel(time=slice(0, ntrain)).params.values)
 ds_GAN['anomaly'] = (('sample', 'lat', 'lon', 'channel'), sample_X)
+ds_GAN['independent'] = (('sample', 'lat', 'lon', 'channel'), sample_ind)
+ds_GAN['dependent'] = (('sample', 'lat', 'lon', 'channel'), sample_dep)
 # %% add monthly info
 monthly_medians = ds_ref.medians.groupby('time.month').median()
 ds_GAN['medians'] = (('month', 'lat', 'lon', 'channel'), monthly_medians.values)

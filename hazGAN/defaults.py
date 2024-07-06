@@ -7,3 +7,5 @@ ymin = 10.0
 ymax = 25.0
 
 bay_of_bengal_crs = 24346
+
+occurrence_rate = 18.033

@@ -1,12 +1,21 @@
 """
 Load a pretrained model then plot and display EADs
+
+---- To do ----
+    - Make into functions
+    - Do for training data
+    - Do for hazGAN samples
+    - Do for dependent/independent assumptions
 """
 # %% ---- Setup ----
 import os
 import numpy as np
 from joblib import load
 import xarray as xr
+import matplotlib
 import matplotlib.pyplot as plt
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['font.serif'] = ['Garamond'] + plt.rcParams['font.serif']
 plt.style.use('bmh')
 
 month = 7
@@ -85,6 +94,7 @@ mangroves.to_file(mangrovesout, driver='GeoJSON')
 from matplotlib.ticker import PercentFormatter
 
 fig, ax = plt.subplots(figsize=(10, 5), subplot_kw={'projection': ccrs.PlateCarree()})
+
 damages['expected_annual'].plot(
     ax=ax,
     cmap='YlOrRd',
@@ -92,6 +102,7 @@ damages['expected_annual'].plot(
         'label': 'Expected annual damage [\% area]',
         'format': PercentFormatter(1, 0)
         })
+
 mangrove_centroids.plot(ax=ax,
                          color='lightgreen',
                          alpha=.8,
@@ -170,7 +181,46 @@ ds = xr.Dataset(
     }
 )
 
-
-
 ds.expected_annual_damages.plot(cmap='YlOrRd', norm=LogNorm(), vmin=1e5)
+# %% ----- Total damage [m²] vs RP plots -----
+# potentiall very slow
+aggregated = xa.aggregate(damages['mangrove_damage'], weightmap)
+total_damages = aggregated.to_geodataframe()
+
+total_damages = total_damages[['area', 'mangrove_damage0']]
+total_damages.columns = ['area', 'percent_damage']
+total_damages['area_damage'] = total_damages['area'] * total_damages['percent_damage']
+total_damages['area_damage'] = total_damages['area_damage'].apply(lambda x: [(i, x) for i, x in enumerate(x)])
+total_damages = total_damages[['area_damage']].explode('area_damage')
+
+total_damages['index'] = total_damages['area_damage'].apply(lambda x: x[0])
+total_damages['area_damage'] = total_damages['area_damage'].apply(lambda x: x[1])
+total_damages = total_damages.groupby('index').sum()
+# %%
+N = len(total_damages)
+total_damages['rank'] = total_damages['area_damage'].rank(ascending=False)
+total_damages['exceedence_probability'] = total_damages['rank'] / (1 + N)
+total_damages['return_period'] = 1 / (yearly_rate * total_damages['exceedence_probability'])
+# %%
+total_damages = total_damages.sort_values(by='return_period', ascending=True)
+max_damages = total_damages['area_damage'].max()
+min_damages = total_damages['area_damage'].min()
+total_damages['rescaled'] = (total_damages['area_damage'] - min_damages) / (max_damages - min_damages)
+fig, ax = plt.subplots()
+
+index = total_damages['return_period'] >= 1
+
+ax.plot(
+    total_damages.loc[index, 'return_period'],
+    total_damages.loc[index, 'rescaled'],
+    color='k',
+    linewidth=.5,
+    label='Modelled dependence')
+ax.set_xlabel('Return period (years)')
+ax.set_ylabel('Total damage (rescaled)')
+ax.legend()
+ax.set_xscale('log')
+ax.set_xticks([2, 5, 25, 100])
+ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+ax.set_title('Figure 7 Lamb (2010)')
 # %%
