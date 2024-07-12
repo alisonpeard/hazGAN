@@ -28,6 +28,7 @@ dependencies:
     - dask
     - pip:
         # - tensorflow-macos #==2.12
+        - bottleneck
         - tensorflow>=2.16 # for python 3.10
         - tensorflow-metal
         - tensorflow-probability
@@ -41,8 +42,6 @@ dependencies:
 # mamba env create -n hazGAN -f hazGAN.yaml
 # cd hazGAN
 # conda activate hazGAN
-# python -m ipykernel install --user --n hazGAN
-# python -m pip install -e .
 
 # ---------Uninstall----------
 # conda env remove -n hazGAN
