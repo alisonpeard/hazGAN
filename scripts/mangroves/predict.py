@@ -30,50 +30,42 @@ with open(modelpath, 'rb') as f:
 
 samplespath = os.path.join(wd, 'samples', f'{run}.nc')
 samples = xr.open_dataset(samplespath)
-month_medians = samples.median(dim='month') # OR: samples.sel(month=month)
-samples_month = samples[['anomaly']] + month_medians
+samples.loc[{'channel': 'mslp'}]['anomaly'] = -samples.loc[{'channel': 'mslp'}].anomaly
+month_medians = samples.sel(month=month).medians
+samples_month = samples[['anomaly', 'dependent', 'independent']] + month_medians
 samples_month = samples_month.stack(grid=['lat', 'lon'])
 
+datapath = os.path.join(wd, 'training', 'res_18x22', 'data.nc')
+data = xr.open_dataset(datapath)
+data.loc[{'channel': 'mslp'}]['anomaly'] = -data.loc[{'channel': 'mslp'}].anomaly
+data_month = data + month_medians # data['medians']
+data_month = data_month.stack(grid=['lat', 'lon'])
+train_month = data_month.isel(time=slice(0, 1000))
+test_month = data_month.isel(time=slice(1000, None))
 # %% ---- Predict (needs Pandas)----
-X = samples_month['anomaly'].to_dataframe()[['anomaly']]
-X = X.unstack('channel').reset_index()
-X.columns = ['sample', 'lat', 'lon', 'wind' ,'mslp']
-X = X.set_index(['sample', 'lat', 'lon'])
-X['mangrove_damage'] = model.predict(X)
-damages = X['mangrove_damage'].to_xarray()
+def predict_damages(model, X: xr.DataArray, var: str) -> xr.DataArray:
+    X = X[var].to_dataframe()[var]
+    X = X.unstack('channel').reset_index()
+    X.columns = ['sample', 'lat', 'lon', 'wind' ,'mslp']
+    X = X.set_index(['sample', 'lat', 'lon'])
+    X[f'mangrove_damage'] = model.predict(X)
+    damages = X[f'mangrove_damage'].to_xarray()
+    return damages.to_dataset()
+
+damages_dependent = predict_damages(model, samples_month, 'dependent')
+damages_independent = predict_damages(model, samples_month, 'independent')
+damages_hazGAN = predict_damages(model, samples_month, 'anomaly')
+damages_train = predict_damages(model, train_month, 'anomaly')
 
 # %% ---- Plot mangrove damage predictions for random storm ----
-fig, ax = plt.subplots()
-i = np.random.random_integers(0, damages.sizes['sample'])
-damages.isel(sample=i).plot(ax=ax, cmap="YlOrRd")
-ax.set_title(f'Predicted mangrove damage (sample storm nᵒ {i})')
+fig, axs = plt.subplots(1, 2, figsize=(15, 5))
+i = np.random.random_integers(0, damages_hazGAN.sizes['sample'])
+damages_hazGAN.isel(sample=i).mangrove_damage.plot(ax=axs[0], cmap="YlOrRd", cbar_kwargs={'label': 'Mangrove damage (%area)'})
+axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ {i})')
 
-# %% ---- Calculate return periods and EADs ----
-from sklearn.metrics import auc
-
-def auc_ufunc(x, y):
-    x = sorted(x)
-    y = sorted(y)
-    return auc(x, y)
-
-exceedence_prob = 1 - (damages.rank(dim='sample') / (1 + damages.sizes['sample']))
-return_period = 1 / (yearly_rate * exceedence_prob)
-exceedence = 1 / (yearly_rate * return_period)
-
-damages = damages.to_dataset()
-damages['return_period'] = return_period
-damages['exceedence'] = exceedence
-damages['expected_annual'] = xr.apply_ufunc(auc_ufunc, damages['exceedence'], damages['mangrove_damage'], input_core_dims=[['sample'], ['sample']], vectorize=True)
-damages.to_netcdf(os.path.join(wd, 'results', 'mangroves', 'damages.nc'))
-# %%
-import rioxarray as rio
-
-tifpath = os.path.join(wd, 'results', 'mangroves', 'expected_annual_damages.tif')
-
-damages['expected_annual'].rio.set_spatial_dims('lon', 'lat')\
-    .rio.set_crs(4326)\
-    .rio.to_raster(tifpath, driver='GTiff')
-
+j = np.random.random_integers(0, damages_train.sizes['sample'])
+damages_train.isel(sample=j).mangrove_damage.plot(ax=axs[1], cmap="YlOrRd", cbar_kwargs={'label': 'Mangrove damage (%area)'})
+axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ {j})')
 # %% ---- Load mangrove data ----
 import cartopy.crs as ccrs
 import geopandas as gpd 
@@ -86,141 +78,214 @@ mangroves = gpd.read_file(global_mangrove_watch, mask=aoi)
 mangroves = mangroves.set_crs(epsg=4326).drop(columns='PXLVAL')
 mangroves['area'] = mangroves.to_crs(bay_of_bengal_crs).area
 mangrove_centroids = mangroves.set_geometry(mangroves.centroid)
+mangrove_centrois = mangrove_centroids.sort_values(by='area', ascending=False)
 
 mangrovesout = os.path.join(wd, 'results', 'mangroves', 'mangroves.geojson')
 mangroves.to_file(mangrovesout, driver='GeoJSON')
 
-# %% ---- Overlay with EADs ----
-from matplotlib.ticker import PercentFormatter
-
-fig, ax = plt.subplots(figsize=(10, 5), subplot_kw={'projection': ccrs.PlateCarree()})
-
-damages['expected_annual'].plot(
-    ax=ax,
-    cmap='YlOrRd',
-    cbar_kwargs={
-        'label': 'Expected annual damage [\% area]',
-        'format': PercentFormatter(1, 0)
-        })
-
-mangrove_centroids.plot(ax=ax,
-                         color='lightgreen',
-                         alpha=.8,
-                         edgecolor='k',
-                         linewidth=0.5,
-                         markersize=mangroves.area * 5000
-                         )
-ax.set_title('Expected annual damages for mangroves\nin the Bay of Bengal');
-# %% ---- (1) Get EADs for individual mangrove patches ----
+# %% ---- Convert mangroves to xarray.Dataset with values as areas ----
 import xagg as xa
 
-weightmap = xa.pixel_overlaps(damages, mangroves)
-aggregated = xa.aggregate(damages[['expected_annual']], weightmap)
-mangrove_damages = aggregated.to_geodataframe()
-mangrove_damages.columns = ['area', 'EAPD']
-mangrove_damages = gpd.GeoDataFrame(mangrove_damages, geometry=mangrove_centroids.geometry)
-mangrove_damages = mangrove_damages.set_crs(4326)
-mangrove_damages['EAD'] = mangrove_damages['area'] * mangrove_damages['EAPD']
+def intersect_mangroves_with_damages(mangroves: gpd.GeoDataFrame,
+                                     damages: xr.Dataset,
+                                     plot=True) -> xr.Dataset:
+    # calculate intersections
+    mangroves = mangroves.to_crs(4326)
+    damages = damages_hazGAN.copy()
+    weightmap = xa.pixel_overlaps(damages, mangroves)
+
+    # calculate overlaps, NOTE: using EPSG:4326 for now
+    mangroves_gridded = weightmap.agg
+    mangroves_gridded['npix'] = mangroves_gridded['pix_idxs'].apply(len)
+    mangroves_gridded['rel_area'] = mangroves_gridded['rel_area'].apply(lambda x: np.squeeze(x, axis=0))
+    mangroves_gridded = mangroves_gridded.explode(['rel_area', 'pix_idxs'])
+
+    # sum all relative mangrove areas in the same pixel
+    mangroves_gridded['area'] = mangroves_gridded['area'] * mangroves_gridded['rel_area']
+    mangroves_gridded = mangroves_gridded.groupby('pix_idxs').agg({'area': 'sum', 'coords': 'first'})
+
+    # convert pd.DataFrame to xarray.Dataset
+    lons = weightmap.source_grid['lon'].values
+    lats = weightmap.source_grid['lat'].values
+    mangroves_gridded = mangroves_gridded.reset_index()
+    mangroves_gridded['lon'] = mangroves_gridded['pix_idxs'].apply(lambda j: lons[j])
+    mangroves_gridded['lat'] = mangroves_gridded['pix_idxs'].apply(lambda i: lats[i])
+    mangroves_gridded['lon'] = mangroves_gridded['lon'].astype(float)
+    mangroves_gridded['lat'] = mangroves_gridded['lat'].astype(float)
+    mangroves_gridded['area'] = mangroves_gridded['area'].astype(float)
+    mangroves_gridded['area'] = mangroves_gridded['area'] * 1e-6 # convert to sqkm
+    mangroves_gridded = mangroves_gridded.set_index(['lat', 'lon'])[['area']]
+    mangroves_gridded = xr.Dataset.from_dataframe(mangroves_gridded)
+
+    if plot:
+        mangroves_gridded.area.plot(cmap="Greens", cbar_kwargs={'label': 'Mangrove damage [km²]'})
+    return mangroves_gridded
+
+mangroves_gridded = intersect_mangroves_with_damages(mangroves, damages_hazGAN)
+mangroves_gridded.area.plot(cmap="Greens", cbar_kwargs={'label': 'Mangrove damage [km²]'})
+
+damages_hazGAN['mangrove_damage_area'] = mangroves_gridded.area * damages_hazGAN.mangrove_damage
+damages_hazGAN['mangrove_damage_percent'] = damages_hazGAN.mangrove_damage.where(mangroves_gridded.area > 0)
+
+damages_dependent['mangrove_damage_area'] = mangroves_gridded.area * damages_dependent.mangrove_damage
+damages_dependent['mangrove_damage_percent'] = damages_dependent.mangrove_damage.where(mangroves_gridded.area > 0)
+
+damages_independent['mangrove_damage_area'] = mangroves_gridded.area * damages_independent.mangrove_damage
+damages_independent['mangrove_damage_percent'] = damages_independent.mangrove_damage.where(mangroves_gridded.area > 0)
+
+damages_train['mangrove_damage_area'] = mangroves_gridded.area * damages_train.mangrove_damage
+damages_train['mangrove_damage_percent'] = damages_train.mangrove_damage.where(mangroves_gridded.area > 0)
+# %% Turn contourf on and off
+import cartopy.crs as ccrs
+from cartopy import feature
+from matplotlib.ticker import PercentFormatter
+i = np.random.randint(0, 1000)
+# i = 969
+damages = damages_dependent
+fig, axs = plt.subplots(2, 2, figsize=(12, 10), subplot_kw={'projection': ccrs.PlateCarree()})
+mangroves_gridded.area.plot.contourf(ax=axs[0, 0], cmap="Greens", cbar_kwargs={'label': 'Mangrove area [km²]'})
+damages.isel(sample=i).mangrove_damage.plot(ax=axs[0, 1],
+                                                   cmap='YlOrRd',
+                                                   cbar_kwargs={'label': 'Mangrove potential damage',
+                                                                'format': PercentFormatter(1, 0)}
+)
+damages.isel(sample=i).mangrove_damage_percent.plot(ax=axs[1, 0],
+                                                   cmap='YlOrRd',
+                                                   cbar_kwargs={'label': 'Mangrove potential damage',
+                                                                'format': PercentFormatter(1, 0)}
+                                                                )
+
+damages.isel(sample=i).mangrove_damage_area.plot(ax=axs[1, 1],
+                                                        cmap='YlOrRd',
+                                                        cbar_kwargs={'label': 'Mangrove damaged [km²]'}
+                                                        )
+
+axs[0, 0].set_title('Mangrove area')
+axs[0, 1].set_title('Mangrove potential damage')
+axs[1, 0].set_title('Mangrove percentage damage')
+axs[1, 1].set_title('Mangrove damaged')
+
+for ax in axs.ravel():
+    ax.add_feature(feature.COASTLINE)
+    ax.add_feature(feature.BORDERS)
+    ax.add_feature(feature.LAND, facecolor='wheat')
+    ax.add_feature(feature.OCEAN)
+
+fig.suptitle('Sample storm damage to mangroves')
+
+# %% ---- Calculate return periods and EADs ----
+from sklearn.metrics import auc
+from hazGAN import occurrence_rate
+
+
+def auc_ufunc(x, y):
+    x = sorted(x)
+    y = sorted(y)
+    return auc(x, y)
+
+
+def calculate_eads(var, damages: xr.Dataset, yearly_rate: int) -> xr.Dataset:
+    damages = damages.copy()
+    exceedence_prob = 1 - (damages[var].rank(dim='sample') / (1 + damages[var].sizes['sample']))
+
+    annual_exceedence_prob = yearly_rate * exceedence_prob
+    return_period = 1 / annual_exceedence_prob
+    damages['annual_exceedence_prob'] = annual_exceedence_prob
+    damages['return_period'] = return_period
+
+    damages['expected_annual_damages'] = xr.apply_ufunc(
+        auc_ufunc,
+        damages['annual_exceedence_prob'],
+        damages[var],
+        input_core_dims=[['sample'], ['sample']],
+        vectorize=True
+        )
+    
+    return damages
+
+damages_dependent = calculate_eads('mangrove_damage_area', damages_dependent, occurrence_rate)
+damages_independent = calculate_eads('mangrove_damage_area', damages_independent, occurrence_rate)
+damages_hazGAN = calculate_eads('mangrove_damage_area', damages_hazGAN, occurrence_rate)
+damages_train = calculate_eads('mangrove_damage_area', damages_train, occurrence_rate)
+# %% ---- Plot EADs ----
+fig, axs = plt.subplots(1, 4, figsize=(15, 3.5), subplot_kw={'projection': ccrs.PlateCarree()})
+
+damages_dependent.expected_annual_damages.plot(ax=axs[0], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
+damages_independent.expected_annual_damages.plot(ax=axs[1], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
+damages_hazGAN.expected_annual_damages.plot(ax=axs[2], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
+damages_train.expected_annual_damages.plot(ax=axs[3], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
+
+axs[0].set_title('All dependent')
+axs[1].set_title('All independent')
+axs[2].set_title('hazGAN')
+axs[3].set_title('Real data')
+
+# %% ---- Return period vs. damages plot (Lamb 2010) ----
+def calculate_total_return_periods(damages: xr.Dataset,
+                                   yearly_rate: float,
+                                   var='mangrove_damage_area') -> xr.Dataset:
+    totals = damages[var].sum(dim=['lat', 'lon']).to_dataset()
+    N = totals[var].sizes['sample']
+    totals['rank'] = totals[var].rank(dim='sample')
+    totals['exceedence_probability'] = 1 - totals['rank'] / (1 + N)
+    totals['return_period'] = 1 / (yearly_rate * totals['exceedence_probability'])
+    totals = totals.sortby('return_period')
+    return totals
+
+totals_independent = calculate_total_return_periods(damages_independent, occurrence_rate)
+totals_dependent = calculate_total_return_periods(damages_dependent, occurrence_rate)
+totals_hazGAN = calculate_total_return_periods(damages_hazGAN, occurrence_rate)
+totals_data = calculate_total_return_periods(damages_train, occurrence_rate)
 
 # %%
-mangrove_damages = mangrove_damages.sort_values(by='EAD', ascending=True)
-mangrove_damages.plot(
-    'EAD',
-    cmap='YlOrRd',
-    edgecolor='k',
-    linewidth=.1,
-    legend=True,
-    alpha=.8,
-    legend_kwds={'label': 'Expected annual damage [m²]'}
-    )
+fig, ax = plt.subplots()
+eps =.25
 
-# %% ---- Transform to a raster for nicer plotting ----
-# https://pygis.io/docs/e_raster_rasterize.html
-from rasterio import features
-from rasterio.plot import show
-from rasterio.enums import MergeAlg
-import rasterio
-from matplotlib.colors import Normalize, LogNorm
-
-lats = np.linspace(ymax, ymin, src.shape[0])[::-1]
-lons = np.linspace(xmin, xmax, src.shape[1])
-
-geom = [*mangroves.geometry]
-geom_value = ((geom, value) for geom, value in zip(geom, mangrove_damages['EAD']))
-src = rasterio.open(tifpath)
-
-rasterized = features.rasterize(geom_value,
-                                out_shape=src.shape,
-                                fill=0,
-                                out=None,
-                                transform=src.transform,
-                                all_touched=True,
-                                merge_alg=MergeAlg.add,
-                                dtype=np.float32)
-
-ds = xr.Dataset(
-    {
-        'expected_annual_damages': (
-            ['lat', 'lon'],
-            rasterized,
-            {
-                'long_name': 'Expected Annual Damages',
-                'units': 'm²',
-                'display_name': 'Expected Annual Damages (m²)'
-            }
-        )
-    },
-    coords={
-        'lat': ('lat', lats, {'long_name': 'Latitude', 'units': 'degrees_north'}),
-        'lon': ('lon', lons, {'long_name': 'Longitude', 'units': 'degrees_east'})
-    },
-    attrs={
-        'crs': src.crs,
-        'transform': src.transform,
-        'area_units': 'm²'
-    }
+mask = totals_hazGAN.return_period > eps
+ax.plot(
+    totals_hazGAN.where(mask).return_period,
+    totals_hazGAN.where(mask).mangrove_damage_area,
+    color='k',
+    linewidth=1.5,
+    label='Modelled dependence'
 )
 
-ds.expected_annual_damages.plot(cmap='YlOrRd', norm=LogNorm(), vmin=1e5)
-# %% ----- Total damage [m²] vs RP plots -----
-# potentiall very slow
-aggregated = xa.aggregate(damages['mangrove_damage'], weightmap)
-total_damages = aggregated.to_geodataframe()
-
-total_damages = total_damages[['area', 'mangrove_damage0']]
-total_damages.columns = ['area', 'percent_damage']
-total_damages['area_damage'] = total_damages['area'] * total_damages['percent_damage']
-total_damages['area_damage'] = total_damages['area_damage'].apply(lambda x: [(i, x) for i, x in enumerate(x)])
-total_damages = total_damages[['area_damage']].explode('area_damage')
-
-total_damages['index'] = total_damages['area_damage'].apply(lambda x: x[0])
-total_damages['area_damage'] = total_damages['area_damage'].apply(lambda x: x[1])
-total_damages = total_damages.groupby('index').sum()
-# %%
-N = len(total_damages)
-total_damages['rank'] = total_damages['area_damage'].rank(ascending=False)
-total_damages['exceedence_probability'] = total_damages['rank'] / (1 + N)
-total_damages['return_period'] = 1 / (yearly_rate * total_damages['exceedence_probability'])
-# %%
-total_damages = total_damages.sort_values(by='return_period', ascending=True)
-max_damages = total_damages['area_damage'].max()
-min_damages = total_damages['area_damage'].min()
-total_damages['rescaled'] = (total_damages['area_damage'] - min_damages) / (max_damages - min_damages)
-fig, ax = plt.subplots()
-
-index = total_damages['return_period'] >= 1
-
+mask = totals_dependent.return_period > eps
 ax.plot(
-    total_damages.loc[index, 'return_period'],
-    total_damages.loc[index, 'rescaled'],
+    totals_dependent.where(mask).return_period,
+    totals_dependent.where(mask).mangrove_damage_area,
+    color='blue',
+    linewidth=1.5,
+    linestyle='dotted',
+    label='Complete dependence'
+)
+
+mask = totals_independent.return_period > eps
+ax.plot(
+    totals_independent.where(mask).return_period,
+    totals_independent.where(mask).mangrove_damage_area,
+    color='r',
+    linestyle='dashed',
+    linewidth=1.5,
+    label='Independence'
+)
+
+mask = totals_data.return_period > eps
+ax.scatter(
+    totals_data.where(mask).return_period,
+    totals_data.where(mask).mangrove_damage_area,
     color='k',
-    linewidth=.5,
-    label='Modelled dependence')
+    s=1.5,
+    label='Real data'
+)
+
 ax.set_xlabel('Return period (years)')
-ax.set_ylabel('Total damage (rescaled)')
+ax.set_ylabel('Total damage to mangroves (km²)')
 ax.legend()
 ax.set_xscale('log')
-ax.set_xticks([2, 5, 25, 100])
+ax.set_xticks([2, 5, 25, 100, 200, 500])
 ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
 ax.set_title('Figure 7 Lamb (2010)')
+# %%
+!say done
 # %%
