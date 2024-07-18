@@ -25,7 +25,7 @@ datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/res_{res[0]}x{r
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 config = open_config("clean-sweep-3", "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
 data = xr.open_dataset(os.path.join(datadir, "data.nc"))
-samples_ds = xr.open_dataset(os.path.join(samplesdir, f"{RUNNAME}_samples.nc"))
+samples_ds = xr.open_dataset(os.path.join(samplesdir, f"{RUNNAME}.nc"))
 occurence_rate = 18.033 # from R 
 ntrain = config['train_size']
 train_ds = data.isel(time=slice(0, ntrain))

@@ -16,7 +16,9 @@ import matplotlib.pyplot as plt
 channel = 0
 channels = ['u10', 'mslp']
 
+runname = 'clean-sweep-3'
 datadir = '/Users/alison/Documents/DPhil/paper1.nosync/training/res_18x22'
+samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 resdir = '/Users/alison/Documents/DPhil/paper1.nosync/results/brown_resnick'
 # %% -----Load data-----
 # load train/test data
@@ -27,7 +29,7 @@ data_train = data.isel(time=slice(0, ntrain))
 data_test = data.isel(time=slice(ntrain, None))
 
 # load hazGAN samples
-samples_gan = xr.open_dataset(os.path.join(datadir, "hazGAN_samples.nc"))
+samples_gan = xr.open_dataset(os.path.join(samplesdir, f"{runname}.nc"))
 samples_gan = samples_gan.rename({'sample': 'time'}).stack(grid=('lat', 'lon'))
 
 # load Brown-Resnick samples
@@ -63,7 +65,7 @@ samples_X = samples_X.set_index('grid')
 def format_str(s):
     return s.replace('_', ' ').title()
 
-pair = middle_EC_pair # ['high' | 'middle' | 'low']
+pair = high_EC_pair # ['high' | 'middle' | 'low']
 
 xlim = (-.1, 1.1)
 ylim = (-.1, 1.1)

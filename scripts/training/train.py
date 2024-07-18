@@ -36,12 +36,12 @@ global rundir
 global runname
 global force_cpu
 
-plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
-
 # some static variables
 data_source = "era5"
 res = (18, 22)
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
+plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
+
 
 def log_image_to_wandb(fig, name: str, dir: str):
     impath = os.path.join(dir, f"{name}.png")
