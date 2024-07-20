@@ -14,6 +14,7 @@ from joblib import load
 import xarray as xr
 import matplotlib
 import matplotlib.pyplot as plt
+import warnings
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Garamond'] + plt.rcParams['font.serif']
 plt.style.use('bmh')
@@ -22,6 +23,8 @@ month = 7
 run = 'clean-sweep-3_1.25xtemp' #'clean-sweep-3'
 yearly_rate = 18 # from R
 wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')
+
+warnings.warn("Need to add mangroves_with_slope.geojson and change agg func")
 
 # %% ---- Load model and samples ----
 modelpath = os.path.join(wd, 'results', 'mangroves', 'model.pkl')
