@@ -1,9 +1,12 @@
 """
-Augment Yu's data
-    - Add Athanisou's slope data
-    - Add ERA5 pressure and wind at landfall time at each patch (no more Holland)
-To do:
-    - Extract lifetime maximum wind instead of just the wind at the time of landfall
+Script to request ERA5 data using the Copernicus Climate Data Store API.
+
+Looks through Yu's training data and replaces wind speed and pressure at landfall with
+the maximum wind speed and minimum pressure over the lifetime of the storm at each pixel.
+
+Also adds Athanisou's slope data to the dataset.
+
+NOTE: this is being replaced with a script to process data from the SoGE linux cluster instead.
 """
 #%%
 import os

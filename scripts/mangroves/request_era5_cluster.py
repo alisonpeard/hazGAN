@@ -30,13 +30,25 @@ ibtracs = ibtracs[['NAME', 'ISO_TIME']].rename(columns={'ISO_TIME': 'times'})
 gdf['stormName'] = gdf['stormName'].str.upper() 
 gdf = pd.merge(gdf, ibtracs, left_on='stormName', right_on='NAME', how='inner')
 gdf = gdf.groupby(['center_centerLat', 'center_centerLon', 'stormName']).agg({'NAME': 'first', 'times': 'first'}).reset_index()
-
+gdf = gdf[['stormName', 'center_centerLat', 'center_centerLon', 'times']]
+gdf.columns = ['storm', 'lat', 'lon', 'times']
 # %% TODO: Create and ERA5 API request for pressure and wind
-import cdsapi
-c = cdsapi.Client()
+# home = os.path.expandvars("$HOME")
+# datapath = f'/soge-home/data/analysis/era5/0.28125x0.28125/hourly/' # cluster
+import glob
+import xarray as xr
+datapath = "/Users/alison/Documents/DPhil/data/era5/bay_of_bengal__monthly.nosync/original" # will need to modify later
+files = glob.glob(f"{datapath}/*.nc")
+data = xr.open_mfdataset(files, chunks={"time": "500MB"}, engine="netcdf4") # lazy load data
 
-home = os.path.expandvars("$HOME")
-datapath = f'/soge-home/data/analysis/era5/0.28125x0.28125/hourly'
+# %%
+i, row = next(iter(gdf.iterrows()))
+# %%
+times = row.times[0]
+storm_reanalysis = data.sel(longitude=row.lon, latitude=row.lat, method='nearest')
+
+# extract max wind, min pressure, total rainfall
+# %%
 vars = ['10m_u_component_of_wind', '10m_v_component_of_wind', 'mean_sea_level_pressure', 'total_precipitation']
 
 def get_era5_data(i, year, month, day, hour, lat, lon, eps=0.1):

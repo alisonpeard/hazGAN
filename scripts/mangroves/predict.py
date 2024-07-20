@@ -19,7 +19,7 @@ plt.rcParams['font.serif'] = ['Garamond'] + plt.rcParams['font.serif']
 plt.style.use('bmh')
 
 month = 7
-run = 'clean-sweep-3'
+run = 'clean-sweep-3_1.25xtemp' #'clean-sweep-3'
 yearly_rate = 18 # from R
 wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')
 
@@ -143,7 +143,7 @@ i = np.random.randint(0, 1000)
 # i = 969
 damages = damages_dependent
 fig, axs = plt.subplots(2, 2, figsize=(12, 10), subplot_kw={'projection': ccrs.PlateCarree()})
-mangroves_gridded.area.plot.contourf(ax=axs[0, 0], cmap="Greens", cbar_kwargs={'label': 'Mangrove area [km²]'})
+mangroves_gridded.area.plot(ax=axs[0, 0], cmap="Greens", cbar_kwargs={'label': 'Mangrove area [km²]'})
 damages.isel(sample=i).mangrove_damage.plot(ax=axs[0, 1],
                                                    cmap='YlOrRd',
                                                    cbar_kwargs={'label': 'Mangrove potential damage',
@@ -276,7 +276,7 @@ ax.scatter(
     totals_data.where(mask).mangrove_damage_area,
     color='k',
     s=1.5,
-    label='Real data'
+    label='Training data'
 )
 
 ax.set_xlabel('Return period (years)')
@@ -285,7 +285,7 @@ ax.legend()
 ax.set_xscale('log')
 ax.set_xticks([2, 5, 25, 100, 200, 500])
 ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
-ax.set_title('Figure 7 Lamb (2010)')
+ax.set_title('Based on Figure 7 Lamb (2010)')
 # %%
 !say done
 # %%

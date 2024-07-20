@@ -15,7 +15,7 @@ dependencies:
     - rioxarray
     - hdf5
     - netcdf4
-    - pygeos
+    - shapely>=2.0
     - scipy
     - scikit-learn
     - ipykernel
