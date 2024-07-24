@@ -7,7 +7,9 @@ import xarray as xr
 import numpy as np
 import dask
 
+print('Hi!')
 i = int(sys.argv[1]) # load the index from the command line
+# i = 0
 
 xmin, xmax =  80., 95.
 ymin, ymax = 10., 25.
@@ -36,23 +38,28 @@ outdir = os.path.join(HOME,'projects/mistral/alison/hazGAN/bay_of_bengal__daily/
 files = []
 for var_name in var_long.values():
     var_files = glob(os.path.join(indir, var_name, 'nc', '*'))
-    files += var_files[:1]
+    files += var_files
 files_year = [f for f in files if str(year) in f]
+print(f"Found {len(files_year)} files for year {year}")
 
 with dask.config.set(**{'array.slicing.split_large_chunks': True}):
     data = xr.open_mfdataset(files_year, engine='netcdf4', chunks={"time": "500MB", 'longitude': '500MB', 'latitude': '500MB'})
     data = data.sel(longitude=slice(xmin, xmax), latitude=slice(ymax, ymin))
+print("Data loaded")
 
 resampled = {}
 for var, func in variables.items():
     resampled[var] = getattr(data[var].resample(time='1D'), func)()
-
 data_resampled = xr.Dataset(resampled)
+print('Data resampled to daily aggregates (min, max, sum)')
+
 chunk_size = {'time': '500MB'}
 data_resampled = data_resampled.chunk(chunk_size)
 output_file = os.path.join(outdir, f'bangladesh_{year}.nc')
-
 data_resampled.to_netcdf(output_file, compute=False)
+print(f"Data saved to {output_file}")
+
 data.close()
 data_resampled.close()
+print('Bye!')
 # %%
