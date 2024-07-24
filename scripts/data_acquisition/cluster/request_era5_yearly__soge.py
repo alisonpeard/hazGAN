@@ -14,7 +14,7 @@ i = int(sys.argv[1]) # load the index from the command line
 xmin, xmax =  80., 95.
 ymin, ymax = 10., 25.
 
-years = np.arange(1940, 2023)
+years = np.arange(1940, 1950) # (1940, 2023)
 year = years[i]
 
 variables = {
@@ -32,12 +32,12 @@ var_long = {
 
 # HOME = '/Volumes'       # if connecting from local (dev only)
 HOME = '/soge-home/'  # if connecting from cluster
-indir = os.path.join(HOME, 'data/analysis/era5/0.28125x0.28125/hourly/')
-outdir = os.path.join(HOME,'projects/mistral/alison/hazGAN/bay_of_bengal__daily/original')
+source_dir = os.path.join(HOME, 'data/analysis/era5/0.28125x0.28125/hourly/')
+target_dir = os.path.join(HOME,'projects/mistral/alison/hazGAN/bay_of_bengal__daily/original')
 # %% 
 files = []
 for var_name in var_long.values():
-    var_files = glob(os.path.join(indir, var_name, 'nc', '*'))
+    var_files = glob(os.path.join(source_dir, var_name, 'nc', '*'))
     files += var_files
 files_year = [f for f in files if str(year) in f]
 print(f"Found {len(files_year)} files for year {year}")
@@ -55,8 +55,8 @@ print('Data resampled to daily aggregates (min, max, sum)')
 
 chunk_size = {'time': '500MB'}
 data_resampled = data_resampled.chunk(chunk_size)
-output_file = os.path.join(outdir, f'bangladesh_{year}.nc')
-data_resampled.to_netcdf(output_file, compute=False)
+output_file = os.path.join(target_dir, f'bangladesh_{year}.nc')
+data_resampled.to_netcdf(output_file)
 print(f"Data saved to {output_file}")
 
 data.close()
