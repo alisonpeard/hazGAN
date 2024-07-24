@@ -12,10 +12,10 @@ library(extRemes)
 library(CFtime)
 library(tidync)
 
-wd <- "/Users/alison/Documents/DPhil/multivariate"
-res <- c(28, 28)
+wd <- "/soge-home/projects/mistral/alison/hazGAN/training"
+res <- c(18, 22)
 filename <- 'data_1950_2022.nc'
-indir <- paste0(wd, '/', 'era5_data.nosync', '/', paste0('res_', res[1], 'x', res[2]))
+indir <- paste0(wd, paste0('res_', res[1], 'x', res[2]))
 r.func <- max # https://doi.org/10.1111/rssb.12498
 ########### DEFINE FUNCTIONS ###################################################
 standardise.by.month <- function(df, var){
@@ -49,15 +49,17 @@ coords <- src %>% activate('grid') %>% hyper_tibble(force = TRUE)
 era5.df <- left_join(era5.df, coords, by=c('longitude', 'latitude'))
 rm(coords)
 
-era5.df$msl <- -era5.df$msl # negate msl so maximising both vars
-era5.df = era5.df[,c('grid', 'time', 'u10', 'msl')]
+era5.df$msl <- -era5.df$msl # negate msl so maximising all vars
+era5.df = era5.df[,c('grid', 'time', 'u10', 'msl', 'tp')]
 
 era5.df$time <- as.Date(CFtimestamp(CFtime("days since 1950-01-01", "gregorian", era5.df$time)))
 medians <- monthly.medians(era5.df, 'u10')
 medians$mslp <- monthly.medians(era5.df, 'msl')$msl
+medians$tp <- monthly.medians(era5.df, 'tp')$tp
 era5.df$u10 <- standardise.by.month(era5.df, 'u10')
 era5.df$msl <- standardise.by.month(era5.df, 'msl')
-########### DECLUSTER EVENTS ###################################################
+era5.df$tp <- standardise.by.month(era5.df, 'tp')
+########### IDENTIFY STORMS BY WIND SPEEDS ###################################################
 df <- aggregate(. ~ time, era5.df[,c('time', 'u10')], r.func) # overall max wind each day
 
 # search for threshold that gives most data
@@ -132,11 +134,14 @@ era5.df.all = era5.df.all[,c('grid', 'time', 'u10', 'msl')]
 era5.df.all$time <- as.Date(era5.df.all$time)
 era5.df.all$u10 <- standardise.by.month(era5.df.all, 'u10')
 era5.df.all$msl <- standardise.by.month(era5.df.all, 'msl')
+era5.df.all$tp <- standardise.by.month(era5.df.all, 'tp')
 grid.cells <- unique(era5.df.all$grid)
 ngrid <- length(grid.cells)
 
 # fit GPD models to excesses
 q <- 0.8
+
+# WIND
 update_progress <- progress_bar(ngrid, "Fitting GPD to wind excesses:", "Complete")
 fields <- c("storm", "u10", "time", "storm.rp", "grid", "thresh", "scale", "shape", "p", "ecdf")
 wind.transformed.df <- data.frame(matrix(nrow=0, ncol=length(fields)))
@@ -192,6 +197,7 @@ for(i in 1:ngrid){
   update_progress(i)
 }
 
+# MSLP
 mslp.transformed.df <- data.frame(matrix(nrow=0, ncol=length(fields)))
 colnames(mslp.transformed.df) <- fields
 update_progress <- progress_bar(ngrid, "Fitting GPD to MSLP excesses:", "Complete")
@@ -245,9 +251,69 @@ for(i in 1:ngrid){
   update_progress(i)
 } 
 
-transformed.df <- wind.transformed.df %>% inner_join(mslp.transformed.df,
-                                                     by = c('grid', 'storm'),
-                                                     suffix = c('.u10', '.mslp'))
+# PRECIPITATION
+tp.transformed.df <- data.frame(matrix(nrow=0, ncol=length(fields)))
+colnames(tp.transformed.df) <- fields
+update_progress <- progress_bar(ngrid, "Fitting GPD to precip excesses:", "Complete")
+for(i in 1:ngrid){
+  GRIDCELL <- grid.cells[i]
+  era5.df <- era5.df.all[era5.df.all$grid == GRIDCELL,]
+  era5.df <- era5.df[era5.df$time %in% times,]
+  era5.df <- left_join(era5.df, cluster.df[,c('time', 'storm', 'storm.rp')], by=c('time'='time'))
+  
+  maxima <- era5.df %>%
+    group_by(storm) %>%
+    slice(which.max(tp)) %>%
+    summarise(tp = max(tp),
+              time = time,
+              storm.rp = storm.rp,
+              grid = grid)
+  thresh.tp <- quantile(maxima$tp, q)
+  
+  # validate
+  excesses <- maxima$tp[maxima$tp >= thresh.tp]
+  Box.test(excesses) # H0: independent
+  hist(excesses)
+  
+  # fit models...
+  new.row <- tryCatch({
+    fit.tp <- gpdAd(maxima$tp[maxima$tp >= thresh.tp],
+                     bootstrap = TRUE, bootnum = 10,
+                     allowParallel = TRUE, numCores=2) # H0: GPD distribution
+    scale <- fit.tp$theta[1]
+    shape <- fit.tp$theta[2]
+    maxima$thresh <- thresh.tp
+    maxima$scale <- scale
+    maxima$shape <- shape
+    maxima$p <- fit.tp$p.value
+    
+    # semiparametric transform
+    maxima$ecdf <- maxima$tp
+    maxima$ecdf[maxima$tp < thresh.tp] <- ecdf(maxima$tp)(maxima$tp[maxima$tp < thresh.tp])
+    f.exceed <- 1 - ecdf(maxima$tp)(thresh.tp)
+    survival.probs <- 1 - pgpd(maxima$tp[maxima$tp >= thresh.tp], thresh.tp, scale, shape)
+    maxima$ecdf[maxima$tp >= thresh.tp] <- 1 - f.exceed * survival.probs
+    maxima
+    
+  }, error=function(e){
+    print(paste0("skipping grid cell ", GRIDCELL, e))
+    missing.columns <- setdiff(names(tp.transformed.df), names(maxima))
+    maxima[missing.columns] <- NA
+    return(maxima)
+  })
+  tp.transformed.df <- rbind(tp.transformed.df, new.row)
+  update_progress(i)
+} 
+
+# CONCATENATE
+transformed.df <- wind.transformed.df %>%
+  inner_join(mslp.transformed.df,
+             by = c('grid', 'storm'),
+             suffix = c('.u10', '.mslp')) %>%
+  inner_join(tp.transformed.df,
+             by = c('grid', 'storm'),
+             suffix = c('', '.tp'))
+
 transformed.df$thresh.q <- q # approx. extremeness measure
 
 ########### SAVE TO CSV FOR PYTHON #############################################
@@ -258,16 +324,15 @@ write_parquet(transformed.df, paste0(indir, '/', 'fitted_data.parquet'))
 print(paste0("Saved as ", indir, '/', 'fitted_data.csv.'))
 print(paste0(length(unique(transformed.df$storm)), " events processed."))
 ########### FIGURES ############################################################
-GRIDCELL <- 15
-grid.df <- transformed.df[transformed.df$grid == GRIDCELL,]
-par(mfrow=c(2, 2))
-acf(grid.df$u10, main="U10 cluster maxima ACF")
-pacf(grid.df$u10, main="U10 cluster maxima PACF")
-acf(grid.df$msl, main="MSLP cluster maxima ACF")
-pacf(grid.df$msl, main="MSLP cluster maxima PACF")
-
-
-
+if(FALSE){
+  GRIDCELL <- 15
+  grid.df <- transformed.df[transformed.df$grid == GRIDCELL,]
+  par(mfrow=c(2, 2))
+  acf(grid.df$u10, main="U10 cluster maxima ACF")
+  pacf(grid.df$u10, main="U10 cluster maxima PACF")
+  acf(grid.df$msl, main="MSLP cluster maxima ACF")
+  pacf(grid.df$msl, main="MSLP cluster maxima PACF")
+}
 #####
 print(occurrence.rate)
 missing.days <- (nyears * 365) - length(unique(era5.df.all$time))
