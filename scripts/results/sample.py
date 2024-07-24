@@ -7,10 +7,11 @@ import tensorflow as tf
 import hazGAN as hg
 from hazGAN import POT
 import wandb
+
 # %%
 wd = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN"
 RUNNAME = "clean-sweep-3"  # "toasty-serenity-21"
-TEMPERATURE = 0.5
+TEMPERATURE = 1.
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 occurrence_rate = 18.033
@@ -51,9 +52,11 @@ def sample_to_xr(data, ds_ref, plot=False):
     if plot:
         ds.isel(sample=0, channel=0).uniform.plot.contourf(levels=20, cmap='viridis')
     return ds
+
 # %%
 samples_hazGAN = hg.unpad(wgan(nsamples=nsamples ,temp=TEMPERATURE), paddings).numpy()
 ds_hazGAN = sample_to_xr(samples_hazGAN, train, plot=True)
+
 # %% sample fully independent uniform data of same size
 samples_independent = np.random.uniform(size=(nsamples, 18, 22, 2))
 samples_dependent = np.random.uniform(size=(nsamples))
@@ -61,35 +64,46 @@ samples_dependent = np.repeat(samples_dependent, 18*22*2, axis=0).reshape(nsampl
 
 # %% plot the sampled uniform values
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
+
+rcParams['font.family'] = 'serif'
+hist_kws = {'bins': 25, 'color': 'lightgrey', 'edgecolor': 'k', 'alpha': 0.5, 'density': True}
+
+fig, axes = plt.subplots(2, 4, figsize=(12, 5), sharey=True, sharex=True, layout='tight')
 channel = 0
-fig, axs = plt.subplots(1, 4, figsize=(15, 4), sharey=True, layout='tight')
-axs[0].hist(samples_hazGAN[..., 0].flatten(), bins=100, color='blue', alpha=0.5, label='hazGAN', density=True)
-axs[1].hist(samples_independent[..., 0].flatten(), bins=100, color='red', alpha=0.5, label='independent', density=True);
-axs[2].hist(samples_dependent[..., 0].flatten(), bins=100, color='green', alpha=0.5, label='dependent', density=True);
-axs[3].hist(train.uniform.values[..., 0].flatten(), bins=100, color='purple', alpha=0.5, label='reference', density=True);
+axs = axes[0, :]
+axs[0].hist(samples_hazGAN[..., 0].flatten(), **hist_kws);
+axs[1].hist(samples_independent[..., 0].flatten(), **hist_kws);
+axs[2].hist(samples_dependent[..., 0].flatten(), **hist_kws);
+axs[3].hist(train.uniform.values[..., 0].flatten(), **hist_kws);
 
-axs[0].set_title('HazGAN samples')
-axs[1].set_title('Independent samples')
-axs[2].set_title('Dependent samples')
-axs[3].set_title('Training samples')
+axs[0].set_title('HazGAN samples for wind')
+axs[1].set_title('Independent samples for wind')
+axs[2].set_title('Dependent samples for wind')
+axs[3].set_title('Training samples for wind')
 
-fig.suptitle('Histogram of uniform samples for wind')
-# %% plot same for a single pixel
-i = np.random.randint(0, 18)
-j = np.random.randint(0, 22)
+channel = 1
+axs = axes[1, :]
+axs[0].hist(samples_hazGAN[..., 1].flatten(), **hist_kws);
+axs[1].hist(samples_independent[..., 1].flatten(), **hist_kws);
+axs[2].hist(samples_dependent[..., 1].flatten(), **hist_kws);
+axs[3].hist(train.uniform.values[..., 1].flatten(), **hist_kws);
 
-fig, axs = plt.subplots(1, 4, figsize=(15, 4), sharey=True, layout='tight')
-axs[0].hist(samples_hazGAN[:, i, j, 0], bins=100, color='blue', alpha=0.5, label='hazGAN', density=True)
-axs[1].hist(samples_independent[:, i, j, 0], bins=100, color='red', alpha=0.5, label='independent', density=True);
-axs[2].hist(samples_dependent[:, i, j, 0], bins=100, color='green', alpha=0.5, label='dependent', density=True);
-axs[3].hist(train.uniform.values[:, i, j, 0], bins=100, color='purple', alpha=0.5, label='reference', density=True);
+axs[0].set_title('HazGAN samples for pressure')
+axs[1].set_title('Independent samples for pressure')
+axs[2].set_title('Dependent samples for pressure')
+axs[3].set_title('Training samples for pressure')
 
-axs[0].set_title('HazGAN samples')
-axs[1].set_title('Independent samples')
-axs[2].set_title('Dependent samples')
-axs[3].set_title('Training samples')
+for ax in axes.flatten():
+    ax.axhline(1, color='r', linestyle='--', label='Target shape')
+    ax.legend(loc='lower center', framealpha=1, edgecolor='k', fancybox=False)
+    ax.set_xticks(np.linspace(0, 1, 3))
+    ax.set_yticks(np.linspace(0, 1, 3))
+    ax.label_outer()
 
-fig.suptitle('Histogram of uniform samples for wind for pixel ({}, {})'.format(i, j))
+# fig.tight_layout()
+fig.suptitle('Uniformity of pixels', fontsize=16)
+
 # %% convert to original scale
 sample_U = ds_hazGAN.uniform.values
 X = train.anomaly.values

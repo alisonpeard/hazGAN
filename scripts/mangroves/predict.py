@@ -9,25 +9,29 @@ Load a pretrained model then plot and display EADs
 """
 # %% ---- Setup ----
 import os
+import pandas as pd
 import numpy as np
 from joblib import load
 import xarray as xr
 import matplotlib
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
 import warnings
+
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Garamond'] + plt.rcParams['font.serif']
 plt.style.use('bmh')
 
 month = 7
-run = 'clean-sweep-3_1.25xtemp' #'clean-sweep-3'
+run = 'clean-sweep-3__forpublish' #'clean-sweep-3'
 yearly_rate = 18 # from R
 wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')
 
 warnings.warn("Need to add mangroves_with_slope.geojson and change agg func")
 
 # %% ---- Load model and samples ----
-modelpath = os.path.join(wd, 'results', 'mangroves', 'model.pkl')
+modelpath = os.path.join(wd, 'results', 'mangroves', 'model__forpublish.pkl')
+scalerpath = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync', 'results', 'mangroves', 'scaler.pkl')
 with open(modelpath, 'rb') as f:
     model = load(f)
 
@@ -45,12 +49,14 @@ data_month = data + month_medians # data['medians']
 data_month = data_month.stack(grid=['lat', 'lon'])
 train_month = data_month.isel(time=slice(0, 1000))
 test_month = data_month.isel(time=slice(1000, None))
+
 # %% ---- Predict (needs Pandas)----
 def predict_damages(model, X: xr.DataArray, var: str) -> xr.DataArray:
     X = X[var].to_dataframe()[var]
     X = X.unstack('channel').reset_index()
     X.columns = ['sample', 'lat', 'lon', 'wind' ,'mslp']
     X = X.set_index(['sample', 'lat', 'lon'])
+    X[['wind', 'mslp']] = X
     X[f'mangrove_damage'] = model.predict(X)
     damages = X[f'mangrove_damage'].to_xarray()
     return damages.to_dataset()
@@ -61,15 +67,18 @@ damages_hazGAN = predict_damages(model, samples_month, 'anomaly')
 damages_train = predict_damages(model, train_month, 'anomaly')
 
 # %% ---- Plot mangrove damage predictions for random storm ----
+heatmap_kwargs = {'cmap': 'YlOrRd', 'cbar_kwargs': {'label': 'Mangrove damage (%area)'}}    
+
 fig, axs = plt.subplots(1, 2, figsize=(15, 5))
 i = np.random.random_integers(0, damages_hazGAN.sizes['sample'])
-damages_hazGAN.isel(sample=i).mangrove_damage.plot(ax=axs[0], cmap="YlOrRd", cbar_kwargs={'label': 'Mangrove damage (%area)'})
+damages_hazGAN.isel(sample=i).mangrove_damage.plot.contourf(ax=axs[0], levels=12, **heatmap_kwargs)
 axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ {i})')
 
 j = np.random.random_integers(0, damages_train.sizes['sample'])
-damages_train.isel(sample=j).mangrove_damage.plot(ax=axs[1], cmap="YlOrRd", cbar_kwargs={'label': 'Mangrove damage (%area)'})
+damages_train.isel(sample=j).mangrove_damage.plot.contourf(ax=axs[1], levels=12, **heatmap_kwargs)
 axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ {j})')
-# %% ---- Load mangrove data ----
+
+# %% ---- Step 2: Load mangrove data ----
 import cartopy.crs as ccrs
 import geopandas as gpd 
 from shapely.geometry import box
@@ -143,11 +152,12 @@ import cartopy.crs as ccrs
 from cartopy import feature
 from matplotlib.ticker import PercentFormatter
 i = np.random.randint(0, 1000)
+
 # i = 969
 damages = damages_dependent
 fig, axs = plt.subplots(2, 2, figsize=(12, 10), subplot_kw={'projection': ccrs.PlateCarree()})
 mangroves_gridded.area.plot(ax=axs[0, 0], cmap="Greens", cbar_kwargs={'label': 'Mangrove area [km²]'})
-damages.isel(sample=i).mangrove_damage.plot(ax=axs[0, 1],
+damages.isel(sample=i).mangrove_damage.plot.contourf(ax=axs[0, 1],
                                                    cmap='YlOrRd',
                                                    cbar_kwargs={'label': 'Mangrove potential damage',
                                                                 'format': PercentFormatter(1, 0)}

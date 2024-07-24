@@ -13,10 +13,12 @@ import xarray as xr
 from hazGAN import POT, scatter_density2
 import matplotlib.pyplot as plt
 
+plt.rcParams['font.family'] = 'serif'
+
 channel = 0
 channels = ['u10', 'mslp']
 
-runname = 'clean-sweep-3'
+runname = 'clean-sweep-3_1.0xtemp'
 datadir = '/Users/alison/Documents/DPhil/paper1.nosync/training/res_18x22'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 resdir = '/Users/alison/Documents/DPhil/paper1.nosync/results/brown_resnick'
@@ -65,7 +67,7 @@ samples_X = samples_X.set_index('grid')
 def format_str(s):
     return s.replace('_', ' ').title()
 
-pair = high_EC_pair # ['high' | 'middle' | 'low']
+pair = low_EC_pair # ['high' | 'middle' | 'low']
 
 xlim = (-.1, 1.1)
 ylim = (-.1, 1.1)

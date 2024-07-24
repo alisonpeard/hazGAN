@@ -8,11 +8,12 @@ import xarray as xr
 import matplotlib.pyplot as plt
 from calendar import month_name as month
 
+plt.rcParams['font.family'] = 'serif'
 # %%
 channels = ["u10", "mslp"]
-res = (28, 28)
-wd = "/Users/alison/Documents/DPhil/multivariate"
-datadir = os.path.join(wd, "era5_data.nosync", f'res_{res[1]}x{res[0]}')
+res = (22, 18)
+wd = "/Users/alison/Documents/DPhil/paper1.nosync"
+datadir = os.path.join(wd, "training", f'res_{res[1]}x{res[0]}')
 
 coords = xr.open_dataset(os.path.join(datadir, 'data_1950_2022.nc'))
 coords = coords['grid'].to_dataframe().reset_index()
@@ -31,30 +32,39 @@ events = events.to_dict()["storm.size"]
 df["size"] = df["storm"].map(events)
 gdf = gpd.GeoDataFrame(df, geometry="geometry").set_crs("EPSG:4326")
 # %%
+import cartopy
+from cartopy import crs as ccrs
+
+var = "mslp"
 p_crit = 0.1
 s0 = gdf["storm"].min()
-fig, axs = plt.subplots(1, 4, figsize=(12, 3))
-var = "u10"
+fig, axs = plt.subplots(1, 4, figsize=(12, 3), sharex=True, sharey=True,
+subplot_kw={'projection': ccrs.PlateCarree()})
 
-p_cmap = plt.get_cmap("viridis")
-p_cmap.set_under("red")
+cmap = "PuBu_r"
+p_cmap = plt.get_cmap(cmap)
+p_cmap.set_under("crimson")
 
 gdf[gdf["storm"] == s0].plot(column=f"p_{var}", marker="s", cmap=p_cmap, vmin=p_crit, ax=axs[0])
-
-gdf[gdf["storm"] == s0].plot(column=f"thresh_{var}", legend=True, marker="s", cmap="viridis", ax=axs[1])
-gdf[gdf["storm"] == s0].plot(column=f"scale_{var}", legend=True, marker="s", cmap="viridis", ax=axs[2])
-gdf[gdf["storm"] == s0].plot(column=f"shape_{var}", legend=True, marker="s", cmap="viridis", ax=axs[3])
+gdf[gdf["storm"] == s0].plot(column=f"thresh_{var}", legend=True, marker="s", cmap=cmap, ax=axs[1])
+gdf[gdf["storm"] == s0].plot(column=f"scale_{var}", legend=True, marker="s", cmap=cmap, ax=axs[2])
+gdf[gdf["storm"] == s0].plot(column=f"shape_{var}", legend=True, marker="s", cmap=cmap, ax=axs[3])
 
 # extend p-values colorbar to show where H0 rejected
 scatter = axs[0].collections[0]
 plt.colorbar(scatter, ax=axs[0], extend="min")
 
-axs[0].set_title("p, H0: GPD(ξ,μ,σ)")
-axs[1].set_title("thresh (μ)")
-axs[2].set_title("scale (σ)")
-axs[3].set_title("shape (ξ)")
-fig.suptitle(f"Fit for ERA5 {var.upper()}, N={gdf['storm'].nunique()}")
+axs[0].set_title("H₀: X~GPD(ξ,μ,σ)")
+axs[1].set_title("μ")
+axs[2].set_title("σ")
+axs[3].set_title("ξ")
 
+for ax in axs.ravel():
+    ax.add_feature(cartopy.feature.COASTLINE, linewidth=0.5)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+fig.suptitle(f"Fit for ERA5 {var.upper()}, n = {gdf['storm'].nunique()}")
 print(gdf[gdf[f"p_{var}"] < p_crit]["grid"].nunique(), "significant p-values")
 # %%
 monthly_medians = pd.read_csv(os.path.join(datadir, "monthly_medians.csv"), index_col="month")

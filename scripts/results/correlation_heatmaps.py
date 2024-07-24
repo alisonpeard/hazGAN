@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from itertools import combinations
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
+plt.rcParams['font.family'] = 'serif'
 
 def open_config(runname, dir):
     configfile = open(os.path.join(dir, runname, "config-defaults.yaml"), "r")
@@ -20,7 +21,7 @@ def open_config(runname, dir):
 
 # %%
 res = (18, 22)
-RUNNAME = "clean-sweep-3"
+RUNNAME = "clean-sweep-3_1.0xtemp"
 datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/res_{res[0]}x{res[1]}'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 config = open_config("clean-sweep-3", "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
@@ -68,7 +69,7 @@ for c0, c1 in combinations(channels, 2):
     
     ax[0].set_title("Training")
     ax[1].set_title("Test")
-    ax[2].set_title("GAN")
+    ax[2].set_title("hazGAN")
     
     for a in ax:
         a.set_xticks([])
@@ -111,7 +112,7 @@ for a in ax:
     
 ax[0].set_title('Train')
 ax[1].set_title('Test')
-ax[2].set_title('GAN');
+ax[2].set_title('hazGAN');
 
 fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
 fig.suptitle(r'$\hat \theta$ across all three channels');

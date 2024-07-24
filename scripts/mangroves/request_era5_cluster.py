@@ -9,9 +9,10 @@ import dask
 
 vars = ['10m_u_component_of_wind', '10m_v_component_of_wind', 'mean_sea_level_pressure', 'total_precipitation']
 # %% new way to organise files
-# HOME = '/Volumes'
-HOME = '/soge-home/'
-indir = os.path.join(HOME,'data/analysis/era5/0.28125x0.28125/hourly/')
+HOME = '/Volumes'
+
+# HOME = '/soge-home/'
+indir = os.path.join(HOME, 'data/analysis/era5/0.28125x0.28125/hourly/')
 outdir = os.path.join(HOME,'projects/mistral/alison/hazGAN/mangrove')
 infile1 = os.path.join(outdir, 'data_with_ibtracs.csv')
 outfile2 = os.path.join(outdir, 'data_with_era5.csv')
@@ -52,23 +53,6 @@ for year in (pbar := tqdm(years)):
         df_storm = df_year[df_year['storm'] == storm].reset_index(drop=True)
         times = df_storm['times'].values[0]
         storm = data.sel(time=times, method='nearest')
-        # for i, row in df_storm.iterrows():
-        #     print(f" ---- Processing patch {i}")
-        #     # get the storm data
-        #     lon = row.lon
-        #     lat = row.lat
-        #     storm_patch = storm.sel(longitude=lon, latitude=lat, method='nearest')
-
-        #     # aggregate along time dimension
-        #     u10 = storm_patch['u10'].max(dim=['time'], keep_attrs=True).values.max()
-        #     v10 = storm_patch['v10'].max(dim=['time'], keep_attrs=True).values.max()
-        #     msl = storm_patch['msl'].min(dim=['time'], keep_attrs=True).values.min()
-        #     precip = storm_patch['tp'].sum(dim=['time'], keep_attrs=True).values.sum()
-
-        #     # save to list
-        #     winds.append(np.sqrt(u10**2 + v10**2))
-        #     pressures.append(msl)
-        #     precips.append(precip)
 
         # Vectorized selection
         lons = df_storm['lon'].values
