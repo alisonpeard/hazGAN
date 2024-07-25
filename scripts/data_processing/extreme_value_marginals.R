@@ -318,8 +318,8 @@ tp.renamed <- tp.transformed.df %>%
   rename_with(~ paste0(., '.tp'), -c(grid, storm, storm.rp, tp))
 
 final.df <- wind.renamed %>%
-  inner_join(mslp.renamed, by = c('grid', 'storm')) %>%
-  inner_join(tp.renamed, by = c('grid', 'storm'))
+  inner_join(mslp.renamed, by = c('grid', 'storm', 'storm.rp')) %>%
+  inner_join(tp.renamed, by = c('grid', 'storm', 'storm.rp'))
 
 final.df$thresh.q <- q # approx. extremeness measure
 
