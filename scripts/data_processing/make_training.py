@@ -33,37 +33,37 @@ gdf = gpd.GeoDataFrame(df, geometry="geometry").set_crs("EPSG:4326")
 import cartopy
 from cartopy import crs as ccrs
 
-var = "u10"
-p_crit = 0.1
-s0 = gdf["storm"].min()
-fig, axs = plt.subplots(1, 4, figsize=(12, 3), sharex=True, sharey=True,
-subplot_kw={'projection': ccrs.PlateCarree()})
+for var in  channels:
+    p_crit = 0.1
+    s0 = gdf["storm"].min()
+    fig, axs = plt.subplots(1, 4, figsize=(12, 3), sharex=True, sharey=True,
+    subplot_kw={'projection': ccrs.PlateCarree()})
 
-cmap = "PuBu_r"
-p_cmap = plt.get_cmap(cmap)
-p_cmap.set_under("crimson")
+    cmap = "PuBu_r"
+    p_cmap = plt.get_cmap(cmap)
+    p_cmap.set_under("crimson")
 
-gdf[gdf["storm"] == s0].plot(column=f"p_{var}", marker="s", cmap=p_cmap, vmin=p_crit, ax=axs[0])
-gdf[gdf["storm"] == s0].plot(column=f"thresh_{var}", legend=True, marker="s", cmap=cmap, ax=axs[1])
-gdf[gdf["storm"] == s0].plot(column=f"scale_{var}", legend=True, marker="s", cmap=cmap, ax=axs[2])
-gdf[gdf["storm"] == s0].plot(column=f"shape_{var}", legend=True, marker="s", cmap=cmap, ax=axs[3])
+    gdf[gdf["storm"] == s0].plot(column=f"p_{var}", marker="s", cmap=p_cmap, vmin=p_crit, ax=axs[0])
+    gdf[gdf["storm"] == s0].plot(column=f"thresh_{var}", legend=True, marker="s", cmap=cmap, ax=axs[1])
+    gdf[gdf["storm"] == s0].plot(column=f"scale_{var}", legend=True, marker="s", cmap=cmap, ax=axs[2])
+    gdf[gdf["storm"] == s0].plot(column=f"shape_{var}", legend=True, marker="s", cmap=cmap, ax=axs[3])
 
-# extend p-values colorbar to show where H0 rejected
-scatter = axs[0].collections[0]
-plt.colorbar(scatter, ax=axs[0], extend="min")
+    # extend p-values colorbar to show where H0 rejected
+    scatter = axs[0].collections[0]
+    plt.colorbar(scatter, ax=axs[0], extend="min")
 
-axs[0].set_title("H₀: X~GPD(ξ,μ,σ)")
-axs[1].set_title("μ")
-axs[2].set_title("σ")
-axs[3].set_title("ξ")
+    axs[0].set_title("H₀: X~GPD(ξ,μ,σ)")
+    axs[1].set_title("μ")
+    axs[2].set_title("σ")
+    axs[3].set_title("ξ")
 
-for ax in axs.ravel():
-    ax.add_feature(cartopy.feature.COASTLINE, linewidth=0.5)
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
+    for ax in axs.ravel():
+        ax.add_feature(cartopy.feature.COASTLINE, linewidth=0.5)
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
 
-fig.suptitle(f"Fit for ERA5 {var.upper()}, n = {gdf['storm'].nunique()}")
-print(gdf[gdf[f"p_{var}"] < p_crit]["grid"].nunique(), "significant p-values")
+    fig.suptitle(f"Fit for ERA5 {var.upper()}, n = {gdf['storm'].nunique()}")
+    print(gdf[gdf[f"p_{var}"] < p_crit]["grid"].nunique(), "significant p-values")
 # %%
 monthly_medians = pd.read_csv(os.path.join(datadir, "monthly_medians.csv"), index_col="month")
 assert monthly_medians.groupby(['month', 'grid']).count().max().max() == 1, "Monthly medians not unique"
@@ -102,16 +102,19 @@ z = gdf[["storm", "storm_rp"]].groupby("storm").mean().values.reshape(T)
 s = gdf[["storm", "size"]].groupby("storm").mean().values.reshape(T)
 
 lifetime_max_wind = np.max((X + M)[..., 0], axis=(1,2))
-lifetime_min_pressure = np.min(-(X + M)[..., 1], axis=(1,2))
+# lifetime_min_pressure = np.min(-(X + M)[..., 1], axis=(1,2))
+lifetime_total_precip = np.sum((X + M)[..., 1], axis=(1,2))
 
 # %% parameters
 threshs = []
 scales = []
 shapes = []
+
 if len(channels) > 1:
     gpd_params = ([f"thresh_{var}" for var in channels] + [f"scale_{var}" for var in channels] + [f"shape_{var}" for var in channels])
 else:
     gpd_params = ["thresh", "scale", "shape"]
+
 gdf_params = (gdf[[*gpd_params, "longitude", "latitude"]].groupby(["latitude", "longitude"]).mean().reset_index())
 thresh = np.array(gdf_params[[f"thresh_{var}" for var in channels]].values.reshape([ny, nx, nchannels]))
 scale = np.array(gdf_params[[f"scale_{var}" for var in channels]].values.reshape([ny, nx, nchannels]))
@@ -186,9 +189,12 @@ ds_outlier = ds.isel(time=ds.storm_rp.argmax())
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))
 wind_footprint = ds_outlier.anomaly.isel(channel=0) + ds_outlier.medians.isel(channel=0)
 pressure_footprint = -(ds_outlier.anomaly.isel(channel=1) + ds_outlier.medians.isel(channel=1))
-wind_footprint.plot.contourf(cmap='Spectral_r', ax=axs[0])
-pressure_footprint.plot.contourf(cmap='PuBu', ax=axs[1])
+wind_footprint.plot(cmap='Spectral_r', ax=axs[0])
+pressure_footprint.plot(cmap='PuBu', ax=axs[1])
 # %%
-plt.hist(ds.isel(channel=1).anomaly.values.ravel());
+fig, axs = plt.subplots(1, 2)
+for i, ax in enumerate(axs):
+    hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k'}
+    ax.hist(ds.isel(channel=i).anomaly.values.ravel(), **hist_kws);
 ds.close()
 #%%
