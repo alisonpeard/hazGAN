@@ -141,7 +141,7 @@ def main(config):
 # %% run this cell to train the model
 if __name__ == "__main__":
     if sys.__stdin__.isatty(): 
-    # parse arguments (for linux)
+    # parse arguments (if running from command line)
         parser = argparse.ArgumentParser()
         parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
         parser.add_argument('--cluster', '-c', dest="cluster", action='store_true', default=False, help='Running on cluster')

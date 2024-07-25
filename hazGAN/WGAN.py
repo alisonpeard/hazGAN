@@ -11,11 +11,8 @@ from tensorflow import keras
 from tensorflow.keras import optimizers
 from tensorflow.keras import layers
 from inspect import signature
-import tensorflow_probability as tfp
 from .extreme_value_theory import chi_loss, inv_gumbel
 
-
-# tf.random.gumbel = tfp.distributions.Gumbel(0, 1).sample # so can sample as normal
 
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0.):
     """Sample from Gumbel(0, 1)"""

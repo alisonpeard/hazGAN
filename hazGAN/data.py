@@ -11,7 +11,8 @@ def load_datasets(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
     return train, test
 
 
-def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22), numpy=False, gumbel_marginals=False):
+def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
+                  numpy=False, gumbel_marginals=False):
     """Note numpy arrays will appear upside down because of latitude."""
     data = xr.open_dataset(os.path.join(datadir, "data.nc"))
     X = tf.image.resize(data.anomaly, image_shape)

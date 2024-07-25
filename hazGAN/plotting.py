@@ -31,27 +31,31 @@ def discrete_colormap(data, nintervals, min=None, cmap="cividis", under='lightgr
     return cmap, norm
 
 
-def plot_generated_marginals(fake_data, start=0, nchannels=1, runname="", vmin=0, vmax=1):
+def plot_generated_marginals(fake_data, start=0, nchannels=None, runname="", vmin=0, vmax=1):
     print(f"Range: [{fake_data.min():.2f}, {fake_data.max():.2f}]")
 
+    if nchannels is None:
+        nchannels = fake_data.shape[-1]
+
     ncols = 10
-    fig, axs = plt.subplots(nchannels, ncols, layout='tight', figsize=(10, 3))
+    fig, axs = plt.subplots(nchannels, ncols, layout='tight', figsize=(10, 3 * nchannels))
 
     if nchannels == 1:
         axs = axs[np.newaxis, :]
     for i in range(nchannels):
         for j in range(ncols):
-            im = axs[i, j].imshow(fake_data[start + j, ..., i], cmap='Spectral_r', vmin=vmin, vmax=vmax)
+            ax = axs[i, j]
+            im = ax.imshow(fake_data[start + j, ..., i], cmap='Spectral_r', vmin=vmin, vmax=vmax)
         axs[i, 0].set_ylabel(f'channel {i}')
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes('right', size='5%', pad=0.05)
+        fig.colorbar(im, cax=cax, orientation='vertical', label='Quantile')
+        plt.suptitle(f'Generated marginals {runname}')
 
     for ax in axs.ravel():
         ax.set_xticks([])
         ax.set_yticks([])
 
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes('right', size='5%', pad=0.05)
-    fig.colorbar(im, cax=cax, orientation='vertical', label='Quantile')
-    plt.suptitle(f'Generated marginals {runname}')
     return fig
 
 

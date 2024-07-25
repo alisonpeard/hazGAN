@@ -2,6 +2,7 @@ from .utils import *
 from .plotting import *
 from .data import *
 from .defaults import *
+from .callbacks import *
 from .extreme_value_theory import *
 from .tensorflow import *
 from .WGAN import *
