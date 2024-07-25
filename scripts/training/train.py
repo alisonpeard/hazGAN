@@ -143,20 +143,20 @@ def main(config):
 
 # %% run this cell to train the model
 if __name__ == "__main__":
-    if sys.__stdin__.isatty(): 
+    # if sys.__stdin__.isatty(): 
     # parse arguments (if running from command line)
-        parser = argparse.ArgumentParser()
-        parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
-        parser.add_argument('--cluster', '-c', dest="cluster", action='store_true', default=False, help='Running on cluster')
-        parser.add_argument('--force-cpu', '-f', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
-        args = parser.parse_args()
-        dry_run = args.dry_run
-        cluster = args.cluster
-        force_cpu = args.force_cpu
-    else:
-        dry_run = True
-        cluster = False
-        force_cpu = False
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
+    parser.add_argument('--cluster', '-c', dest="cluster", action='store_true', default=False, help='Running on cluster')
+    parser.add_argument('--force-cpu', '-f', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
+    args = parser.parse_args()
+    dry_run = args.dry_run
+    cluster = args.cluster
+    force_cpu = args.force_cpu
+    # else:
+    #     dry_run = True
+    #     cluster = False
+    #     force_cpu = False
 
     # setup device
     device = config_tf_devices()
@@ -178,7 +178,7 @@ if __name__ == "__main__":
         wandb.config.update({'nepochs': 1, 'batch_size': 1, 'train_size': 1}, allow_val_change=True)
         runname = 'dry-run'
     else:
-        wandb.init()  # saves snapshot of code as artifact
+        wandb.init(allow_val_change=True)  # saves snapshot of code as artifact
         runname = wandb.run.name
     rundir = os.path.join(wd, "_wandb-runs", runname)
     os.makedirs(rundir, exist_ok=True)
