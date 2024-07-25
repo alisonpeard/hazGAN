@@ -16,7 +16,10 @@ or
 
 -----Linux cluster examples-----
 >>> srun -p Short --pty python train.py --dry-run --cluster
->>> srun -p GPU --gres=gpu:tesla:1 --pty train.py --dry-run --cluster
+>>> srun -p GPU --gres=gpu:tesla:1 --pty python train.py --dry-run --cluster
+
+>>> wandb sweep sweep.yaml
+>>> wandb agent alison/hazGAN/2x1z5z5z
 """
 # %%
 import os
@@ -140,20 +143,20 @@ def main(config):
 
 # %% run this cell to train the model
 if __name__ == "__main__":
-    if sys.__stdin__.isatty(): 
+    # if sys.__stdin__.isatty(): 
     # parse arguments (if running from command line)
-        parser = argparse.ArgumentParser()
-        parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
-        parser.add_argument('--cluster', '-c', dest="cluster", action='store_true', default=False, help='Running on cluster')
-        parser.add_argument('--force-cpu', '-f', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
-        args = parser.parse_args()
-        dry_run = args.dry_run
-        cluster = args.cluster
-        force_cpu = args.force_cpu
-    else:
-        dry_run = True
-        cluster = False
-        force_cpu = False
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
+    parser.add_argument('--cluster', '-c', dest="cluster", action='store_true', default=False, help='Running on cluster')
+    parser.add_argument('--force-cpu', '-f', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
+    args = parser.parse_args()
+    dry_run = args.dry_run
+    cluster = args.cluster
+    force_cpu = args.force_cpu
+    # else:
+    #     dry_run = True
+    #     cluster = False
+    #     force_cpu = False
 
     # setup device
     device = config_tf_devices()
@@ -164,7 +167,7 @@ if __name__ == "__main__":
     else:
         wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')  # hazGAN directory
 
-    datadir = os.path.join(wd, 'training', f"res_{res[0]}x{res[1]}")  # keep data folder in parent directory
+    datadir = os.path.join(wd, 'training', f"{res[0]}x{res[1]}")  # keep data folder in parent directory
     print(f"Loading data from {datadir}")
     imdir = os.path.join(wd, "figures", "temp")
 
@@ -175,7 +178,7 @@ if __name__ == "__main__":
         wandb.config.update({'nepochs': 1, 'batch_size': 1, 'train_size': 1}, allow_val_change=True)
         runname = 'dry-run'
     else:
-        wandb.init()  # saves snapshot of code as artifact
+        wandb.init(allow_val_change=True)  # saves snapshot of code as artifact
         runname = wandb.run.name
     rundir = os.path.join(wd, "_wandb-runs", runname)
     os.makedirs(rundir, exist_ok=True)
