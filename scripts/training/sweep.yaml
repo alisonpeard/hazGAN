@@ -1,7 +1,7 @@
 project: hazGAN
 program: train.py
-method: bayes
-name: cluster-gpu-02-July-134800
+method: random
+name: precipitation
 metric:
   goal: minimize
   name: chi_rmse

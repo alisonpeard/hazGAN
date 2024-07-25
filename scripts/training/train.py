@@ -16,7 +16,10 @@ or
 
 -----Linux cluster examples-----
 >>> srun -p Short --pty python train.py --dry-run --cluster
->>> srun -p GPU --gres=gpu:tesla:1 --pty train.py --dry-run --cluster
+>>> srun -p GPU --gres=gpu:tesla:1 --pty python train.py --dry-run --cluster
+
+>>> wandb sweep sweep.yaml
+>>> wandb agent alison/hazGAN/2x1z5z5z
 """
 # %%
 import os
@@ -164,7 +167,7 @@ if __name__ == "__main__":
     else:
         wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')  # hazGAN directory
 
-    datadir = os.path.join(wd, 'training', f"res_{res[0]}x{res[1]}")  # keep data folder in parent directory
+    datadir = os.path.join(wd, 'training', f"{res[0]}x{res[1]}")  # keep data folder in parent directory
     print(f"Loading data from {datadir}")
     imdir = os.path.join(wd, "figures", "temp")
 

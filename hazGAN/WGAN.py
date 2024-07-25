@@ -143,6 +143,7 @@ class WGAN(keras.Model):
         self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
         self.value_function_tracker = keras.metrics.Mean(name="value_function")
+        self.seed = config.seed
         
     
     def compile(self, d_optimizer, g_optimizer, *args, **kwargs):
