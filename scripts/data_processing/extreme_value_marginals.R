@@ -12,10 +12,12 @@ library(extRemes)
 library(CFtime)
 library(tidync)
 
-wd <- "/soge-home/projects/mistral/alison/hazGAN/training"
+# "Yearly rate: 17.7971014492754" 25-07-2024
+#wd <- "/soge-home/projects/mistral/alison/hazGAN/training"
+wd <- "/Users/alison/Documents/DPhil/paper1.nosync/training/"
 res <- c(18, 22)
 filename <- 'data_1950_2022.nc'
-indir <- paste0(wd, paste0('res_', res[1], 'x', res[2]))
+indir <- paste0(wd, paste0('res', res[1], 'x', res[2]))
 r.func <- max # https://doi.org/10.1111/rssb.12498
 ########### DEFINE FUNCTIONS ###################################################
 standardise.by.month <- function(df, var){
@@ -130,7 +132,7 @@ era5.df.all$time <- as.Date(CFtimestamp(CFtime("days since 1950-01-01", "gregori
 rm(coords)
 
 era5.df.all$msl <- -era5.df.all$msl # negate msl again...
-era5.df.all = era5.df.all[,c('grid', 'time', 'u10', 'msl')]
+era5.df.all = era5.df.all[,c('grid', 'time', 'u10', 'msl', 'tp')]
 era5.df.all$time <- as.Date(era5.df.all$time)
 era5.df.all$u10 <- standardise.by.month(era5.df.all, 'u10')
 era5.df.all$msl <- standardise.by.month(era5.df.all, 'msl')
@@ -305,26 +307,31 @@ for(i in 1:ngrid){
   update_progress(i)
 } 
 
-# CONCATENATE
-transformed.df <- wind.transformed.df %>%
-  inner_join(mslp.transformed.df,
-             by = c('grid', 'storm'),
-             suffix = c('.u10', '.mslp')) %>%
-  inner_join(tp.transformed.df,
-             by = c('grid', 'storm'),
-             suffix = c('', '.tp'))
+# CONCATENATE 
+wind.renamed <- wind.transformed.df %>%
+  rename_with(~ paste0(., '.u10'), -c(grid, storm, storm.rp, u10))
 
-transformed.df$thresh.q <- q # approx. extremeness measure
+mslp.renamed <- mslp.transformed.df %>%
+  rename_with(~ paste0(., '.mslp'), -c(grid, storm, storm.rp, msl))
+
+tp.renamed <- tp.transformed.df %>%
+  rename_with(~ paste0(., '.tp'), -c(grid, storm, storm.rp, tp))
+
+final.df <- wind.renamed %>%
+  inner_join(mslp.renamed, by = c('grid', 'storm')) %>%
+  inner_join(tp.renamed, by = c('grid', 'storm'))
+
+final.df$thresh.q <- q # approx. extremeness measure
 
 ########### SAVE TO CSV FOR PYTHON #############################################
 write.csv(medians, paste0(indir, '/', 'monthly_medians.csv'), row.names=FALSE)
 write_parquet(cluster.df, paste0(indir, '/', 'event_data.parquet'))
-write_parquet(transformed.df, paste0(indir, '/', 'fitted_data.parquet'))
+write_parquet(final.df, paste0(indir, '/', 'fitted_data.parquet'))
 
 print(paste0("Saved as ", indir, '/', 'fitted_data.csv.'))
 print(paste0(length(unique(transformed.df$storm)), " events processed."))
 ########### FIGURES ############################################################
-if(FALSE){
+if(TRUE){
   GRIDCELL <- 15
   grid.df <- transformed.df[transformed.df$grid == GRIDCELL,]
   par(mfrow=c(2, 2))

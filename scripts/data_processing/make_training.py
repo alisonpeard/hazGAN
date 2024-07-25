@@ -10,7 +10,7 @@ from calendar import month_name as month
 
 plt.rcParams['font.family'] = 'serif'
 # %%
-channels = ["u10", "mslp"]
+channels = ["u10", "tp"] # 'mslp'
 res = (22, 18)
 wd = "/Users/alison/Documents/DPhil/paper1.nosync"
 datadir = os.path.join(wd, "training", f'res_{res[1]}x{res[0]}')
@@ -23,8 +23,6 @@ df = pd.read_parquet(os.path.join(datadir, f"fitted_data.parquet"))
 df = df.merge(coords, on="grid")
 df.columns = [col.replace(".", "_") for col in df.columns]
 df = df.rename(columns={"msl": "mslp"})
-df["storm_rp"] = df["storm_rp_u10"]
-df = df.drop(columns=["storm_rp_u10", "storm_rp_mslp"])
 df['day_of_storm'] = df.groupby('storm')['time_u10'].rank('dense')
 # %% add event sizes
 events = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))[["storm", "storm.size"]].groupby("storm").mean()
@@ -35,7 +33,7 @@ gdf = gpd.GeoDataFrame(df, geometry="geometry").set_crs("EPSG:4326")
 import cartopy
 from cartopy import crs as ccrs
 
-var = "mslp"
+var = "u10"
 p_crit = 0.1
 s0 = gdf["storm"].min()
 fig, axs = plt.subplots(1, 4, figsize=(12, 3), sharex=True, sharey=True,
@@ -135,7 +133,7 @@ ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], U),
                         'channel': channels,
                         'param': ['shape', 'loc', 'scale']
                  },
-                 attrs={'CRS': 'EPSG:4326', 'u10': '10m wind speed', 'mslp': 'negative of mean sea level pressure'})
+                 attrs={'CRS': 'EPSG:4326', 'u10': '10m wind speed', 'tp': 'total precipitation'})
 
 ds.to_netcdf(os.path.join(datadir, "data.nc"))
 # %% day of storm
@@ -163,21 +161,21 @@ ax.set_title(f"Day of storm {t}")
 t = np.random.uniform(0, T, 1).astype(int)[0]
 ds_t = ds.isel(time=t)
 fig, axs = plt.subplots(1, 2, figsize=(10, 3))
-ds_t.isel(channel=0).anomaly.plot.contourf(cmap='viridis', ax=axs[0], levels=20)
-(-ds_t).isel(channel=1).anomaly.plot.contourf(cmap='viridis', ax=axs[1], levels=15)
+ds_t.isel(channel=0).anomaly.plot.contourf(cmap='Spectral_r', ax=axs[0], levels=20)
+(-ds_t).isel(channel=1).anomaly.plot.contourf(cmap='PuBu', ax=axs[1], levels=15)
 fig.suptitle("Anomaly")
 
 fig, axs = plt.subplots(1, 2, figsize=(10, 3))
-ds_t.isel(channel=0).medians.plot.contourf(cmap='viridis', ax=axs[0], levels=20)
-(-ds_t).isel(channel=1).medians.plot.contourf(cmap='viridis', ax=axs[1], levels=15)
+ds_t.isel(channel=0).medians.plot.contourf(cmap='Spectral_r', ax=axs[0], levels=20)
+(-ds_t).isel(channel=1).medians.plot.contourf(cmap='PuBu', ax=axs[1], levels=15)
 fig.suptitle(f"Median")
 
 fig, axs = plt.subplots(1, 2, figsize=(10, 3))
-(ds_t.isel(channel=0).anomaly + ds_t.isel(channel=0).medians).plot.contourf(cmap='viridis', ax=axs[0], levels=20)
-(-ds_t.isel(channel=1).anomaly - ds_t.isel(channel=1).medians).plot.contourf(cmap='viridis', ax=axs[1], levels=15)
+(ds_t.isel(channel=0).anomaly + ds_t.isel(channel=0).medians).plot.contourf(cmap='Spectral_r', ax=axs[0], levels=20)
+(-ds_t.isel(channel=1).anomaly - ds_t.isel(channel=1).medians).plot.contourf(cmap='PuBu', ax=axs[1], levels=15)
 fig.suptitle('Anomaly + Median')
-# %%
-ds.close()
+# ds.close()
+
 # %% check the highest wind speed is also the highest return period
 highest_wind = ds.anomaly.isel(channel=0).max(dim=['lat', 'lon']).values.max()
 highest_rp_wind = ds.anomaly.isel(channel=0, time=ds.storm_rp.argmax()).max(dim=['lat', 'lon']).values
@@ -188,9 +186,9 @@ ds_outlier = ds.isel(time=ds.storm_rp.argmax())
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))
 wind_footprint = ds_outlier.anomaly.isel(channel=0) + ds_outlier.medians.isel(channel=0)
 pressure_footprint = -(ds_outlier.anomaly.isel(channel=1) + ds_outlier.medians.isel(channel=1))
-wind_footprint.plot(cmap='viridis', ax=axs[0])
-pressure_footprint.plot(cmap='viridis', ax=axs[1])
+wind_footprint.plot.contourf(cmap='Spectral_r', ax=axs[0])
+pressure_footprint.plot.contourf(cmap='PuBu', ax=axs[1])
 # %%
-plt.hist(ds.isel(channel=0).anomaly.values.ravel());
+plt.hist(ds.isel(channel=1).anomaly.values.ravel());
 ds.close()
 #%%
