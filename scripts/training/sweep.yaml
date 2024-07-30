@@ -4,7 +4,7 @@ method: random
 name: precipitation
 metric:
   goal: minimize
-  name: chi_rmse
+  name: compound_metric
 parameters:
   batch_size:
     values: [32, 64, 128]
