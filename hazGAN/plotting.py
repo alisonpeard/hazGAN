@@ -10,11 +10,6 @@ from .utils import *
 from .defaults import *
 
 
-channel_labels = {0: r'wind speed [ms$^{-1}$]', 1: r'mean sea level pressure [Pa]'}
-longitude = np.linspace(xmin, xmax, 3)
-latitude = np.linspace(ymin, ymax, 4)
-
-
 def add_colorbar(fig, im, ax, pad=0.05):
     divider = make_axes_locatable(ax)
     cax = divider.append_axes('right', size='5%', pad=pad)

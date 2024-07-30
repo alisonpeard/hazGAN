@@ -96,6 +96,13 @@ def main(config):
         gumbel_margins=config.gumbel
         )
     
+    chi_squared = hg.ChiSquared(
+        batchsize=config.batch_size,
+        frequency=config.chi_frequency
+        )
+    
+    compound = hg.CompoundMetric(frequency=config.chi_frequency)
+
     reduce_on_plateau = tf.keras.callbacks.ReduceLROnPlateau(
         monitor="generator_loss",
         factor=config.lr_factor,
@@ -106,7 +113,7 @@ def main(config):
     
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         os.path.join(rundir, "checkpoint.weights.h5"),
-        monitor="chi_score_test",
+        monitor="compound_metric",
         save_best_only=True,
         save_weights_only=True,
         mode="min",
@@ -121,6 +128,8 @@ def main(config):
             epochs=config.nepochs,
             callbacks=[
                 chi_score,
+                chi_squared,
+                compound,
                 WandbMetricsLogger(),
                 # visualiser,
                 checkpoint
@@ -143,7 +152,6 @@ def main(config):
 
 # %% run this cell to train the model
 if __name__ == "__main__":
-    # if sys.__stdin__.isatty(): 
     # parse arguments (if running from command line)
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
@@ -153,10 +161,10 @@ if __name__ == "__main__":
     dry_run = args.dry_run
     cluster = args.cluster
     force_cpu = args.force_cpu
-    # else:
-    #     dry_run = True
-    #     cluster = False
-    #     force_cpu = False
+
+    # dry_run = True
+    # cluster = False
+    # force_cpu = False
 
     # setup device
     device = config_tf_devices()
@@ -175,7 +183,13 @@ if __name__ == "__main__":
     if dry_run: # doesn't work with sweeps
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
-        wandb.config.update({'nepochs': 1, 'batch_size': 1, 'train_size': 1}, allow_val_change=True)
+        wandb.config.update({
+            'nepochs': 2,
+            'batch_size': 1,
+            'train_size': 1,
+            'chi_frequency': 1
+            },
+            allow_val_change=True)
         runname = 'dry-run'
     else:
         wandb.init(allow_val_change=True)  # saves snapshot of code as artifact

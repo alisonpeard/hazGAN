@@ -21,8 +21,8 @@ def open_config(runname, dir):
 
 # %%
 res = (18, 22)
-RUNNAME = "clean-sweep-3_1.0xtemp"
-datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/res_{res[0]}x{res[1]}'
+RUNNAME = "denim-sweep-78"
+datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/{res[0]}x{res[1]}'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 config = open_config("clean-sweep-3", "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
 data = xr.open_dataset(os.path.join(datadir, "data.nc"))

@@ -1,7 +1,34 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow_probability import distributions
 from .base import *
+
+
+@tf.function
+def chi2metric(samples, nbins=20):
+    """
+    H0: samples are uniformly distributed
     
+    Want to minimise prob
+    """
+    shape = tf.shape(samples)
+    b, h, w, c = shape[0], shape[1], shape[2], shape[3]
+    samples = tf.reshape(samples, (b * h * w, c))
+
+    expected = tf.cast(b * h * w, dtype=tf.float32)
+    expected = tf.cast(expected / nbins, dtype=tf.float32)
+
+    max = tf.reduce_max(samples)
+    min = tf.reduce_min(samples)
+    bins = tf.histogram_fixed_width_bins(samples, [min, max], nbins=nbins)
+    
+    one_hot_bins = tf.one_hot(bins, depth=nbins)
+    counts = tf.reduce_sum(one_hot_bins, axis=0)
+    teststat = tf.reduce_sum((counts - expected) ** 2 / expected)
+    chi2dist = distributions.Chi2(df=nbins-1)
+    # prob = chi2dist.cdf(teststat)
+    return teststat # of chisq(nbins) values being smaller than observed
+
 
 @tf.function
 def chi_loss(real, fake):

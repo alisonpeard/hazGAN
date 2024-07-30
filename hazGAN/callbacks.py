@@ -4,7 +4,7 @@ from tensorflow.keras.callbacks import Callback
 from tensorflow.nn import sigmoid_cross_entropy_with_logits as cross_entropy
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
-from .extreme_value_theory import chi_loss, inv_gumbel, pairwise_extremal_coeffs
+from .extreme_value_theory import chi_loss, inv_gumbel, pairwise_extremal_coeffs, chi2metric
 
 
 class WandbMetricsLogger(Callback):
@@ -67,11 +67,12 @@ class ChiScore(Callback):
                 setattr(self, f"extcoeffs_{name}_channel_{c}", extcoeffs)
             setattr(self, f"chi_score_{name}", None)
 
+
     def on_epoch_end(self, epoch, logs={}):
         if epoch % self.frequency == 0:
             for name, data in self.validation_data.items():
                 batch_size = tf.shape(data)[0]
-                generated_data = self.model(batch_size) # handles inverse gumbel in __call__
+                generated_data = self.model(nsamples=batch_size) # handles inverse gumbel in __call__
 
                 def compute_chi_diff(i):
                     generated_data_i = generated_data[..., i]
@@ -84,6 +85,56 @@ class ChiScore(Callback):
                 rmse = tf.reduce_mean(chi_diffs)
                 setattr(self, f"chi_score_{name}", rmse)
                 logs[f"chi_score_{name}"] = rmse
+
+
+class ChiSquared(Callback):
+    def __init__(self, batchsize, frequency=1, nbins=20):
+        super().__init__()
+        self.batchsize = batchsize
+        self.nbins = nbins
+        self.frequency = frequency
+        self.chi_squared = None
+
+    def on_epoch_end(self, epoch, logs={}):
+        if epoch % self.frequency == 0: # run after others
+            generated_data = self.model(nsamples=self.batchsize)
+            chisq = chi2metric(generated_data, nbins=self.nbins)
+
+            # updates
+            self.chi_squared = chisq
+            logs["chi_squared"] = chisq
+    
+
+class CompoundMetric(Callback):
+    def __init__(self, frequency=1):
+        super().__init__()
+        self.chi_rmse = None
+        self.chi_squared = None
+        self.metric = None
+        self.frequency = frequency
+
+    def on_epoch_end(self, epoch, logs={}):
+        if epoch % self.frequency == 0: # run after others
+            chisq = logs.get("chi_squared")
+            chirmse = logs.get("chi_score_test")
+
+            if chisq is None or chirmse is None:
+                tf.print(
+                    "\nWarning: One or more of the metrics is None. Skipping compound metric computation."
+                    )
+                return
+            
+            metric = tf.math.log(1 + chisq) + chirmse # compound_metric(chisq, chirmse)
+            logs["compound_metric"] = metric
+
+
+@tf.function
+def compound_metric(chisq, chirmse, eps=1e-6):
+    """Transform to comparable scales"""
+    chisq = tf.clip_by_value(chisq, 0, 1 - eps)
+    chisq = -tf.math.log(1 - chisq)
+    chirmse = tf.math.log(1 + chirmse)
+    return chisq + chirmse
 
 
 class CrossEntropy(Callback):

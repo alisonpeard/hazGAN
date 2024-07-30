@@ -10,7 +10,7 @@ import wandb
 
 # %%
 wd = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN"
-RUNNAME = "clean-sweep-3"  # "toasty-serenity-21"
+RUNNAME = "denim-sweep-78" # "logical-sweep-75" # "clean-sweep-3"
 TEMPERATURE = 1.
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
@@ -27,7 +27,7 @@ wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generato
 wgan.generator.summary()
 ntrain = config.train_size
 # %%
-ds_ref = xr.open_dataset(os.path.join(wd, "..", "training", "res_18x22", "data.nc"))
+ds_ref = xr.open_dataset(os.path.join(wd, "..", "training", "18x22", "data.nc"))
 train = ds_ref.isel(time=slice(0, ntrain))
 test = ds_ref.isel(time=slice(ntrain, None))
 
@@ -122,5 +122,5 @@ i = np.random.randint(0, nsamples)
 ds_hazGAN.isel(sample=i, channel=0).anomaly.plot(cmap='viridis') # levels=10, 
 # %%
 ds_hazGAN = ds_hazGAN.rio.write_crs("EPSG:4326")
-ds_hazGAN.to_netcdf(os.path.join(wd, "..", "samples", f"{RUNNAME}_{TEMPERATURE}xtemp.nc"))
+ds_hazGAN.to_netcdf(os.path.join(wd, "..", "samples", f"{RUNNAME}.nc"))
 # %%

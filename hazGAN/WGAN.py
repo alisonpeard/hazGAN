@@ -14,11 +14,11 @@ from inspect import signature
 from .extreme_value_theory import chi_loss, inv_gumbel
 
 
-def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0.):
+def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
     """Sample from Gumbel(0, 1)"""
     T = tf.constant(temperature, dtype=tf.float32)
     O = tf.constant(offset, dtype=tf.float32)
-    U = tf.random.uniform(shape, minval=0, maxval=1)
+    U = tf.random.uniform(shape, minval=0, maxval=1, seed=seed)
     return O - T * tf.math.log(-tf.math.log(U + eps) + eps)
 tf.random.gumbel = sample_gumbel
 
@@ -154,9 +154,14 @@ class WGAN(keras.Model):
         self.g_optimizer.build(self.generator.trainable_variables)
 
 
-    def call(self, nsamples=5, temp=1., offset=0):
+    def call(self, nsamples=5, temp=1., offset=0, seed=None):
         """Return uniformly distributed samples from the generator."""
-        random_latent_vectors = self.latent_space_distn((nsamples, self.latent_dim), temperature=temp, offset=offset)
+        random_latent_vectors = self.latent_space_distn(
+            (nsamples, self.latent_dim),
+            temperature=temp,
+            offset=offset,
+            seed=seed
+            )
         raw = self.generator(random_latent_vectors, training=False)
         return self.inv(raw)
 
