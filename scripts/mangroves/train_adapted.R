@@ -26,7 +26,7 @@ allXs <- c(
   #"era5_precip"
   "landingWindMaxLocal2",
   "totalPrec_total",
-  "slope"
+  #"slope"
 )
 
 if(TRUE){ # model 
@@ -154,7 +154,7 @@ if(TRUE){ # model
     
     #set up variables
     if(TRUE){
-      # adjust data to be all positive so can log transform later
+      # shift positive
       for(var in c(allXs)){
         if(min(data[,var], na.rm=TRUE) <= 0){
           data[,var] <- data[,var] + abs(min(data[,var], na.rm=TRUE)) + 1 
@@ -162,6 +162,7 @@ if(TRUE){ # model
       }
     } 
   } # input
+  
   if(TRUE){  # modelling
     output_all <- data.frame(matrix(nrow=0, ncol=27))
     colnames(output_all) <-  c( 'scale',
@@ -176,19 +177,25 @@ if(TRUE){ # model
                                 'ensemble.pred.oob.event.rescale','ensemble.pred.oob.event.upper.rescale','ensemble.pred.oob.event.lower.rescale')
     start_time <- Sys.time()
     
-    for(scl in c('log10')){ # loop through different scalings
-      if(FALSE){ # for debugging
+    # loop through different scalings
+    for(scl in c('log10')){ 
+      # for debugging
+      if(FALSE){ 
         scl <- 'log10' 
-      } # for debugging
+      }
       print(scl)  
       
+      # loop y
       for (y in allYs){
-        if(FALSE){ # for debugging
+        # for debugging
+        if(FALSE){
           y <- allYs[1]
-        } # for debugging
+        } 
+        
         print(y)
         feed <- data[, c(idcols, y, allXs)]
         feed.scaled <- feed
+        
         if(TRUE){ # transform input
           if(scl=='log10'){
             for(x in c(y, allXs[!allXs %in% c('side')])){
@@ -200,6 +207,7 @@ if(TRUE){ # model
           feed.scaled[,y] [which(!is.finite(feed.scaled[,y] ))] <- NA 
           feed.scaled <- feed.scaled[complete.cases(feed.scaled), ] 
         } # transform input
+        
         feed.standardised <- feed.scaled
         for (col in c(y, allXs)){ #standardize input
           #col <- 3
@@ -296,7 +304,7 @@ if(TRUE){ # model
         } # eventwise out-of-bag
         
         output_all <- rbind(output_all, output)
-      } # loop y
+      } 
     } # loop through different scalings
     
     end_time <- Sys.time()
@@ -318,14 +326,11 @@ if(TRUE){ # plot results
   library(tidyr)
   
   data <- read.csv(outfile, stringsAsFactors=FALSE)
-  
   mdls <- c("ensemble.pred", "ensemble.pred.oob", "ensemble.pred.oob.event",
             "ensemble.pred.rescale", "ensemble.pred.oob.rescale", "ensemble.pred.oob.event.rescale")
   obList <- c("y.standardised", "y.standardised", "y.standardised",
               "obs", "obs", "obs")
-  
   list <- unique(data[,c('scale','y')])
-  
   pdf(file=outfig, width=8.5, height=11) 
   par(oma=c(3,1,3,1), mar=c(5,4,4,1), xpd=FALSE) 
   layout(matrix(seq(1, 12, 1), 4, 3, byrow=TRUE))

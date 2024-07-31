@@ -18,21 +18,21 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 global scaling
-scaling = True
+scaling = False
 visuals = False
-
+# %%
 def transform(df: pd.DataFrame, X: list, y: str):
  # shift transform and scale
  if scaling:
   df = df[[y] + X].dropna()
   df[X] = df[X].apply(shift_positive, axis=0)
-  df = np.log(df)
+  df = np.log10(df).dropna()
  return(df)
 
 
 def inverse_transform(y: pd.Series):
   if scaling:
-    y = np.exp(y)
+    y = 10**y
   return(y)
 
 
@@ -43,7 +43,10 @@ def shift_positive(x: pd.Series):
 
 
 def rsquared(y, yhat):
-    return sum((yhat - np.mean(y))**2) / sum((y - np.mean(y))**2)
+    """Psuedo R^2"""
+    ymean = np.mean(y)
+    y = np.where(y == ymean, np.nan, y)
+    return sum((yhat - ymean)**2) / sum((y - ymean)**2)
 
 
 def rsquared_res(y, yhat):
@@ -62,6 +65,7 @@ def mean_average_percent_error(y, yhat):
 def mean_squared_error(y, yhat):
     return np.mean((y - yhat)**2)
 
+
 bob_crs = 24346
 indir_alison = '/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v3__mine'
 indir_yu = '/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v2'
@@ -73,21 +77,9 @@ infile0 = os.path.join(indir_yu, 'result/model/input_fixedCNTRY_rmOutlier.csv')
 infile = infile2
 response = 'intensity'
 regressor_rename = {
-    # 'landingSpeed': 'storm_speed',
     'totalPrec_total': 'precip',
-    # 'elevation_mean': 'elevation',
-    # 'bathymetry_mean': 'bathymetry',
-    # 'era5_wind': 'wind',
-    # 'era5_precip': 'precip',
-    # 'era5_pressure': 'mslp',
-    # 'wind': 'wind',
-    # 'mslp': 'mslp',
-    # 'continent': 'continent',
-    'slope': 'slope',
-    'landingWindMaxLocal2': 'wind',
-    # 'landingPressure': 'mslp',
-    # 'stormFrequency_mean': 'freq',
-    # 'coastDist': 'dist_coast'
+    # 'slope': 'slope',
+    'landingWindMaxLocal2': 'wind'
     }
 regressors = [value for value in regressor_rename.values()]
 scaler = StandardScaler()
@@ -98,19 +90,35 @@ events = [*df['landing'].unique()]
 
 df_transformed = transform(df, regressors, response)
 df_transformed[['landing', 'center_centerLon', 'center_centerLat']] = df[['landing', 'center_centerLon', 'center_centerLat']]
-df = df_transformed
-gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.center_centerLon, df.center_centerLat)).set_crs(epsg=4326)
-# %%
+gdf = gpd.GeoDataFrame(df_transformed, geometry=gpd.points_from_xy(df_transformed.center_centerLon, df_transformed.center_centerLat)).set_crs(epsg=4326)
+
+df = df.iloc[gdf.index] # align indices
+# %% ----Train model eventwise OOB---- 
 from tqdm import tqdm
+from sklearn.linear_model import LinearRegression
 from xgboost import XGBRegressor
 
-results = gdf[['landing', 'intensity']].rename(columns={'intensity': 'y'})
+def ensemble(X_train, y_train, X_test):
+  xgb = XGBRegressor(n_estimators=15).fit(X_train, y_train)
+  xgb_fit = xgb.predict(X_train).reshape(-1, 1)
+  xgb_pred = xgb.predict(X_test).reshape(-1, 1)
+  linear = LinearRegression().fit(xgb_fit, y_train)
+  y_fit = linear.predict(xgb_fit)
+  y_pred = linear.predict(xgb_pred)
+  return y_pred
+
+
+results = df[['landing', 'intensity']].rename(columns={'intensity': 'y'})
 predictions = []
 mses = []
 rsqs = []
+
+# loop through events
 for event in tqdm(events):
   gdf_train = gdf[gdf['landing'] != event]
   gdf_test = gdf[gdf['landing'] == event]
+  y_fullscale = df[df['landing'] == event][response]
+
   X_train, y_train = gdf_train[regressors], gdf_train[response]
   X_test, y_test = gdf_test[regressors], gdf_test[response]
 
@@ -122,63 +130,106 @@ for event in tqdm(events):
     sns.pairplot(gdf, x_vars=regressors, y_vars=response)
     sns.pairplot(gdf_train[regressors])
 
-  model = XGBRegressor().fit(X_train, y_train)
+  # ensemble model
+  y_pred = ensemble(X_train, y_train, X_test)
+  y_rescaled = inverse_transform(y_pred)
 
   # predict and view test metrics
-  xgb_fit = model.predict(X_train)
-  xgb_pred = model.predict(X_test)
-  mse = mean_squared_error(y_test, xgb_pred)
-  rsq = rsquared_res(y_test, xgb_pred)
-  print(f'MSE: {mse:.4f}, R^2: {rsq:.4f}')
+  mse = mean_squared_error(y_test, y_pred)
+  rsq = rsquared(y_test, y_pred)
+  mse_fullscale = mean_squared_error(y_fullscale, y_rescaled)
+  rsq_fullscale = rsquared(y_fullscale, y_rescaled)
+  print(f'{event}: MSE: {mse:.4f}, R^2: {rsq:.4f}')
+  print(f'{event}: MSE (fullscale): {mse_fullscale:.4f}, R^2 (fullscale): {rsq_fullscale:.4f}')
 
   # scatter plot of observed vs predicted
   if visuals:
     fig, ax = plt.subplots()
-    ax.scatter(y_test, xgb_pred, color='k')
+    ax.scatter(y_test, y_pred, color='k')
     ax.plot(y_test, y_test, color='r', label='test')
     ax.set_xlabel('Observed')
     ax.set_ylabel('Predicted')
     ax.set_title('XGBoost')
 
-  predictions.append(xgb_pred)
-  mses.append(mse)
-  rsqs.append(rsq)
+    fig, ax = plt.subplots()
+    ax.scatter(y_fullscale, y_rescaled, color='k')
+    ax.plot(y_fullscale, y_fullscale, color='r', label='test')
+    ax.set_xlabel('Observed')
+    ax.set_ylabel('Predicted')
+    ax.set_title('XGBoost (rescaled)')
+
+  predictions.append(y_rescaled)
+  mses.append(mse_fullscale)
+  rsqs.append(rsq_fullscale)
+
+# gather results
 results['predictions'] = np.concatenate(predictions)
-# %%
+rsqs = [rsq for rsq in rsqs if not np.isnan(rsq)]
+mses = [mse for mse in mses if not np.isnan(mse)]
+
+# %% ----Visualise results----
 hist_kwargs = {'bins': 50, 'alpha': 0.5, 'color': 'lightgrey', 'edgecolor': 'k'}
 plt.rcParams['font.family'] = 'serif'
 
-fig, axs = plt.subplots(1, 3, figsize=(10, 3))
+fig, axs = plt.subplots(1, 3, figsize=(13, 3))
 ax = axs[0]
 ax.hist(mses, **hist_kwargs)
 ax.set_xlabel('MSE')
 ax.set_ylabel('Frequency')
+ax.set_title('Mean squared error')
 
 ax = axs[1]
-ax.hist(rsqs, **hist_kwargs)
-ax.set_xlabel('R^2')
+q = .9
+rsqs_clipped = np.clip(rsqs, np.quantile(rsqs, 0), np.quantile(rsqs, q))
+ax.hist(rsqs_clipped, **hist_kwargs)
+ax.set_xlabel('Pseudo-R²')
 ax.set_ylabel('Frequency')
+ax.set_title(f"Pseudo-R² (clipped at {q:.0%})")
 
 ax = axs[2]
-ax.scatter(results['y'], results['predictions'], color='k')
-ax.plot(results['y'], results['y'], color='r', label='test')
+ax.scatter(results['y'], results['predictions'], color='k', s=.1, label='Predictions')
+ax.plot(results['y'], results['y'], color='r', linewidth=.5, label='Observations')
 ax.set_xlabel('Observed')
 ax.set_ylabel('Predicted')
-ax.set_title('XGBoost')
-# %% calculate final RMSE and R^2
-rmse = root_mean_squared_error(results['y'], results['predictions'])
-rsq = r2_score(results['y'], results['predictions'])
+ax.legend(loc='upper left')
+ax.set_title('Predictions vs observations')
 
-print(f'RMSE: {rmse:.4f}, R^2: {rsq:.4f}')
-# %%
-r2 = r2(results['y'], results['predictions'])
-r2res = r2_res(results['y'], results['predictions'])
-mse = mse(results['y'], results['predictions'])
-mape = mape(results['y'], results['predictions'])
+fig.suptitle('XGBoost and linear ensemble model', y=1.05)
 
-print(f'R^2: {r2:.4f}, R^2_res: {r2res:.4f}, MSE: {mse:.4f}, MAPE: {mape:.4f}')
+#  calculate final RMSE and R2 
+mse = mean_squared_error(results['y'], results['predictions'])
+rsq = rsquared(results['y'], results['predictions'])
+
+print(f'\nAveraged OOB scores: MSE: {mse:.4f}, R²: {rsq:.4f}')
 
 # %%
+from joblib import dump
+
+modelpath = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync', 'results', 'mangroves', 'model.pkl')
+with open(modelpath, "wb") as f:
+    dump(model, f, protocol=5)
+
+# %%
+"""
+----Full regressor options----
+regressor_rename = {
+    'landingSpeed': 'storm_speed',
+    'totalPrec_total': 'precip',
+    'elevation_mean': 'elevation',
+    'bathymetry_mean': 'bathymetry',
+    'era5_wind': 'wind',
+    'era5_precip': 'precip',
+    'era5_pressure': 'mslp',
+    'wind': 'wind',
+    'mslp': 'mslp',
+    'continent': 'continent',
+    'slope': 'slope',
+    'landingWindMaxLocal2': 'wind',
+    'landingPressure': 'mslp',
+    'stormFrequency_mean': 'freq',
+    'coastDist': 'dist_coast'
+    }
+"""
 
 
 
@@ -199,111 +250,3 @@ print(f'R^2: {r2:.4f}, R^2_res: {r2res:.4f}, MSE: {mse:.4f}, MAPE: {mape:.4f}')
 
 
 
-
-
-
-
-
-
-
-# %% ----OLD STUFF----
-# %% train a random forest for different numbers of trees
-results = {'MSE': [], 'RMSE': [], 'R^2': [], 'K': [], 'K * npredictors': []}
-for i in [1, 2, 5, 10, 20, 50, 100, 200]:
-  model = RandomForestRegressor(n_estimators=i * len(regressors), random_state=42).fit(X_train, y_train)
-
-  y_pred = model.predict(X_test)
-  mse = mean_squared_error(y_test, y_pred)
-  rmse = root_mean_squared_error(y_test, y_pred)
-  rsq = r2_score(y_test, y_pred)
-
-  results['MSE'].append(mse)
-  results['RMSE'].append(rmse)
-  results['R^2'].append(rsq)
-  results['K'].append(i)
-  results['K * npredictors'].append(i * len(regressors))
-
-results = pd.DataFrame.from_dict(results)
-results
-
-# %% fit final model 
-k = results.set_index('K').idxmax()['R^2']
-model = RandomForestRegressor(n_estimators=i * len(regressors),
-                              random_state=42).fit(X_train, y_train)
-rf_fit = model.predict(X_train)
-rf_pred = model.predict(X_test)
-mse = mean_squared_error(y_test, rf_pred)
-rmse = root_mean_squared_error(y_test, rf_pred)
-rsq = r2_score(y_test, rf_pred)
-print(f'RMSE: {rmse:.4f}, R^2: {rsq:.4f}')
-
-# plot observed vs predicted
-fig, axs = plt.subplots(1, 2, figsize=(10, 3))
-ax = axs[0]
-ax.scatter(y_test, y_pred, color='k')
-ax.plot(y_test, y_test, color='r', label='test')
-ax.set_xlabel('Observed')
-ax.set_ylabel('Predicted')
-ax.set_title(f'RF R^2 = {rsq:.4f}')
-
-# plot feature importances
-hist_kwargs = {'alpha': 0.5, 'color': 'lightblue', 'edgecolor': 'k'}
-importances = model.feature_importances_
-indices = np.argsort(importances)[::-1]
-ax = axs[1]
-ax.bar(regressors, importances[indices], **hist_kwargs)
-ax.set_xticks(ax.get_xticks(), labels=regressors, rotation=45, ha='right')
-ax.set_ylabel('Importance')
-
-# %% pickle that thing
-if False:
-    modelpath = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync', 'results', 'mangroves', 'model.pkl')
-    with open(modelpath, "wb") as f:
-        dump(model, f, protocol=5)
-
-    scalerpath = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync', 'results', 'mangroves', 'scaler.pkl')
-    with open(scalerpath, "wb") as f:
-        dump(scaler, f, protocol=5)
-
-# %% ---- Here's some experiments with other model types ----
-if True:
-  from xgboost import XGBRegressor
-
-  model = XGBRegressor().fit(X_train, y_train)
-
-  # predict and view test metrics
-  xgb_fit = model.predict(X_train)
-  xgb_pred = model.predict(X_test)
-  rmse = root_mean_squared_error(y_test, xgb_pred)
-  rsq = r2_score(y_test, xgb_pred)
-  print(f'RMSE: {rmse:.4f}, R^2: {rsq:.4f}')
-
-  # scatter plot of observed vs predicted
-  fig, ax = plt.subplots()
-  ax.scatter(y_test, xgb_pred, color='k')
-  ax.plot(y_test, y_test, color='r', label='test')
-  ax.set_xlabel('Observed')
-  ax.set_ylabel('Predicted')
-  ax.set_title('XGBoost')
-
-# %%  ensemble the two of them 
-from sklearn.linear_model import LinearRegression
-
-X_train_ensemble = np.column_stack([rf_fit, xgb_fit])
-X_test_ensemble = np.column_stack([rf_pred, xgb_pred])
-
-model = LinearRegression().fit(X_train_ensemble, y_train)
-ens_pred = model.predict(X_test_ensemble)
-
-rmse = root_mean_squared_error(y_test, ens_pred)
-rsq = r2_score(y_test, ens_pred)
-print(f'RMSE: {rmse:.4f}, R^2: {rsq:.4f}')
-
-# scatter plot of observed vs predicted
-fig, ax = plt.subplots()
-ax.scatter(y_test, ens_pred, color='k')
-ax.plot(y_test, y_test, color='r', label='test')
-ax.set_xlabel('Observed')
-ax.set_ylabel('Predicted')
-ax.set_title('Linear Ensemble')
-# %%
