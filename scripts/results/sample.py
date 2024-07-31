@@ -10,8 +10,8 @@ import wandb
 
 # %%
 wd = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN"
-RUNNAME = "denim-sweep-78" # "logical-sweep-75" # "clean-sweep-3"
-TEMPERATURE = 1.
+RUNNAME = "vital-sweep-30" # "denim-sweep-78" # "logical-sweep-75" # "clean-sweep-3"
+TEMPERATURE = 1.1
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 occurrence_rate = 18.033

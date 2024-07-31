@@ -21,7 +21,7 @@ def open_config(runname, dir):
 
 # %%
 res = (18, 22)
-RUNNAME = "denim-sweep-78"
+RUNNAME = "vital-sweep-30"
 datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/{res[0]}x{res[1]}'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 config = open_config("clean-sweep-3", "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
@@ -98,12 +98,13 @@ fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
                            )
 
 cmap = plt.cm.coolwarm_r
-cmap.set_over('darkblue')
-cmap.set_under('crimson')
+cmap.set_over('lightgrey')
+cmap.set_under(cmap(0))
+cmap_kws = {'cmap': cmap, 'vmin': 1, 'vmax': 2.1}
 
-im = ax[0].imshow(excoefs_train, cmap=cmap, vmin=1, vmax=3)
-im = ax[1].imshow(excoefs_test, cmap=cmap, vmin=1, vmax=3)
-im = ax[2].imshow(excoefs_gan, cmap=cmap, vmin=1, vmax=3)
+im = ax[0].imshow(excoefs_train, **cmap_kws)
+im = ax[1].imshow(excoefs_test, **cmap_kws)
+im = ax[2].imshow(excoefs_gan, **cmap_kws)
 
 for a in ax:
     a.set_yticks([])
@@ -115,7 +116,7 @@ ax[1].set_title('Test')
 ax[2].set_title('hazGAN');
 
 fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
-fig.suptitle(r'$\hat \theta$ across all three channels');
+fig.suptitle(r'$\hat \theta$ across both channels');
 plt.scatter(test_corrs, gan_corrs);
 
 rmse_chi_train_test = np.sqrt(np.nanmean((excoefs_train - excoefs_test) ** 2))
@@ -163,11 +164,15 @@ vmin = min(ecs_gen.min(), ecs_train.min(), ecs_test.min())
 vmax = max(ecs_gen.max(), ecs_train.max(), ecs_test.max())
 vmin, vmax = 1, 2
 
+cmap = plt.cm.coolwarm_r
+cmap.set_over('lightgrey')
+cmap_kws = {'cmap': cmap, 'vmin': vmin, 'vmax': vmax}
+
 fig, axs = plt.subplots(1, 3, figsize=(10, 3))
-im = axs[0].imshow(ecs_train, cmap="coolwarm_r", vmin=vmin, vmax=vmax)
-im = axs[1].imshow(ecs_test, cmap="coolwarm_r", vmin=vmin, vmax=vmax)
-im = axs[2].imshow(ecs_gen, cmap="coolwarm_r", vmin=vmin, vmax=vmax)
-fig.colorbar(im, ax=axs, orientation="vertical", shrink=0.8, aspect=40)
+im = axs[0].imshow(ecs_train, **cmap_kws)
+im = axs[1].imshow(ecs_test, **cmap_kws)
+im = axs[2].imshow(ecs_gen, **cmap_kws)
+fig.colorbar(im, ax=axs, extend="max", orientation="vertical", shrink=0.8, aspect=40)
 
 axs[0].set_title("Train data")
 axs[1].set_title("Test data")
