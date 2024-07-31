@@ -13,25 +13,26 @@ class MangroveDamageModel(object):
        self.linear = LinearRegression()
        self.scaler = StandardScaler()
        self.transformer = Transformer()
-       # variables to be fitted
-       self.scaler_fit = None
-       self.base_fit = None
-       self.linear_fit = None
+       self.fitted = False
 
     def fit(self, X, y):
-        # scale and transform
-        self.scaler_fit = self.scaler.fit(X)
+        # transform
+        X = self.transformer.positive(X)
         X = self.transformer.transform(X)
+        X = self.scaler.fit_transform(X)
         y = self.transformer.transform(y)
         # fit models
-        self.base_fit = self.base.fit(X, y)
+        self.base.fit(X, y)
         X_base = self.base.predict(X).reshape(-1, 1)
-        self.linear_fit = self.linear.fit(X_base, y)
-        return self 
+        self.linear.fit(X_base, y)
+        self.fitted = True
     
     def predict(self, X):
-        X = self.scaler.transform(X)
+        if not self.fitted:
+            raise ValueError("Model not fitted yet.")
+        X = self.transformer.positive(X)
         X = self.transformer.transform(X)
+        X = self.scaler.transform(X)
         X_base = self.base.predict(X).reshape(-1, 1)
         y_pred = self.linear.predict(X_base)
         y_pred = self.transformer.inverse_transform(y_pred)
@@ -40,14 +41,20 @@ class MangroveDamageModel(object):
   
 class Transformer(object):
     """Make transformer an object to make it more flexible."""
-    def transform(self, x):
-        return np.log10(shift_positive(x))
+    def positive(self, X):
+        """Shift the data to be positive."""
+        def shift(x):
+            if np.min(x) <= 0:
+                x += abs(np.min(x)) + 1
+            return x
+        if len(X.shape) == 1:
+            return shift(X)
+        else:
+            return  np.apply_along_axis(shift, 0, X)
     
-    def inverse_transform(self, x):
-        return x ** 10
+    def transform(self, X):
+        return np.log10(X)
+    
+    def inverse_transform(self, X):
+        return 10 ** X
 
-
-def shift_positive(x):
-  if np.min(x) <= 0:
-    x += abs(np.min(x)) + 1
-  return x

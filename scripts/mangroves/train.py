@@ -11,55 +11,17 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 from joblib import dump # for pickling
-# from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestRegressor
 import matplotlib.pyplot as plt
 import seaborn as sns
+from MangroveDamage import MangroveDamageModel
 
-global scaling
-scaling = False
 visuals = False
 # %%
-def transform(df: pd.DataFrame, X: list, y: str):
- # shift transform and scale
- if scaling:
-  df = df[[y] + X].dropna()
-  df[X] = df[X].apply(shift_positive, axis=0)
-  df = np.log10(df).dropna()
- return(df)
-
-
-def inverse_transform(y: pd.Series):
-  if scaling:
-    y = 10**y
-  return(y)
-
-
-def shift_positive(x: pd.Series):
-  if x.min() <= 0:
-    x += abs(x.min()) + 1
-  return x
-
-
 def rsquared(y, yhat):
     """Psuedo R^2"""
     ymean = np.mean(y)
     y = np.where(y == ymean, np.nan, y)
     return sum((yhat - ymean)**2) / sum((y - ymean)**2)
-
-
-def rsquared_res(y, yhat):
-  rss = sum((y - yhat)**2)
-  tss = sum((y - np.mean(y))**2)
-  if tss > 0:
-    return 1 - rss / tss
-  else:
-    return np.nan
-
-
-def mean_average_percent_error(y, yhat):
-    return np.mean(np.abs((y - yhat) / y))
 
 
 def mean_squared_error(y, yhat):
@@ -78,94 +40,62 @@ infile = infile2
 response = 'intensity'
 regressor_rename = {
     'totalPrec_total': 'precip',
-    # 'slope': 'slope',
     'landingWindMaxLocal2': 'wind'
     }
 regressors = [value for value in regressor_rename.values()]
-scaler = StandardScaler()
 
 # %% load and process data
 df = pd.read_csv(infile).rename(columns=regressor_rename)
-events = [*df['landing'].unique()]
+events = list(set(df['landing']))
 
-df_transformed = transform(df, regressors, response)
-df_transformed[['landing', 'center_centerLon', 'center_centerLat']] = df[['landing', 'center_centerLon', 'center_centerLat']]
-gdf = gpd.GeoDataFrame(df_transformed, geometry=gpd.points_from_xy(df_transformed.center_centerLon, df_transformed.center_centerLat)).set_crs(epsg=4326)
-
-df = df.iloc[gdf.index] # align indices
 # %% ----Train model eventwise OOB---- 
 from tqdm import tqdm
-from sklearn.linear_model import LinearRegression
-from xgboost import XGBRegressor
-
-def ensemble(X_train, y_train, X_test):
-  xgb = XGBRegressor(n_estimators=15).fit(X_train, y_train)
-  xgb_fit = xgb.predict(X_train).reshape(-1, 1)
-  xgb_pred = xgb.predict(X_test).reshape(-1, 1)
-  linear = LinearRegression().fit(xgb_fit, y_train)
-  y_fit = linear.predict(xgb_fit)
-  y_pred = linear.predict(xgb_pred)
-  return y_pred
-
 
 results = df[['landing', 'intensity']].rename(columns={'intensity': 'y'})
 predictions = []
 mses = []
 rsqs = []
+mse_fitted = []
+rsq_fitted = []
 
 # loop through events
-for event in tqdm(events):
-  gdf_train = gdf[gdf['landing'] != event]
-  gdf_test = gdf[gdf['landing'] == event]
-  y_fullscale = df[df['landing'] == event][response]
+for event in (pbar:=tqdm(events)):
+  gdf_train = df[df['landing'] != event]
+  gdf_test = df[df['landing'] == event]
 
   X_train, y_train = gdf_train[regressors], gdf_train[response]
   X_test, y_test = gdf_test[regressors], gdf_test[response]
 
-  if scaling:
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
-
-  if visuals:
-    sns.pairplot(gdf, x_vars=regressors, y_vars=response)
-    sns.pairplot(gdf_train[regressors])
-
   # ensemble model
-  y_pred = ensemble(X_train, y_train, X_test)
-  y_rescaled = inverse_transform(y_pred)
+  model = MangroveDamageModel()
+  model.fit(X_train, y_train)
+  y_fit = model.predict(X_train)
+  y_pred = model.predict(X_test)
+
+  # fit metrics
+  mse_fit = mean_squared_error(y_train, y_fit)
+  rsq_fit = rsquared(y_train, y_fit)
+  print(f'{event}: fitted MSE: {mse_fit:.4f}, fitted R^2: {rsq_fit:.4f}')
 
   # predict and view test metrics
   mse = mean_squared_error(y_test, y_pred)
   rsq = rsquared(y_test, y_pred)
-  mse_fullscale = mean_squared_error(y_fullscale, y_rescaled)
-  rsq_fullscale = rsquared(y_fullscale, y_rescaled)
   print(f'{event}: MSE: {mse:.4f}, R^2: {rsq:.4f}')
-  print(f'{event}: MSE (fullscale): {mse_fullscale:.4f}, R^2 (fullscale): {rsq_fullscale:.4f}')
 
-  # scatter plot of observed vs predicted
-  if visuals:
-    fig, ax = plt.subplots()
-    ax.scatter(y_test, y_pred, color='k')
-    ax.plot(y_test, y_test, color='r', label='test')
-    ax.set_xlabel('Observed')
-    ax.set_ylabel('Predicted')
-    ax.set_title('XGBoost')
-
-    fig, ax = plt.subplots()
-    ax.scatter(y_fullscale, y_rescaled, color='k')
-    ax.plot(y_fullscale, y_fullscale, color='r', label='test')
-    ax.set_xlabel('Observed')
-    ax.set_ylabel('Predicted')
-    ax.set_title('XGBoost (rescaled)')
-
-  predictions.append(y_rescaled)
-  mses.append(mse_fullscale)
-  rsqs.append(rsq_fullscale)
+  # store results
+  predictions.append(y_pred)
+  mse_fitted.append(mse_fit)
+  rsq_fitted.append(rsq_fit)
+  mses.append(mse)
+  rsqs.append(rsq)
+  
 
 # gather results
 results['predictions'] = np.concatenate(predictions)
 rsqs = [rsq for rsq in rsqs if not np.isnan(rsq)]
 mses = [mse for mse in mses if not np.isnan(mse)]
+rsq_fitted = [rsq for rsq in rsq_fitted if not np.isnan(rsq)]
+mse_fitted = [mse for mse in mse_fitted if not np.isnan(mse)]
 
 # %% ----Visualise results----
 hist_kwargs = {'bins': 50, 'alpha': 0.5, 'color': 'lightgrey', 'edgecolor': 'k'}
@@ -199,13 +129,15 @@ fig.suptitle('XGBoost and linear ensemble model', y=1.05)
 #  calculate final RMSE and R2 
 mse = mean_squared_error(results['y'], results['predictions'])
 rsq = rsquared(results['y'], results['predictions'])
-
 print(f'\nAveraged OOB scores: MSE: {mse:.4f}, R²: {rsq:.4f}')
 
-# %%
-from joblib import dump
+# calculate fitted RMSE and R2
+mse_fitted = np.mean(mse_fitted)
+rsq_fitted = np.mean(rsq_fitted)
+print(f'Fitted scores: MSE: {mse_fitted:.4f}, R²: {rsq_fitted:.4f}')
 
-modelpath = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync', 'results', 'mangroves', 'model.pkl')
+# %%
+modelpath = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync', 'results', 'mangroves', 'damagemodel.pkl')
 with open(modelpath, "wb") as f:
     dump(model, f, protocol=5)
 
