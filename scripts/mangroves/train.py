@@ -78,7 +78,7 @@ infile3 = os.path.join(indir_alison, 'era5_and_slope_0.csv')
 infile4 = os.path.join(indir_alison, 'data_with_imdaa.csv')
 
 
-infile = infile2
+infile = infile4
 response = 'intensity'
 regressor_rename = {
     # "imdaa_gust": "wind",
@@ -113,51 +113,13 @@ if IMDAA:
 # %%
 df = convert_ibtracs_vars(df)
 df = df.rename(columns=regressor_rename)
+df = df.dropna(subset=regressors + [response])
 events = list(set(df[eventcol]))
 ntrain = int(len(events) * trainratio)
 
-median = np.median(df[response])
+median = np.median(df[response]) # mangroves that are over 10% damaged
 df[response] = (df[response] > median).astype(int) # binary problem
-
-# %% ---- EDA ----
-if VISUALS:
-    from sklearn.linear_model import LinearRegression
-
-    imdaa_vars = ['imdaa_wind', 'imdaa_gust', 'imdaa_pressure', 'imdaa_precip']
-    df['distEquator'] = np.abs(df['center_centerLat'])
-    hue ='continent'
-    sns.pairplot(df, x_vars=regressors, y_vars=response, hue=hue, kind='scatter')
-    if IMDAA:
-        sns.pairplot(df, x_vars=imdaa_vars, y_vars=response, hue=hue, kind='scatter')
-
-    lm = LinearRegression()
-    df_sub = df#[df['continent'] =='Africa']
-    sns.pairplot(df_sub, x_vars=regressors, y_vars=response, hue=hue, kind='scatter')
-    lm.fit(df_sub[['wind']], df_sub[response])
-    print(lm.coef_)
-    df.columns
-
-# %% Augment data
-if AUGMENT:
-  n = len(df)
-  bins = np.linspace(0, .9, 10)
-  counts, bins = np.histogram(df['intensity'], bins=bins, density=False)
-  bin_weights = {b: 1/c for b, c in enumerate(counts)}
-  binsize = counts.max()
-
-  def bin_intensity(x, bins=bins):
-      return np.digitize(x, bins) - 1
-
-  df['bin'] = df['intensity'].apply(bin_intensity)
-  df['weight'] = df['bin'].map(bin_weights)
-
-  def sample_bin(group, target_size):
-      if len(group) > target_size:
-          return group.sample(target_size, replace=False)
-      else:
-          return group.sample(target_size, replace=True)
-
-  df = df.groupby('bin', group_keys=False).apply(lambda x: sample_bin(x, int(binsize * (1 + x['weight']).iloc[0])))
+df[response].value_counts()
 
 # %% ----Train model eventwise OOB---- 
 # results = df[['landing', 'intensity']].rename(columns={'intensity': 'y'})
