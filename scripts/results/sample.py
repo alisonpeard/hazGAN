@@ -10,8 +10,8 @@ import wandb
 
 # %%
 wd = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN"
-RUNNAME = "denim-sweep-78" # "logical-sweep-75" # "clean-sweep-3"
-TEMPERATURE = 1.
+RUNNAME = "vital-sweep-30" # "denim-sweep-78" # "logical-sweep-75" # "clean-sweep-3"
+TEMPERATURE = 1.1
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 occurrence_rate = 18.033
@@ -44,7 +44,7 @@ def sample_to_xr(data, ds_ref, plot=False):
         'sample': samples,
         'lat': ("lat", ds_ref.lat.values, {"long_name": "Latitude"}),
         'lon': ("lon", ds_ref.lon.values, {'long_name': 'Longitude'}),
-        'channel': ['u10', 'mslp'],
+        'channel': ['u10', 'tp'],
         'param': ("param", ['shape', 'loc', 'scale'], {'long_name': 'gpd_parameters'}),
         'month': np.unique(ds_ref['time.month'].values)
         }
