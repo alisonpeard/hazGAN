@@ -23,6 +23,12 @@ regressor_rename = {
     'stormFrequency_mean': 'freq',
     'coastDist': 'dist_coast'
     }
+
+Objective candidate: reg:quantileerror
+Objective candidate: reg:squarederror
+Objective candidate: reg:pseudohubererror
+Objective candidate: reg:tweedie
+Objective candidate: reg:absoluteerror
 """
 #%%
 import os
@@ -35,7 +41,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from MangroveDamage import MangroveDamageModel
 
-scaling = True
+SCALING = True
+LOSS = 'reg:squarederror'
+VISUALS = False
+AUGMENT = False # just shifts data, it can't find an underlying relationship that doesn't exist
 # %%
 def rsquared(y, yhat):
     """Psuedo R^2"""
@@ -45,12 +54,13 @@ def rsquared(y, yhat):
     sse = sum((y - yhat)**2)     # sum squared residuals
     sst = sum((y - ymean)**2)    # total sum of squares
     ssr = sum((yhat - ymean)**2) # sum of squares of regression
-    # return ssr / (ssr + sse) # Krueck (2020)
-    return ssr / sst # https://doi.org/10.1016/j.neunet.2009.07.002
+    return ssr / (ssr + sse) # Krueck (2020)
+    # return ssr / sst # https://doi.org/10.1016/j.neunet.2009.07.002
 
 
 def root_mean_squared_error(y, yhat):
     return np.sqrt(np.mean((y - yhat)**2))
+
 
 bob_crs = 24346
 indir_alison = '/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v3__mine'
@@ -65,8 +75,10 @@ response = 'intensity'
 regressor_rename = {
     "era5_wind": "wind",
     "era5_precip": "precip",
-    # 'stormFrequency_mean': 'freq' # add this back in later
+    # 'era5_pressure': 'mslp',
+    # 'stormFrequency_mean': 'freq', # add this back in later
     # 'slope': 'slope',
+    # 'landingPressure': 'mslp'
     # 'totalPrec_total': 'precip',
     # 'landingWindMaxLocal2': 'wind'
     }
@@ -76,12 +88,39 @@ regressors = [value for value in regressor_rename.values()]
 eventcol = 'stormName'
 trainratio = 0.6
 bootstrap = True
-df = pd.read_csv(infile).rename(columns=regressor_rename)
+df = pd.read_csv(infile)
+
+# %%
+if VISUALS:
+    def kmph_to_mps(x):
+            return x * 1000 / 3600
+
+    scatter_kw = {'marker': 'o', 's': .5, 'alpha': 0.5, 'color':'k'}
+    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+    axs[0].scatter(df['era5_wind'], df['landingWindMaxLocal2'], **scatter_kw)
+    axs[1].scatter(df['era5_wind'], df['landingWindMaxLocal2'].apply(kmph_to_mps), **scatter_kw)
+    for ax in axs:
+        ax.set_xlabel('ERA5 wind speed (m/s)')
+    axs[0].set_ylabel('Landing wind speed (km/h)')
+    axs[1].set_ylabel('Landing wind speed (m/s)')
+
+    fig.suptitle('Wind speed comparison')
+
+    fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+    ax.scatter(df['era5_precip'], df['totalPrec_total'], **scatter_kw)
+    ax.set_xlabel('ERA5 precipitation (mm)')
+    ax.set_ylabel('Total precipitation (mm)')
+
+# %%
+df = df.rename(columns=regressor_rename)
 events = list(set(df[eventcol]))
 ntrain = int(len(events) * trainratio)
 
+# %% ---- EDA ----
+if VISUALS:
+    sns.pairplot(df, x_vars=regressors, y_vars=response, hue='stormYear', kind='scatter')
+
 # %% Augment data
-augment = False
 if augment:
   n = len(df)
   bins = np.linspace(0, .9, 10)
@@ -101,7 +140,7 @@ if augment:
       else:
           return group.sample(target_size, replace=True)
 
-  df = df.groupby('bin', group_keys=False).apply(lambda x: sample_bin(x, int(binsize * x['weight'].iloc[0])))
+  df = df.groupby('bin', group_keys=False).apply(lambda x: sample_bin(x, int(binsize * (1 + x['weight']).iloc[0])))
 
 # %% ----Train model eventwise OOB---- 
 # results = df[['landing', 'intensity']].rename(columns={'intensity': 'y'})
@@ -123,7 +162,7 @@ for i in range(100):
   X_test, y_test = df_test[regressors], df_test[response]
 
   # ensemble model
-  model = MangroveDamageModel(scaling=scaling)
+  model = MangroveDamageModel(scaling=SCALING, loss=LOSS)
   model.fit(X_train, y_train)
   y_fit = model.predict(X_train)
   y_pred = model.predict(X_test)
@@ -184,7 +223,7 @@ ax.legend(loc='upper left')
 ax.set_title('Predictions vs observations')
 
 ax = axs[3]
-ax.hist(observations, **hist_kwargs)
+ax.hist(model.transformer.transform(observations), **hist_kwargs)
 ax.set_title("Distribution of observations")
 
 fig.suptitle('XGBoost and linear ensemble model', y=1.05)

@@ -1,17 +1,19 @@
 # %%
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, QuantileRegressor
+from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 from sklearn.base import BaseEstimator
+
 
   
 class MangroveDamageModel(BaseEstimator):
     """Model to predict mangrove damage using ensemble of XGBoost and Linear Regression"""
-    def __init__(self, scaling=True):
+    def __init__(self, scaling=True, loss='reg:squarederror'):
        # functions
        self.scaling = scaling
-       self.base = XGBRegressor(n_estimators=15)
+       self.base = XGBRegressor(n_estimators=15, objective=loss)
        self.linear = LinearRegression()
        self.scaler = StandardScaler()
        self.transformer = Transformer()

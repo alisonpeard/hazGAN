@@ -1,7 +1,7 @@
 project: hazGAN
 program: train.py
 method: random
-name: precipitation
+name: compoundmetrics
 metric:
   goal: minimize
   name: compound_metric

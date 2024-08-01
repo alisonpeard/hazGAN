@@ -101,13 +101,27 @@ damages_train = get_damages(train_month, ['era5'])
 # %% ---- Plot mangrove damage predictions for random storm ----
 heatmap_kwargs = {'cmap': 'YlOrRd', 'cbar_kwargs': {'label': 'Mangrove damage (%area)'}}    
 
-fig, axs = plt.subplots(1, 2, figsize=(15, 5))
 i = np.random.random_integers(0, damages_sample.sizes['sample']-1)
-damages_sample.isel(sample=i).hazGAN_damage.plot(ax=axs[0], **heatmap_kwargs)
-axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ{i})')
-
 j = np.random.random_integers(0, damages_train.sizes['sample']-1)
+
+fig, axes = plt.subplots(3, 2, figsize=(15, 15))
+
+axs = axes[0, :]
+damages_sample.isel(sample=i, channel=0).hazGAN.plot(ax=axs[0], cmap="YlOrRd")
+damages_train.isel(sample=j, channel=0).era5.plot(ax=axs[1], **heatmap_kwargs)
+axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ{i})')
+axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ{j})')
+
+axs = axes[1, :]
+damages_sample.isel(sample=i, channel=1).hazGAN.plot(ax=axs[0], cmap="YlOrRd")
+damages_train.isel(sample=j, channel=1).era5.plot(ax=axs[1], **heatmap_kwargs)
+axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ{i})')
+axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ{j})')
+
+axs = axes[2, :]
+damages_sample.isel(sample=i).hazGAN_damage.plot.contourf(ax=axs[0], **heatmap_kwargs)
 damages_train.isel(sample=j).era5_damage.plot(ax=axs[1], **heatmap_kwargs)
+axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ{i})')
 axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ{j})')
 
 # %% ---- Step 2: Load mangrove data ----
