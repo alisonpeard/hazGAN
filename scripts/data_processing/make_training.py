@@ -194,9 +194,9 @@ assert highest_wind == highest_rp_wind, "Highest wind speed doesn't correspond t
 ds_outlier = ds.isel(time=ds.storm_rp.argmax())
 fig, axs = plt.subplots(1, 2, figsize=(10, 4))
 wind_footprint = ds_outlier.anomaly.isel(channel=0) + ds_outlier.medians.isel(channel=0)
-pressure_footprint = -(ds_outlier.anomaly.isel(channel=1) + ds_outlier.medians.isel(channel=1))
+precip_footprint = (ds_outlier.anomaly.isel(channel=1) + ds_outlier.medians.isel(channel=1))
 wind_footprint.plot(cmap='Spectral_r', ax=axs[0])
-pressure_footprint.plot(cmap='PuBu', ax=axs[1])
+precip_footprint.plot(cmap='PuBu', ax=axs[1])
 
 # %%
 fig, axs = plt.subplots(1, 2)
