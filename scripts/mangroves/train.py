@@ -24,11 +24,6 @@ regressor_rename = {
     'coastDist': 'dist_coast'
     }
 
-Objective candidates: reg:quantileerror
-Objective candidate: reg:squarederror
-Objective candidate: reg:pseudohubererror
-Objective candidate: reg:tweedie
-Objective candidate: reg:absoluteerror
 """
 #%%
 import os
@@ -42,8 +37,8 @@ import seaborn as sns
 from MangroveDamage import MangroveDamageModel
 
 SCALING = True
-LOSS = 'reg:squarederror'
-VISUALS = True
+IMDAA = False
+VISUALS = False
 AUGMENT = False # just shifts data, it can't find an underlying relationship that doesn't exist
 
 # %%
@@ -53,8 +48,7 @@ def convert_ibtracs_vars(df):
             return x * 1000 / 3600
     def mm_to_m(x):
         return x / 1000
-
-    df['andingWindMaxLocal2'] = df['landingWindMaxLocal2'].apply(kmph_to_mps)
+    df['landingWindMaxLocal2'] = df['landingWindMaxLocal2'].apply(kmph_to_mps)
     df['totalPrec_total'] = df['totalPrec_total'].apply(mm_to_m)
     return df
 
@@ -84,17 +78,18 @@ infile3 = os.path.join(indir_alison, 'era5_and_slope_0.csv')
 infile4 = os.path.join(indir_alison, 'data_with_imdaa.csv')
 
 
-infile = infile4
+infile = infile2
 response = 'intensity'
-imdaa_vars = ['imdaa_wind', 'imdaa_gust', 'imdaa_pressure', 'imdaa_precip']
 regressor_rename = {
-    # "era5_wind": "wind",
-    # "era5_precip": "precip",
+    # "imdaa_gust": "wind",
+    # "imdaa_precip": "precip",
     # 'elevation_mean': 'elevation',
-    # 'era5_pressure': 'mslp',
+    # 'era5_wind': 'wind',
+    # 'era5_precip': 'precip',
+    # 'era5_pressure': 'mslp'
     # 'stormFrequency_mean': 'freq', # add this back in later
     # 'slope': 'slope',
-    # 'landingPressure': 'mslp'
+    # # 'landingPressure': 'mslp'
     'totalPrec_total': 'precip',
     'landingWindMaxLocal2': 'wind'
     }
@@ -102,18 +97,18 @@ regressors = [value for value in regressor_rename.values()]
 
 # %% load and process data
 eventcol = 'stormName'
-trainratio = 0.6
+trainratio = 0.9
 bootstrap = True
 df = pd.read_csv(infile)
-df2 = pd.read_csv(infile0)
-df2['stormName'] = df2['stormName'].str.upper()
-#  %%
-df = pd.merge(df, df2,
-            how='inner',
-            left_on=['storm', 'lat', 'lon'],
-            right_on=['stormName', 'center_centerLat', 'center_centerLon']
-            )
-df['imdaa_wind']
+
+if IMDAA:
+    df2 = pd.read_csv(infile0)
+    df2['stormName'] = df2['stormName'].str.upper()
+    df = pd.merge(df, df2,
+                how='inner',
+                left_on=['storm', 'lat', 'lon'],
+                right_on=['stormName', 'center_centerLat', 'center_centerLon']
+                )
 
 # %%
 df = convert_ibtracs_vars(df)
@@ -121,11 +116,26 @@ df = df.rename(columns=regressor_rename)
 events = list(set(df[eventcol]))
 ntrain = int(len(events) * trainratio)
 
+median = np.median(df[response])
+df[response] = (df[response] > median).astype(int) # binary problem
+
 # %% ---- EDA ----
 if VISUALS:
-    hue = 'center_centerLat'
+    from sklearn.linear_model import LinearRegression
+
+    imdaa_vars = ['imdaa_wind', 'imdaa_gust', 'imdaa_pressure', 'imdaa_precip']
+    df['distEquator'] = np.abs(df['center_centerLat'])
+    hue ='continent'
     sns.pairplot(df, x_vars=regressors, y_vars=response, hue=hue, kind='scatter')
-    sns.pairplot(df, x_vars=imdaa_vars, y_vars=response, hue=hue, kind='scatter')
+    if IMDAA:
+        sns.pairplot(df, x_vars=imdaa_vars, y_vars=response, hue=hue, kind='scatter')
+
+    lm = LinearRegression()
+    df_sub = df#[df['continent'] =='Africa']
+    sns.pairplot(df_sub, x_vars=regressors, y_vars=response, hue=hue, kind='scatter')
+    lm.fit(df_sub[['wind']], df_sub[response])
+    print(lm.coef_)
+    df.columns
 
 # %% Augment data
 if AUGMENT:
@@ -169,7 +179,7 @@ for i in range(100):
   X_test, y_test = df_test[regressors], df_test[response]
 
   # ensemble model
-  model = MangroveDamageModel(scaling=SCALING, loss=LOSS)
+  model = MangroveDamageModel(scaling=SCALING)
   model.fit(X_train, y_train)
   y_fit = model.predict(X_train)
   y_pred = model.predict(X_test)
@@ -230,7 +240,7 @@ ax.legend(loc='upper left')
 ax.set_title('Predictions vs observations')
 
 ax = axs[3]
-ax.hist(model.transformer.transform(observations), **hist_kwargs)
+ax.hist(observations, **hist_kwargs)
 ax.set_title("Distribution of observations")
 
 fig.suptitle('XGBoost and linear ensemble model', y=1.05)
@@ -255,8 +265,8 @@ with open(modelpath, "wb") as f:
 
 # %%
 median = np.median(observations)
-y_binary = np.where(observations > median, 1, 0)
-predictions_binary = np.where(predictions > median, 1, 0)
+y_binary = np.where(observations > .5, 1, 0)
+predictions_binary = np.where(predictions > .5, 1, 0)
 
 confusion_matrix = pd.crosstab(y_binary, predictions_binary, rownames=['Actual'], colnames=['Predicted'])
 print(confusion_matrix)
@@ -271,5 +281,8 @@ precision = TP / (TP + FP)
 recall = TP / (TP + FN)
 csi = TP / (TP + FN + FP)
 
+print(f'Fitted scores: rmse:  {rmse_fitted:.4f}, R²: {rsq_fitted:.4f}')
+print(f'Averaged OOB scores: RMSE: {rmse:.4f}, R²: {rsq:.4f}')
 print(f'Precision: {precision:.4f}, Recall: {recall:.4f}, CSI: {csi:.4f}')
+# print(model.base.coef_)
 # %%

@@ -124,6 +124,25 @@ damages_train.isel(sample=j).era5_damage.plot(ax=axs[1], **heatmap_kwargs)
 axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ{i})')
 axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ{j})')
 
+# %% PAUSE HERE UNTIL FIGURES LOOK RIGHT
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # %% ---- Step 2: Load mangrove data ----
 import cartopy.crs as ccrs
 import geopandas as gpd 

@@ -1,7 +1,7 @@
 # %%
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression, QuantileRegressor
+from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 from sklearn.base import BaseEstimator
@@ -9,11 +9,13 @@ from sklearn.base import BaseEstimator
 
 class MangroveDamageModel(BaseEstimator):
     """Model to predict mangrove damage using ensemble of XGBoost and Linear Regression"""
-    def __init__(self, scaling=True, loss='reg:squarederror'):
+    def __init__(self, scaling=True):
        # functions
        self.scaling = scaling
-       self.base = XGBRegressor(n_estimators=15, objective=loss)
-       self.linear = LinearRegression()
+    #    self.base = XGBRegressor(n_estimators=15)
+    #    self.linear = LinearRegression()
+       self.base = LogisticRegression(fit_intercept=True)
+       self.linear = IdentityModel()
        self.scaler = StandardScaler()
        self.transformer = Transformer()
        self.fitted = False
@@ -26,10 +28,10 @@ class MangroveDamageModel(BaseEstimator):
         X = self.transformer.transform(X)
         if self.scaling:
             X = self.scaler.fit_transform(X)
-        y = self.transformer.transform(y)
+        # y = self.transformer.transform(y)
         # fit models
         self.base.fit(X, y)
-        X_base = self.base.predict(X).reshape(-1, 1)
+        X_base = self.base.predict_proba(X)[:,0] # .reshape(-1, 1)
         self.linear.fit(X_base, y)
         self.fitted = True
     
@@ -41,9 +43,9 @@ class MangroveDamageModel(BaseEstimator):
         X = self.transformer.transform(X)
         if self.scaling:
             X = self.scaler.transform(X)
-        X_base = self.base.predict(X).reshape(-1, 1)
+        X_base = self.base.predict_proba(X)[:,0] # .reshape(-1, 1)
         y_pred = self.linear.predict(X_base)
-        y_pred = self.transformer.inverse_transform(y_pred)
+        # y_pred = self.transformer.inverse_transform(y_pred)
         return y_pred
 
     def set_metrics(self, metrics:dict):
@@ -83,3 +85,4 @@ class IdentityModel(BaseEstimator):
 
     def predict(self, X):
         return X.squeeze()
+
