@@ -9,11 +9,12 @@ import matplotlib.pyplot as plt
 from calendar import month_name as month
 
 plt.rcParams['font.family'] = 'serif'
+
 # %%
 channels = ["u10", "tp"] # 'mslp'
 res = (22, 18)
 wd = "/Users/alison/Documents/DPhil/paper1.nosync"
-datadir = os.path.join(wd, "training", f'res_{res[1]}x{res[0]}')
+datadir = os.path.join(wd, "training", f'{res[1]}x{res[0]}')
 
 coords = xr.open_dataset(os.path.join(datadir, 'data_1950_2022.nc'))
 coords = coords['grid'].to_dataframe().reset_index()
@@ -24,6 +25,7 @@ df = df.merge(coords, on="grid")
 df.columns = [col.replace(".", "_") for col in df.columns]
 df = df.rename(columns={"msl": "mslp"})
 df['day_of_storm'] = df.groupby('storm')['time_u10'].rank('dense')
+
 # %% add event sizes
 events = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))[["storm", "storm.size"]].groupby("storm").mean()
 events = events.to_dict()["storm.size"]
@@ -139,6 +141,7 @@ ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], U),
                  attrs={'CRS': 'EPSG:4326', 'u10': '10m wind speed', 'tp': 'total precipitation'})
 
 ds.to_netcdf(os.path.join(datadir, "data.nc"))
+
 # %% day of storm
 import matplotlib as mpl
 cmap = mpl.cm.YlOrRd
@@ -160,22 +163,25 @@ ticks = np.arange(0, 12, 1).tolist()
 norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
 ds_t.plot(cmap=cmap, norm=norm, ax=ax, cbar_kwargs={'ticks': ticks})
 ax.set_title(f"Day of storm {t}")
+
 # %% view netcdf file
+import warnings
+warnings.warn("Change ds_t to (-ds_t) if looking at MSLP")
 t = np.random.uniform(0, T, 1).astype(int)[0]
 ds_t = ds.isel(time=t)
 fig, axs = plt.subplots(1, 2, figsize=(10, 3))
 ds_t.isel(channel=0).anomaly.plot.contourf(cmap='Spectral_r', ax=axs[0], levels=20)
-(-ds_t).isel(channel=1).anomaly.plot.contourf(cmap='PuBu', ax=axs[1], levels=15)
+ds_t.isel(channel=1).anomaly.plot.contourf(cmap='PuBu', ax=axs[1], levels=15)
 fig.suptitle("Anomaly")
 
 fig, axs = plt.subplots(1, 2, figsize=(10, 3))
 ds_t.isel(channel=0).medians.plot.contourf(cmap='Spectral_r', ax=axs[0], levels=20)
-(-ds_t).isel(channel=1).medians.plot.contourf(cmap='PuBu', ax=axs[1], levels=15)
+ds_t.isel(channel=1).medians.plot.contourf(cmap='PuBu', ax=axs[1], levels=15)
 fig.suptitle(f"Median")
 
 fig, axs = plt.subplots(1, 2, figsize=(10, 3))
 (ds_t.isel(channel=0).anomaly + ds_t.isel(channel=0).medians).plot.contourf(cmap='Spectral_r', ax=axs[0], levels=20)
-(-ds_t.isel(channel=1).anomaly - ds_t.isel(channel=1).medians).plot.contourf(cmap='PuBu', ax=axs[1], levels=15)
+(ds_t.isel(channel=1).anomaly - ds_t.isel(channel=1).medians).plot.contourf(cmap='PuBu', ax=axs[1], levels=15)
 fig.suptitle('Anomaly + Median')
 # ds.close()
 
@@ -191,6 +197,7 @@ wind_footprint = ds_outlier.anomaly.isel(channel=0) + ds_outlier.medians.isel(ch
 pressure_footprint = -(ds_outlier.anomaly.isel(channel=1) + ds_outlier.medians.isel(channel=1))
 wind_footprint.plot(cmap='Spectral_r', ax=axs[0])
 pressure_footprint.plot(cmap='PuBu', ax=axs[1])
+
 # %%
 fig, axs = plt.subplots(1, 2)
 for i, ax in enumerate(axs):
