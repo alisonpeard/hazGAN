@@ -12,8 +12,6 @@ class MangroveDamageModel(BaseEstimator):
     def __init__(self, scaling=True):
        # functions
        self.scaling = scaling
-    #    self.base = XGBRegressor(n_estimators=15)
-    #    self.linear = LinearRegression()
        self.base = LogisticRegression(fit_intercept=True)
        self.linear = IdentityModel()
        self.scaler = StandardScaler()
@@ -28,10 +26,9 @@ class MangroveDamageModel(BaseEstimator):
         X = self.transformer.transform(X)
         if self.scaling:
             X = self.scaler.fit_transform(X)
-        # y = self.transformer.transform(y)
         # fit models
         self.base.fit(X, y)
-        X_base = self.base.predict_proba(X)[:,0] # .reshape(-1, 1)
+        X_base = self.base.predict_proba(X)[:,1]
         self.linear.fit(X_base, y)
         self.fitted = True
     
@@ -43,9 +40,8 @@ class MangroveDamageModel(BaseEstimator):
         X = self.transformer.transform(X)
         if self.scaling:
             X = self.scaler.transform(X)
-        X_base = self.base.predict_proba(X)[:,0] # .reshape(-1, 1)
+        X_base = self.base.predict_proba(X)[:,1]
         y_pred = self.linear.predict(X_base)
-        # y_pred = self.transformer.inverse_transform(y_pred)
         return y_pred
 
     def set_metrics(self, metrics:dict):

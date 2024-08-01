@@ -37,9 +37,8 @@ import seaborn as sns
 from MangroveDamage import MangroveDamageModel
 
 SCALING = True
-IMDAA = False
 VISUALS = False
-AUGMENT = False # just shifts data, it can't find an underlying relationship that doesn't exist
+THRESHOLD = 0.2 # mangroves being 10% damaged or more
 
 # %%
 def convert_ibtracs_vars(df):
@@ -78,7 +77,7 @@ infile3 = os.path.join(indir_alison, 'era5_and_slope_0.csv')
 infile4 = os.path.join(indir_alison, 'data_with_imdaa.csv')
 
 
-infile = infile4
+infile = infile2
 response = 'intensity'
 regressor_rename = {
     # "imdaa_gust": "wind",
@@ -98,17 +97,8 @@ regressors = [value for value in regressor_rename.values()]
 # %% load and process data
 eventcol = 'stormName'
 trainratio = 0.9
-bootstrap = True
+bootstrap = False
 df = pd.read_csv(infile)
-
-if IMDAA:
-    df2 = pd.read_csv(infile0)
-    df2['stormName'] = df2['stormName'].str.upper()
-    df = pd.merge(df, df2,
-                how='inner',
-                left_on=['storm', 'lat', 'lon'],
-                right_on=['stormName', 'center_centerLat', 'center_centerLon']
-                )
 
 # %%
 df = convert_ibtracs_vars(df)
@@ -117,8 +107,7 @@ df = df.dropna(subset=regressors + [response])
 events = list(set(df[eventcol]))
 ntrain = int(len(events) * trainratio)
 
-median = np.median(df[response]) # mangroves that are over 10% damaged
-df[response] = (df[response] > median).astype(int) # binary problem
+df[response] = (df[response] >= THRESHOLD).astype(int) # binary problem
 df[response].value_counts()
 
 # %% ----Train model eventwise OOB---- 
@@ -129,6 +118,8 @@ rmses = []
 rsqs = []
 rmse_fitted = []
 rsq_fitted = []
+winds = []
+precips = []
 
 # loop through events
 for i in range(100):
@@ -164,11 +155,15 @@ for i in range(100):
   rsq_fitted.append(rsq_fit)
   rmses.append(rmse)
   rsqs.append(rsq)
+  winds.append(df_test['wind'])
+  precips.append(df_test['precip'])
   
 
 # gather results
 observations = np.concatenate(observations)
 predictions = np.concatenate(predictions)
+winds = np.concatenate(winds)
+precips = np.concatenate(precips)
 rsqs = [rsq for rsq in rsqs if not np.isnan(rsq)]
 mses = [rmse for rmse in rmses if not np.isnan(rmse)]
 rsq_fitted = [rsq for rsq in rsq_fitted if not np.isnan(rsq)]
@@ -194,16 +189,22 @@ ax.set_ylabel('Frequency')
 ax.set_title(f"Pseudo-R² (clipped at {q:.0%})")
 
 ax = axs[2]
-ax.scatter(observations, predictions, color='k', s=.1, label='Predictions')
-ax.plot(observations, observations, color='r', linewidth=.5, label='Observations')
-ax.set_xlabel('Observed')
-ax.set_ylabel('Predicted')
-ax.legend(loc='upper left')
+indx = np.argsort(winds)
+ax.scatter(winds[indx], observations[indx], color='k', s=.1, label='Observations')
+ax.scatter(winds[indx], predictions[indx], color='r', s=.1, label='Predictions')
+ax.set_ylabel('Greater than 20\% damage')
+ax.set_xlabel('Wind speed (m/s)')
+ax.legend(loc='upper left', fontsize='small')
 ax.set_title('Predictions vs observations')
 
 ax = axs[3]
-ax.hist(observations, **hist_kwargs)
-ax.set_title("Distribution of observations")
+indx = np.argsort(winds)
+ax.scatter(precips[indx], observations[indx], color='k', s=.1, label='Observations')
+ax.scatter(precips[indx], predictions[indx], color='r', s=.1, label='Predictions')
+ax.set_ylabel('Greater than 20\% damage')
+ax.set_xlabel('Cumulative precipitation (m)')
+ax.legend(loc='upper left', fontsize='small')
+ax.set_title('Predictions vs observations')
 
 fig.suptitle('XGBoost and linear ensemble model', y=1.05)
 
@@ -226,7 +227,6 @@ with open(modelpath, "wb") as f:
     dump(model, f, protocol=5)
 
 # %%
-median = np.median(observations)
 y_binary = np.where(observations > .5, 1, 0)
 predictions_binary = np.where(predictions > .5, 1, 0)
 
@@ -246,5 +246,5 @@ csi = TP / (TP + FN + FP)
 print(f'Fitted scores: rmse:  {rmse_fitted:.4f}, R²: {rsq_fitted:.4f}')
 print(f'Averaged OOB scores: RMSE: {rmse:.4f}, R²: {rsq:.4f}')
 print(f'Precision: {precision:.4f}, Recall: {recall:.4f}, CSI: {csi:.4f}')
-# print(model.base.coef_)
+print(model.base.coef_)
 # %%

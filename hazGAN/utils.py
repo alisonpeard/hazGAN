@@ -68,4 +68,3 @@ def gaussian_blur(img, kernel_size=11, sigma=5):
         img, gaussian_kernel, [1, 1, 1, 1], padding="SAME", data_format="NHWC"
     )
 
-
