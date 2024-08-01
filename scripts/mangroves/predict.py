@@ -93,9 +93,9 @@ damages_train = get_damages(train_month, ['era5'])
 #     damages = X[f'mangrove_damage'].to_xarray()
 #     return damages.to_dataset()
 
-# damages_dependent = predict_damages(model, samples_month, 'dependent')
-# damages_independent = predict_damages(model, samples_month, 'independent')
-# damages_hazGAN = predict_damages(model, samples_month, 'anomaly')
+# damages_sample = predict_damages(model, samples_month, 'dependent')
+# damages_sample = predict_damages(model, samples_month, 'independent')
+# damages_sample = predict_damages(model, samples_month, 'anomaly')
 # damages_train = predict_damages(model, train_month, 'anomaly')
 
 # %% ---- Plot mangrove damage predictions for random storm ----
@@ -135,7 +135,7 @@ def intersect_mangroves_with_damages(mangroves: gpd.GeoDataFrame,
                                      plot=True) -> xr.Dataset:
     # calculate intersections
     mangroves = mangroves.to_crs(4326)
-    # damages = damages_hazGAN.copy()
+    # damages = damages_sample.copy()
     weightmap = xa.pixel_overlaps(damages, mangroves)
 
     # calculate overlaps, NOTE: using EPSG:4326 for now
@@ -169,39 +169,41 @@ mangroves_gridded = intersect_mangroves_with_damages(mangroves, damages_sample)
 mangroves_gridded.area.plot(cmap="Greens", cbar_kwargs={'label': 'Mangrove damage [km²]'})
 
 # %% ---- Calculate mangrove damage area and percentage ----
-damages_hazGAN['mangrove_damage_area'] = mangroves_gridded.area * damages_hazGAN.mangrove_damage
-damages_hazGAN['mangrove_damage_percent'] = damages_hazGAN.mangrove_damage.where(mangroves_gridded.area > 0)
+damages_sample['hazGAN_damagearea'] = mangroves_gridded.area * damages_sample.hazGAN_damage
+damages_sample['hazGAN_damagepercent'] = damages_sample.hazGAN_damage.where(mangroves_gridded.area > 0)
 
-damages_dependent['mangrove_damage_area'] = mangroves_gridded.area * damages_dependent.mangrove_damage
-damages_dependent['mangrove_damage_percent'] = damages_dependent.mangrove_damage.where(mangroves_gridded.area > 0)
+damages_sample['dependent_damagearea'] = mangroves_gridded.area * damages_sample.dependent_damage
+damages_sample['dependent_damagepercent'] = damages_sample.dependent_damage.where(mangroves_gridded.area > 0)
 
-damages_independent['mangrove_damage_area'] = mangroves_gridded.area * damages_independent.mangrove_damage
-damages_independent['mangrove_damage_percent'] = damages_independent.mangrove_damage.where(mangroves_gridded.area > 0)
+damages_sample['independent_damagearea'] = mangroves_gridded.area * damages_sample.independent_damage
+damages_sample['independent_damagepercent'] = damages_sample.independent_damage.where(mangroves_gridded.area > 0)
 
-damages_train['mangrove_damage_area'] = mangroves_gridded.area * damages_train.mangrove_damage
-damages_train['mangrove_damage_percent'] = damages_train.mangrove_damage.where(mangroves_gridded.area > 0)
+damages_train['era5_damagearea'] = mangroves_gridded.area * damages_train.era5_damage
+damages_train['era5_damagepercent'] = damages_train.era5_damage.where(mangroves_gridded.area > 0)
 # %% Turn contourf on and off
 import cartopy.crs as ccrs
 from cartopy import feature
 from matplotlib.ticker import PercentFormatter
-i = np.random.randint(0, 1000)
 
 # i = 969
-damages = damages_dependent
+damages = damages_sample
+i = np.random.randint(0, len(damages_sample.sample))
+
+
 fig, axs = plt.subplots(2, 2, figsize=(12, 10), subplot_kw={'projection': ccrs.PlateCarree()})
 mangroves_gridded.area.plot(ax=axs[0, 0], cmap="Greens", cbar_kwargs={'label': 'Mangrove area [km²]'})
-damages.isel(sample=i).mangrove_damage.plot.contourf(ax=axs[0, 1],
+damages.isel(sample=i).hazGAN_damage.plot.contourf(ax=axs[0, 1],
                                                    cmap='YlOrRd',
                                                    cbar_kwargs={'label': 'Mangrove potential damage',
                                                                 'format': PercentFormatter(1, 0)}
 )
-damages.isel(sample=i).mangrove_damage_percent.plot(ax=axs[1, 0],
+damages.isel(sample=i).hazGAN_damagepercent.plot(ax=axs[1, 0],
                                                    cmap='YlOrRd',
                                                    cbar_kwargs={'label': 'Mangrove potential damage',
                                                                 'format': PercentFormatter(1, 0)}
                                                                 )
 
-damages.isel(sample=i).mangrove_damage_area.plot(ax=axs[1, 1],
+damages.isel(sample=i).hazGAN_damagearea.plot(ax=axs[1, 1],
                                                         cmap='YlOrRd',
                                                         cbar_kwargs={'label': 'Mangrove damaged [km²]'}
                                                         )
@@ -209,7 +211,7 @@ damages.isel(sample=i).mangrove_damage_area.plot(ax=axs[1, 1],
 axs[0, 0].set_title('Mangrove area')
 axs[0, 1].set_title('Mangrove potential damage')
 axs[1, 0].set_title('Mangrove percentage damage')
-axs[1, 1].set_title('Mangrove damaged')
+axs[1, 1].set_title('Mangrove area damaged')
 
 for ax in axs.ravel():
     ax.add_feature(feature.COASTLINE)
@@ -222,7 +224,6 @@ fig.suptitle('Sample storm damage to mangroves')
 # %% ---- Calculate return periods and EADs ----
 from sklearn.metrics import auc
 from hazGAN import occurrence_rate
-
 
 def auc_ufunc(x, y):
     x = sorted(x)
@@ -247,18 +248,19 @@ def calculate_eads(var, damages: xr.Dataset, yearly_rate: int) -> xr.Dataset:
         vectorize=True
         )
     
-    return damages
+    return damages[var]
 
-damages_dependent = calculate_eads('mangrove_damage_area', damages_dependent, occurrence_rate)
-damages_independent = calculate_eads('mangrove_damage_area', damages_independent, occurrence_rate)
-damages_hazGAN = calculate_eads('mangrove_damage_area', damages_hazGAN, occurrence_rate)
-damages_train = calculate_eads('mangrove_damage_area', damages_train, occurrence_rate)
+calculate_eads('hazGAN_damagearea', damages_sample, occurrence_rate)
+# damages_sample = calculate_eads('hazGAN_damagearea', damages_sample, occurrence_rate)
+# damages_sample = calculate_eads('mangrove_damagearea', damages_sample, occurrence_rate)
+# damages_sample = calculate_eads('mangrove_damagearea', damages_sample, occurrence_rate)
+# damages_train = calculate_eads('era5_damagearea', damages_train, occurrence_rate)
 # %% ---- Plot EADs ----
 fig, axs = plt.subplots(1, 4, figsize=(15, 3.5), subplot_kw={'projection': ccrs.PlateCarree()})
 
-damages_dependent.expected_annual_damages.plot(ax=axs[0], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
-damages_independent.expected_annual_damages.plot(ax=axs[1], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
-damages_hazGAN.expected_annual_damages.plot(ax=axs[2], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
+damages_sample.expected_annual_damages.plot(ax=axs[0], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
+damages_sample.expected_annual_damages.plot(ax=axs[1], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
+damages_sample.expected_annual_damages.plot(ax=axs[2], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
 damages_train.expected_annual_damages.plot(ax=axs[3], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
 
 axs[0].set_title('All dependent')
@@ -278,9 +280,9 @@ def calculate_total_return_periods(damages: xr.Dataset,
     totals = totals.sortby('return_period')
     return totals
 
-totals_independent = calculate_total_return_periods(damages_independent, occurrence_rate)
-totals_dependent = calculate_total_return_periods(damages_dependent, occurrence_rate)
-totals_hazGAN = calculate_total_return_periods(damages_hazGAN, occurrence_rate)
+totals_independent = calculate_total_return_periods(damages_sample, occurrence_rate)
+totals_dependent = calculate_total_return_periods(damages_sample, occurrence_rate)
+totals_hazGAN = calculate_total_return_periods(damages_sample, occurrence_rate)
 totals_data = calculate_total_return_periods(damages_train, occurrence_rate)
 
 # %%

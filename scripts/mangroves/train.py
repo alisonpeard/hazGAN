@@ -35,7 +35,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from MangroveDamage import MangroveDamageModel
 
-visuals = False
 scaling = True
 # %%
 def rsquared(y, yhat):
@@ -46,8 +45,8 @@ def rsquared(y, yhat):
     sse = sum((y - yhat)**2)     # sum squared residuals
     sst = sum((y - ymean)**2)    # total sum of squares
     ssr = sum((yhat - ymean)**2) # sum of squares of regression
-    return ssr / (ssr + sse) # Krueck (2020)
-    # return ssr / sst # https://doi.org/10.1016/j.neunet.2009.07.002
+    # return ssr / (ssr + sse) # Krueck (2020)
+    return ssr / sst # https://doi.org/10.1016/j.neunet.2009.07.002
 
 
 def root_mean_squared_error(y, yhat):
@@ -66,7 +65,7 @@ response = 'intensity'
 regressor_rename = {
     "era5_wind": "wind",
     "era5_precip": "precip",
-    'stormFrequency_mean': 'freq',
+    # 'stormFrequency_mean': 'freq' # add this back in later
     # 'slope': 'slope',
     # 'totalPrec_total': 'precip',
     # 'landingWindMaxLocal2': 'wind'
@@ -209,11 +208,11 @@ with open(modelpath, "wb") as f:
     dump(model, f, protocol=5)
 
 # %%
-median = np.median(results['y'])
-results['y_binary'] = np.where(results['y'] > median, 1, 0)
-results['predictions_binary'] = np.where(results['predictions'] > median, 1, 0)
+median = np.median(observations)
+y_binary = np.where(observations > median, 1, 0)
+predictions_binary = np.where(predictions > median, 1, 0)
 
-confusion_matrix = pd.crosstab(results['y_binary'], results['predictions_binary'], rownames=['Actual'], colnames=['Predicted'])
+confusion_matrix = pd.crosstab(y_binary, predictions_binary, rownames=['Actual'], colnames=['Predicted'])
 print(confusion_matrix)
 #%%
 # calculate precision, recall, and csi
