@@ -24,7 +24,7 @@ regressor_rename = {
     'coastDist': 'dist_coast'
     }
 
-Objective candidate: reg:quantileerror
+Objective candidates: reg:quantileerror
 Objective candidate: reg:squarederror
 Objective candidate: reg:pseudohubererror
 Objective candidate: reg:tweedie
@@ -43,9 +43,21 @@ from MangroveDamage import MangroveDamageModel
 
 SCALING = True
 LOSS = 'reg:squarederror'
-VISUALS = False
+VISUALS = True
 AUGMENT = False # just shifts data, it can't find an underlying relationship that doesn't exist
+
 # %%
+def convert_ibtracs_vars(df):
+    df = df.copy()
+    def kmph_to_mps(x):
+            return x * 1000 / 3600
+    def mm_to_m(x):
+        return x / 1000
+
+    df['andingWindMaxLocal2'] = df['landingWindMaxLocal2'].apply(kmph_to_mps)
+    df['totalPrec_total'] = df['totalPrec_total'].apply(mm_to_m)
+    return df
+
 def rsquared(y, yhat):
     """Psuedo R^2"""
     ymean = np.mean(y)
@@ -65,22 +77,26 @@ def root_mean_squared_error(y, yhat):
 bob_crs = 24346
 indir_alison = '/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v3__mine'
 indir_yu = '/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v2'
+infile0 = os.path.join(indir_yu, 'result/model/input_fixedCNTRY_rmOutlier.csv')
 infile1 = os.path.join(indir_alison, 'data_with_slopes.csv')
 infile2 = os.path.join(indir_alison, 'final.csv')
 infile3 = os.path.join(indir_alison, 'era5_and_slope_0.csv')
-infile0 = os.path.join(indir_yu, 'result/model/input_fixedCNTRY_rmOutlier.csv')
+infile4 = os.path.join(indir_alison, 'data_with_imdaa.csv')
 
-infile = infile2
+
+infile = infile4
 response = 'intensity'
+imdaa_vars = ['imdaa_wind', 'imdaa_gust', 'imdaa_pressure', 'imdaa_precip']
 regressor_rename = {
-    "era5_wind": "wind",
-    "era5_precip": "precip",
+    # "era5_wind": "wind",
+    # "era5_precip": "precip",
+    # 'elevation_mean': 'elevation',
     # 'era5_pressure': 'mslp',
     # 'stormFrequency_mean': 'freq', # add this back in later
     # 'slope': 'slope',
     # 'landingPressure': 'mslp'
-    # 'totalPrec_total': 'precip',
-    # 'landingWindMaxLocal2': 'wind'
+    'totalPrec_total': 'precip',
+    'landingWindMaxLocal2': 'wind'
     }
 regressors = [value for value in regressor_rename.values()]
 
@@ -89,39 +105,30 @@ eventcol = 'stormName'
 trainratio = 0.6
 bootstrap = True
 df = pd.read_csv(infile)
+df2 = pd.read_csv(infile0)
+df2['stormName'] = df2['stormName'].str.upper()
+#  %%
+df = pd.merge(df, df2,
+            how='inner',
+            left_on=['storm', 'lat', 'lon'],
+            right_on=['stormName', 'center_centerLat', 'center_centerLon']
+            )
+df['imdaa_wind']
 
 # %%
-if VISUALS:
-    def kmph_to_mps(x):
-            return x * 1000 / 3600
-
-    scatter_kw = {'marker': 'o', 's': .5, 'alpha': 0.5, 'color':'k'}
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-    axs[0].scatter(df['era5_wind'], df['landingWindMaxLocal2'], **scatter_kw)
-    axs[1].scatter(df['era5_wind'], df['landingWindMaxLocal2'].apply(kmph_to_mps), **scatter_kw)
-    for ax in axs:
-        ax.set_xlabel('ERA5 wind speed (m/s)')
-    axs[0].set_ylabel('Landing wind speed (km/h)')
-    axs[1].set_ylabel('Landing wind speed (m/s)')
-
-    fig.suptitle('Wind speed comparison')
-
-    fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-    ax.scatter(df['era5_precip'], df['totalPrec_total'], **scatter_kw)
-    ax.set_xlabel('ERA5 precipitation (mm)')
-    ax.set_ylabel('Total precipitation (mm)')
-
-# %%
+df = convert_ibtracs_vars(df)
 df = df.rename(columns=regressor_rename)
 events = list(set(df[eventcol]))
 ntrain = int(len(events) * trainratio)
 
 # %% ---- EDA ----
 if VISUALS:
-    sns.pairplot(df, x_vars=regressors, y_vars=response, hue='stormYear', kind='scatter')
+    hue = 'center_centerLat'
+    sns.pairplot(df, x_vars=regressors, y_vars=response, hue=hue, kind='scatter')
+    sns.pairplot(df, x_vars=imdaa_vars, y_vars=response, hue=hue, kind='scatter')
 
 # %% Augment data
-if augment:
+if AUGMENT:
   n = len(df)
   bins = np.linspace(0, .9, 10)
   counts, bins = np.histogram(df['intensity'], bins=bins, density=False)

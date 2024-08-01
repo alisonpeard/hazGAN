@@ -7,7 +7,6 @@ from xgboost import XGBRegressor
 from sklearn.base import BaseEstimator
 
 
-  
 class MangroveDamageModel(BaseEstimator):
     """Model to predict mangrove damage using ensemble of XGBoost and Linear Regression"""
     def __init__(self, scaling=True, loss='reg:squarederror'):
@@ -73,3 +72,14 @@ class Transformer(object):
     def inverse_transform(self, X):
         return 10 ** X
 
+
+class IdentityModel(BaseEstimator):
+    """Use to ignore base or linear model in ensemble."""
+    def __init__(self):
+        self.fitted = False
+
+    def fit(self, X, y):
+        self.fitted = True
+
+    def predict(self, X):
+        return X.squeeze()

@@ -109,17 +109,17 @@ fig, axes = plt.subplots(3, 2, figsize=(15, 15))
 axs = axes[0, :]
 damages_sample.isel(sample=i, channel=0).hazGAN.plot(ax=axs[0], cmap="YlOrRd")
 damages_train.isel(sample=j, channel=0).era5.plot(ax=axs[1], **heatmap_kwargs)
-axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ{i})')
-axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ{j})')
+axs[0].set_title(f'Wind speed [mps] (sample storm nᵒ{i})')
+axs[1].set_title(f'Wind speed [mps] (real storm nᵒ{j})')
 
 axs = axes[1, :]
 damages_sample.isel(sample=i, channel=1).hazGAN.plot(ax=axs[0], cmap="YlOrRd")
 damages_train.isel(sample=j, channel=1).era5.plot(ax=axs[1], **heatmap_kwargs)
-axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ{i})')
-axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ{j})')
+axs[0].set_title(f'Total precipitation [m] (sample storm nᵒ{i})')
+axs[1].set_title(f'Total precipitation [m] (real storm nᵒ{j})')
 
 axs = axes[2, :]
-damages_sample.isel(sample=i).hazGAN_damage.plot.contourf(ax=axs[0], **heatmap_kwargs)
+damages_sample.isel(sample=i).hazGAN_damage.plot(ax=axs[0], **heatmap_kwargs)
 damages_train.isel(sample=j).era5_damage.plot(ax=axs[1], **heatmap_kwargs)
 axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ{i})')
 axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ{j})')
