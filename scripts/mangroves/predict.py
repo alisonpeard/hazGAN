@@ -22,61 +22,93 @@ plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Garamond'] + plt.rcParams['font.serif']
 plt.style.use('bmh')
 
+global model
+
+def _damage(X):
+    X = X.reshape(1, -1)
+    return model.predict(X)
+
+def get_damages(
+    ds: xr.DataArray,
+    vars_: list,
+    first_dim='sample',
+    core_dim='channel',
+    other_dims=["lat", "lon"]
+    ) -> xr.DataArray:
+    """Calculate mangrove damages using a pretrained model."""
+    predictions = ds.copy()
+    for var in vars_:
+        predictions[f"{var}_damage"] = xr.apply_ufunc(
+            _damage,
+            ds[var],
+            input_core_dims=[[core_dim]],
+            vectorize=True,
+            output_dtypes=[float]
+        ).transpose(first_dim, *other_dims)
+    return predictions
+
+
 month = 7
-run = 'clean-sweep-3__forpublish' #'clean-sweep-3'
+run = 'vital-sweep-30__precipsota'
 yearly_rate = 18 # from R
 wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')
 
-warnings.warn("Need to add mangroves_with_slope.geojson and change agg func")
-
 # %% ---- Load model and samples ----
-modelpath = os.path.join(wd, 'results', 'mangroves', 'model__forpublish.pkl')
+modelpath = os.path.join(wd, 'results', 'mangroves', 'damagemodel.pkl')
 scalerpath = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync', 'results', 'mangroves', 'scaler.pkl')
 with open(modelpath, 'rb') as f:
     model = load(f)
+    print(model.metrics)
 
 samplespath = os.path.join(wd, 'samples', f'{run}.nc')
 samples = xr.open_dataset(samplespath)
-samples.loc[{'channel': 'mslp'}]['anomaly'] = -samples.loc[{'channel': 'mslp'}].anomaly
 month_medians = samples.sel(month=month).medians
 samples_month = samples[['anomaly', 'dependent', 'independent']] + month_medians
-samples_month = samples_month.stack(grid=['lat', 'lon'])
+samples_month = samples_month.rename({'anomaly': 'hazGAN'})
+# samples_month = samples_month.stack(grid=['lat', 'lon'])
 
-datapath = os.path.join(wd, 'training', 'res_18x22', 'data.nc')
+datapath = os.path.join(wd, 'training', '18x22', 'data.nc')
 data = xr.open_dataset(datapath)
-data.loc[{'channel': 'mslp'}]['anomaly'] = -data.loc[{'channel': 'mslp'}].anomaly
 data_month = data + month_medians # data['medians']
-data_month = data_month.stack(grid=['lat', 'lon'])
-train_month = data_month.isel(time=slice(0, 1000))
-test_month = data_month.isel(time=slice(1000, None))
+data_month = data_month.rename({'anomaly': 'era5', 'time': 'sample'})
+# data_month = data_month.stack(grid=['lat', 'lon'])
+train_month = data_month.isel(sample=slice(0, 560))
+test_month = data_month.isel(sample=slice(560, None))
 
-# %% ---- Predict (needs Pandas)----
-def predict_damages(model, X: xr.DataArray, var: str) -> xr.DataArray:
-    X = X[var].to_dataframe()[var]
-    X = X.unstack('channel').reset_index()
-    X.columns = ['sample', 'lat', 'lon', 'wind' ,'mslp']
-    X = X.set_index(['sample', 'lat', 'lon'])
-    X[['wind', 'mslp']] = X
-    X[f'mangrove_damage'] = model.predict(X)
-    damages = X[f'mangrove_damage'].to_xarray()
-    return damages.to_dataset()
+# for dev
+samples_month = samples_month.isel(sample=slice(0, 10))
+train_month = train_month.isel(sample=slice(0, 10))
+# %% ---- Predict  ----
 
-damages_dependent = predict_damages(model, samples_month, 'dependent')
-damages_independent = predict_damages(model, samples_month, 'independent')
-damages_hazGAN = predict_damages(model, samples_month, 'anomaly')
-damages_train = predict_damages(model, train_month, 'anomaly')
+damages_sample = get_damages(samples_month, ['dependent', 'independent', 'hazGAN'])
+damages_train = get_damages(train_month, ['era5'])
+# # %% ---- Predict (needs Pandas)----
+# def predict_damages(model, X: xr.DataArray, var: str) -> xr.DataArray:
+#     X = X[var].to_dataframe()[var]
+#     X = X.unstack('channel').reset_index()
+#     X.columns = ['sample', 'lat', 'lon', 'wind' ,'mslp']
+#     X = X.set_index(['sample', 'lat', 'lon'])
+#     X[['wind', 'mslp']] = X
+#     X[f'mangrove_damage'] = model.predict(X)
+#     damages = X[f'mangrove_damage'].to_xarray()
+#     return damages.to_dataset()
+
+# damages_dependent = predict_damages(model, samples_month, 'dependent')
+# damages_independent = predict_damages(model, samples_month, 'independent')
+# damages_hazGAN = predict_damages(model, samples_month, 'anomaly')
+# damages_train = predict_damages(model, train_month, 'anomaly')
 
 # %% ---- Plot mangrove damage predictions for random storm ----
 heatmap_kwargs = {'cmap': 'YlOrRd', 'cbar_kwargs': {'label': 'Mangrove damage (%area)'}}    
 
 fig, axs = plt.subplots(1, 2, figsize=(15, 5))
-i = np.random.random_integers(0, damages_hazGAN.sizes['sample'])
-damages_hazGAN.isel(sample=i).mangrove_damage.plot.contourf(ax=axs[0], levels=12, **heatmap_kwargs)
-axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ {i})')
+i = np.random.random_integers(0, damages_sample.sizes['sample']-1)
+damages_sample.isel(sample=i).hazGAN_damage.plot(ax=axs[0], **heatmap_kwargs)
+axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ{i})')
 
-j = np.random.random_integers(0, damages_train.sizes['sample'])
-damages_train.isel(sample=j).mangrove_damage.plot.contourf(ax=axs[1], levels=12, **heatmap_kwargs)
-axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ {j})')
+j = np.random.random_integers(0, damages_train.sizes['sample']-1)
+damages_train.isel(sample=j).era5_damage.plot(ax=axs[1], **heatmap_kwargs)
+axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ{j})')
 
 # %% ---- Step 2: Load mangrove data ----
 import cartopy.crs as ccrs
@@ -103,7 +135,7 @@ def intersect_mangroves_with_damages(mangroves: gpd.GeoDataFrame,
                                      plot=True) -> xr.Dataset:
     # calculate intersections
     mangroves = mangroves.to_crs(4326)
-    damages = damages_hazGAN.copy()
+    # damages = damages_hazGAN.copy()
     weightmap = xa.pixel_overlaps(damages, mangroves)
 
     # calculate overlaps, NOTE: using EPSG:4326 for now
@@ -133,9 +165,10 @@ def intersect_mangroves_with_damages(mangroves: gpd.GeoDataFrame,
         mangroves_gridded.area.plot(cmap="Greens", cbar_kwargs={'label': 'Mangrove damage [km²]'})
     return mangroves_gridded
 
-mangroves_gridded = intersect_mangroves_with_damages(mangroves, damages_hazGAN)
+mangroves_gridded = intersect_mangroves_with_damages(mangroves, damages_sample)
 mangroves_gridded.area.plot(cmap="Greens", cbar_kwargs={'label': 'Mangrove damage [km²]'})
 
+# %% ---- Calculate mangrove damage area and percentage ----
 damages_hazGAN['mangrove_damage_area'] = mangroves_gridded.area * damages_hazGAN.mangrove_damage
 damages_hazGAN['mangrove_damage_percent'] = damages_hazGAN.mangrove_damage.where(mangroves_gridded.area > 0)
 

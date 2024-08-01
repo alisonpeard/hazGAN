@@ -44,7 +44,7 @@ def sample_to_xr(data, ds_ref, plot=False):
         'sample': samples,
         'lat': ("lat", ds_ref.lat.values, {"long_name": "Latitude"}),
         'lon': ("lon", ds_ref.lon.values, {'long_name': 'Longitude'}),
-        'channel': ['u10', 'mslp'],
+        'channel': ['u10', 'tp'],
         'param': ("param", ['shape', 'loc', 'scale'], {'long_name': 'gpd_parameters'}),
         'month': np.unique(ds_ref['time.month'].values)
         }

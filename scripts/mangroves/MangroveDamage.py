@@ -3,23 +3,28 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
 from xgboost import XGBRegressor
+from sklearn.base import BaseEstimator
 
   
-class MangroveDamageModel(object):
+class MangroveDamageModel(BaseEstimator):
     """Model to predict mangrove damage using ensemble of XGBoost and Linear Regression"""
-    def __init__(self):
+    def __init__(self, scaling=True):
        # functions
+       self.scaling = scaling
        self.base = XGBRegressor(n_estimators=15)
        self.linear = LinearRegression()
        self.scaler = StandardScaler()
        self.transformer = Transformer()
        self.fitted = False
+       self.metrics = {}
 
     def fit(self, X, y):
+        """Fit the ensemble model."""
         # transform
         X = self.transformer.positive(X)
         X = self.transformer.transform(X)
-        X = self.scaler.fit_transform(X)
+        if self.scaling:
+            X = self.scaler.fit_transform(X)
         y = self.transformer.transform(y)
         # fit models
         self.base.fit(X, y)
@@ -28,15 +33,21 @@ class MangroveDamageModel(object):
         self.fitted = True
     
     def predict(self, X):
+        """Predict mangrove damages using the ensemble model."""
         if not self.fitted:
             raise ValueError("Model not fitted yet.")
         X = self.transformer.positive(X)
         X = self.transformer.transform(X)
-        X = self.scaler.transform(X)
+        if self.scaling:
+            X = self.scaler.transform(X)
         X_base = self.base.predict(X).reshape(-1, 1)
         y_pred = self.linear.predict(X_base)
         y_pred = self.transformer.inverse_transform(y_pred)
         return y_pred
+
+    def set_metrics(self, metrics:dict):
+        self.metrics = metrics
+
     
   
 class Transformer(object):
@@ -45,12 +56,14 @@ class Transformer(object):
         """Shift the data to be positive."""
         def shift(x):
             if np.min(x) <= 0:
-                x += abs(np.min(x)) + 1
-            return x
+                shifted = x + abs(np.min(x)) + 1
+            else:
+                shifted = x
+            return shifted
         if len(X.shape) == 1:
             return shift(X)
         else:
-            return  np.apply_along_axis(shift, 0, X)
+            return np.apply_along_axis(shift, 0, X)
     
     def transform(self, X):
         return np.log10(X)
