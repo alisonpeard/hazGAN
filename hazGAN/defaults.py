@@ -8,7 +8,7 @@ xmax = 95.0
 ymin = 10.0
 ymax = 25.0
 
-bay_of_bengal_crs = 24346
+bay_of_bengal_crs = 24346 # https://epsg.io/24346
 occurrence_rate = 18.033
 
 channel_labels = {0: r'wind speed [ms$^{-1}$]', 1: r'mean sea level pressure [Pa]'}

@@ -93,6 +93,7 @@ damages_sample = get_damages(samples_month, ['dependent', 'independent', 'hazGAN
 damages_train = get_damages(train_month, ['era5'])
 
 # %% ---- Plot mangrove damage predictions for random storm ----
+# NOTE: might be good to interpolate these for nicer contours .contourf
 i = np.random.randint(0, damages_sample.sizes['sample']-1)
 j = np.random.randint(0, damages_train.sizes['sample']-1)
 
@@ -100,15 +101,15 @@ fig, axes = plt.subplots(3, 2, figsize=(15, 15))
 
 axs = axes[0, :]
 heatmap_kwargs = {'cmap':'YlOrRd', 'cbar_kwargs': {'label': 'Wind speed [mps]'}}
-damages_sample.isel(sample=i, channel=0).hazGAN.plot(ax=axs[0], **heatmap_kwargs)
-damages_train.isel(sample=j, channel=0).era5.plot(ax=axs[1], **heatmap_kwargs)
+damages_sample.isel(sample=i, channel=0).hazGAN.plot.contourf(ax=axs[0], **heatmap_kwargs)
+damages_train.isel(sample=j, channel=0).era5.plot.contourf(ax=axs[1], **heatmap_kwargs)
 axs[0].set_title(f'Wind speed [mps] (sample storm nᵒ{i})')
 axs[1].set_title(f'Wind speed [mps] (real storm nᵒ{j})')
 
 axs = axes[1, :]
 heatmap_kwargs = {'cmap':'PuBu', 'cbar_kwargs': {'label': 'Total precipitation [m]'}} 
-damages_sample.isel(sample=i, channel=1).hazGAN.plot(ax=axs[0], **heatmap_kwargs)
-damages_train.isel(sample=j, channel=1).era5.plot(ax=axs[1], **heatmap_kwargs)
+damages_sample.isel(sample=i, channel=1).hazGAN.plot.contourf(ax=axs[0], **heatmap_kwargs)
+damages_train.isel(sample=j, channel=1).era5.plot.contourf(ax=axs[1], **heatmap_kwargs)
 axs[0].set_title(f'Total precipitation [m] (sample storm nᵒ{i})')
 axs[1].set_title(f'Total precipitation [m] (real storm nᵒ{j})')
 
@@ -119,29 +120,10 @@ heatmap_kwargs = {'cmap':'YlOrRd',
                       'format': matplotlib.ticker.PercentFormatter(1, 0)
                       }
                   }
-damages_sample.isel(sample=i).hazGAN_damage.plot(ax=axs[0], **heatmap_kwargs)
-damages_train.isel(sample=j).era5_damage.plot(ax=axs[1], **heatmap_kwargs)
+damages_sample.isel(sample=i).hazGAN_damage.plot.contourf(ax=axs[0], **heatmap_kwargs)
+damages_train.isel(sample=j).era5_damage.plot.contourf(ax=axs[1], **heatmap_kwargs)
 axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ{i})')
 axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ{j})')
-
-# %% PAUSE HERE UNTIL FIGURES LOOK RIGHT
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # %% ---- Step 2: Load mangrove data ----
 import cartopy.crs as ccrs
@@ -168,7 +150,6 @@ def intersect_mangroves_with_damages(mangroves: gpd.GeoDataFrame,
                                      plot=True) -> xr.Dataset:
     # calculate intersections
     mangroves = mangroves.to_crs(4326)
-    # damages = damages_sample.copy()
     weightmap = xa.pixel_overlaps(damages, mangroves)
 
     # calculate overlaps, NOTE: using EPSG:4326 for now
@@ -314,7 +295,7 @@ def calculate_eads(var, damages: xr.Dataset, yearly_rate: int) -> xr.Dataset:
         input_core_dims=[['sample'], ['sample']],
         output_core_dims=[[]],
         exclude_dims=set(('sample',)), # dimensions allowed to change size, must be set!
-        vectorize=True, # loop over non-core dimensions,
+        vectorize=True,                # loop over non-core dimensions,
         dask="parallelized",
         output_dtypes=[float]
         )
@@ -341,7 +322,7 @@ axs[1].set_title('All independent')
 axs[2].set_title('hazGAN')
 axs[3].set_title('Real data')
 
-# %% ---- Return period vs. damages plot (Lamb 2010) ----
+# %% ---- Return period vs. damages plots (Lamb 2010) ----
 def calculate_total_return_periods(damages: xr.Dataset,
                                    yearly_rate: float,
                                    var='mangrove_damage_area') -> xr.Dataset:
@@ -407,7 +388,20 @@ if not DEV:
     ax.set_xscale('log')
     ax.set_xticks([2, 5, 25, 100, 200, 500])
 ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
-ax.set_title('Based on Figure 7 Lamb (2010)')
+# ax.set_title('Based on Figure 7 Lamb (2010)')
+
+# %% Save damages files for train and samples, as well as total damages
+damages_sample_out = os.path.join(wd, 'results', 'mangroves', 'damages_sample.nc')
+damages_train_out = os.path.join(wd, 'results', 'mangroves', 'damages_train.nc')
+totals_out = os.path.join(wd, 'results', 'mangroves', 'totals.nc')
+
+damages_sample.to_netcdf(damages_sample_out)
+damages_train.to_netcdf(damages_train_out)
+
+totals_independent.to_netcdf(totals_out, group='independent')
+totals_dependent.to_netcdf(totals_out, group='dependent')
+totals_hazGAN.to_netcdf(totals_out, group='hazGAN')
+
 # %%
-!say done
+os.system('say done')
 # %%
