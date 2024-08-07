@@ -26,6 +26,7 @@ wgan = hg.WGAN(wandb.config, nchannels=2)
 wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generator.weights.h5"))
 wgan.generator.summary()
 ntrain = config.train_size
+
 # %%
 ds_ref = xr.open_dataset(os.path.join(wd, "..", "training", "18x22", "data.nc"))
 train = ds_ref.isel(time=slice(0, ntrain))

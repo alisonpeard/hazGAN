@@ -13,16 +13,26 @@ h.set_axis_labels(r'$u$', r'$F^{-1}(u)$', fontsize=16);
 # PIT plot
 # make background transparent
 plt.rcParams['axes.facecolor'] = 'none'
-h = sns.jointplot(x=x_trans, y=x, ax=ax)
+h = sns.jointplot(x=x_trans, y=x)
 h.set_axis_labels(r'$x$', r'$F(x)$', fontsize=16);
 
 # save with transparent background
 h.savefig('PIT_plot.png', transparent=True)
-# %%
+
+# %% PIT Gumbel
+red = '#F52224'
 m1 = stats.gumbel_l()
-x_gumbel = m1.ppf(x)
-h = sns.jointplot(x=x, y=x_gumbel);    
-h.set_axis_labels(r'$u$', r'$G^{-1}(u)$', fontsize=16);
+x_gumbel = -m1.ppf(x)
+h = sns.jointplot(x=x_gumbel, y=x,
+    color='k',
+    marker='.',
+    edgecolor='k',
+    marginal_kws={
+        'color': red,
+        'edgecolor': 'white'
+        });    
+h.set_axis_labels(r'$x$', r'$F(x)$', fontsize=16);
+plt.savefig(os.path.join('/Users/alison/Documents/DPhil/paper1.nosync/figures/paper', 'Gumbel_PIT.png'), transparent=True)
 # %%
 mvnorm = stats.multivariate_normal(mean=[0, 0], cov=[[1., 0.5], 
                                                      [0.5, 1.]])

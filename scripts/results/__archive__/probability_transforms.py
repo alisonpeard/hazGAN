@@ -6,22 +6,24 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from scipy.stats import genpareto
-import hazardGANv2 as hg
+import hazGAN as hg
 from importlib import reload
 
 channels = ["U10", "MSLP"]
-wd = "/Users/alison/Documents/DPhil/multivariate"
-datadir = os.path.join(wd, "era5_data")
+wd = "/Users/alison/Documents/DPhil/paper1.nosync"
+datadir = os.path.join(wd, "training", '18x22')
 # %%
 i, j, c = 0, 0, 0
-u, x, m, z, params = hg.load_training(datadir, 1000, zero_pad=False, numpy=True )
+# u, x, m, z, params = hg.load_training(datadir, 1000)
+training = hg.load_training(datadir, 1000)
 
-u = u[0][:, i, j, c]
-x = x[0][:, i, j, c]
-m = m[0][:, i, j, c]
-z = z[0]
-params = params[i, j, :, c]
+u = training['train_u'][:, i, j, c]
+x = training['train_x'][:, i, j, c]
+m = training['train_m'][:, i, j, c]
+z = training['train_z'][0]
+params = training['params'][i, j, :, c]
 shape, loc, scale = params
+
 # %% plot data, GPD fit, and transformed data
 fig, axs = plt.subplots(1, 3, figsize=(12, 4))
 axs[0].hist(x, bins=20, alpha=0.5, edgecolor='k', label=channels[c], density=True);
@@ -48,13 +50,24 @@ sns.jointplot(x=u, y=x_inv, height=3)
 
 # %% visualise the inverse transformed data
 i, c = 10, 1
-u, x, m, z, params = hg.load_training(datadir, 1000, zero_pad=False, numpy=True)
-u = u[0]
-x = x[0]
-m = m[0]
-z = z[0]
+# u, x, m, z, params = hg.load_training(datadir, 1000, zero_pad=False, numpy=True)
+# u = u[0]
+# x = x[0]
+# m = m[0]
+# z = z[0]
+
+training = hg.load_training(datadir, 1000, padding_mode=None)
+
+u = training['train_u'].numpy()
+x = training['train_x'].numpy()
+m = training['train_m'].numpy()
+z = training['train_z']
+params = training['params']
+shape, loc, scale = params[..., 0, :], params[..., 1, :], params[..., 2, :]
+
+
 params = params
-x_inv = hg.pot.inv_probability_integral_transform(u, x, u, params)
+x_inv = hg.POT.inv_probability_integral_transform(u, x, u, params)
 fig, axs = plt.subplots(1, 3, figsize=(12, 4))
 im = axs[0].imshow(x[i, ..., c], cmap='viridis')
 plt.colorbar(im, orientation='horizontal')

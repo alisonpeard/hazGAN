@@ -46,20 +46,47 @@ ibtracs = ibtracs.groupby(pd.Grouper(key='time', freq='D')).agg({'event': 'first
                                                                  'lon': 'mean'}).reset_index()
 ibtracs['event'] = ibtracs['event'].fillna('NOT_NAMED').apply(lambda s: s.title())
 ibtracs = ibtracs.dropna(subset=['wind'])
-amphan = ibtracs[ibtracs['event'] == 'Amphan']
 
-amphan = gpd.GeoDataFrame(amphan, geometry=gpd.points_from_xy(amphan.lon, amphan.lat)).drop(columns=['lat', 'lon'])
-amphan = amphan.set_crs(epsg=4326)
-# %%
-t0 = amphan['time'].min()
-t1 = amphan['time'].max()
+CYCLONE = 'Asani'
+cyclone = ibtracs[ibtracs['event'] == CYCLONE]
+
+cyclone = gpd.GeoDataFrame(cyclone, geometry=gpd.points_from_xy(cyclone.lon, cyclone.lat)).drop(columns=['lat', 'lon'])
+cyclone = cyclone.set_crs(epsg=4326)
+
+# for selecting ERA5 and IMDAA
+t0 = cyclone['time'].min()
+t1 = cyclone['time'].max()
+year = cyclone['time'].dt.year.unique()[0]
+
+cyclone.head()
+
 # %% # ERA5
-path = '/Users/alison/Documents/DPhil/data/era5/wind_data/bangladesh_2020.nc'
+path = f'/Users/alison/Documents/DPhil/data/era5/bangladesh_{year}.nc'
 era5 = xr.open_dataset(path)
 era5 = era5.sel(time=slice(t0, t1))
 era5['u10'] = np.sqrt(era5['u10']**2 + era5['v10']**2)
 era5 = era5.drop_vars(['v10'])
 era5_footprint = era5.max(dim='time')
+
+vmin = era5_footprint['u10'].quantile(0.01).values
+vmax = era5_footprint['u10'].quantile(0.99).values
+
+# %% plot era5 daily maxima over storm
+for i, t in enumerate(np.arange(t0, t1 + pd.Timedelta(days=1), pd.Timedelta(days=1))):
+    fig, ax = plt.subplots(figsize=(3, 3.1))
+    era5.isel(time=i).u10.plot(ax=ax, cmap="RdBu_r", add_colorbar=False, vmin=vmin, vmax=vmax)
+    ax.set_title(f'Day {i+1}')
+    ax.axis('off')
+    #plt.savefig(os.path.join("/Users/alison/Documents/DPhil/paper1.nosync/figures/paper", CYCLONE, f'day{i}.png'), transparent=True)
+
+# %% plot footprint
+
+fig, ax = plt.subplots(1, 1, figsize=(3, 3.1))
+era5_footprint['u10'].plot(ax=ax, cmap='RdBu_r', add_colorbar=False, vmin=vmin, vmax=vmax)
+ax.axis('off')
+ax.set_title(f"TC {CYCLONE}")
+plt.savefig(os.path.join("/Users/alison/Documents/DPhil/paper1.nosync/figures/paper", CYCLONE.lower(), f'footprint.png'), transparent=True)
+
 # %%
 imdaa_u10 = "/Users/alison/Documents/DPhil/data/imdaa/new_data/ncum_imdaa_reanl_HR_UGRD-10m_2020050100-2020053123.nc"
 imdaa_v10 = "/Users/alison/Documents/DPhil/data/imdaa/new_data/ncum_imdaa_reanl_HR_VGRD-10m_2020050100-2020053123.nc"
@@ -92,12 +119,12 @@ import geospatial_utils as gu
 coords = era5_footprint.to_dataframe().reset_index()
 coords = gpd.GeoDataFrame(coords, geometry=gpd.points_from_xy(coords.longitude, coords.latitude)).set_crs(4326)
 units_df = pd.DataFrame.from_dict({'wind':['mps'], 'rmw': ['nmile'], 'pressure': ['hPa']}, orient='columns')
-amphan['ISO_TIME'] = amphan['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
-amphan['BASIN'] = 'NI'
-amphan = amphan.reset_index(drop=True)
-amphan['LAT'] = amphan['geometry'].y
-amphan['LON'] = amphan['geometry'].x
-field = gu.get_wind_field(amphan, coords, units_df, 'wind', 'pressure', 'rmw')
+cyclone['ISO_TIME'] = cyclone['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
+cyclone['BASIN'] = 'NI'
+cyclone = cyclone.reset_index(drop=True)
+cyclone['LAT'] = cyclone['geometry'].y
+cyclone['LON'] = cyclone['geometry'].x
+field = gu.get_wind_field(cyclone, coords, units_df, 'wind', 'pressure', 'rmw')
 # %%
 wind_cols = [col for col in field.columns if 'wnd' in col]
 pressure_cols = [col for col in field.columns if 'pres' in col]
@@ -122,5 +149,5 @@ ibtracs_footprint['u10'].plot(ax=axs[2])
 axs[0].set_title('ERA5 (hourly)')
 axs[1].set_title('IMDAA (hourly)')
 axs[2].set_title('IBTrACS (6-hourly)')
-fig.suptitle('Comparison of ERA5, IMDAA, and IBTrACS wind speeds for Cyclone Amphan')
+fig.suptitle(f'Comparison of ERA5, IMDAA, and IBTrACS wind speeds for Cyclone {CYCLONE}')
 # %%

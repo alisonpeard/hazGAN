@@ -216,6 +216,7 @@ if(TRUE){ # model
         } #standardize input
         
         ensemble.pred <- as.data.frame(ensemble.model(feed.standardised, feed.standardised, y, allXs, use.models))
+        
         if(FALSE){ # look at fit
           library(ModelMetrics)
           plot(feed.standardised[,y], ensemble.pred[,'fit'])
