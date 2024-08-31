@@ -17,7 +17,7 @@ library(tidync)
 wd <- "/Users/alison/Documents/DPhil/paper1.nosync/training/"
 res <- c(18, 22)
 filename <- 'data_1950_2022.nc'
-indir <- paste0(wd, paste0('res', res[1], 'x', res[2]))
+indir <- paste0(wd, paste0(res[1], 'x', res[2]))
 r.func <- max # https://doi.org/10.1111/rssb.12498
 ########### DEFINE FUNCTIONS ###################################################
 standardise.by.month <- function(df, var){
@@ -62,7 +62,7 @@ era5.df$u10 <- standardise.by.month(era5.df, 'u10')
 era5.df$msl <- standardise.by.month(era5.df, 'msl')
 era5.df$tp <- standardise.by.month(era5.df, 'tp')
 ########### IDENTIFY STORMS BY WIND SPEEDS ###################################################
-df <- aggregate(. ~ time, era5.df[,c('time', 'u10')], r.func) # overall max wind each day
+df <- aggregate(. ~ time, era5.df[,c('time', 'u10')], r.func) # daily overall max wind
 
 # search for threshold that gives most data
 qs <-c(60:99) / 100
@@ -82,14 +82,15 @@ for(i in 1:length(rs)){
   }
 }
 # remove any cases with dependence in exceedences
-nclusters[ext.ind < 0.8] <- 0 # see ?extremalindex, if theta < 1, then there is some dependency (clustering) in the limit
-nclusters[p.vals < 0.1] <- 0  #  
+nclusters[ext.ind < 0.8] <- -Inf # see ?extremalindex, if theta < 1, then there is some dependency (clustering) in the limit
+nclusters[p.vals < 0.1] <- -Inf  #  
 ind <- which(nclusters == max(nclusters), arr.ind=TRUE)
 r <- rs[ind[1]]
 q <- qs[ind[2]]
 
 # make dataframe of events
 thresh <- quantile(df$u10, q)
+print(r, q, thresh) # for paper
 
 plot(df$u10)
 abline(h=thresh, col='red')

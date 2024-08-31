@@ -16,14 +16,16 @@ import matplotlib.pyplot as plt
 plt.rcParams['font.family'] = 'serif'
 
 channel = 0
-channels = ['u10', 'mslp']
+channels = ['u10', 'tp']
+fig_kws = {'dpi': 300, 'bbox_inches': 'tight', 'transparent': True}
 
-runname = 'clean-sweep-3_1.0xtemp'
-datadir = '/Users/alison/Documents/DPhil/paper1.nosync/training/res_18x22'
+runname = 'vital-sweep-30__precipsota'
+datadir = '/Users/alison/Documents/DPhil/paper1.nosync/training/18x22'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 resdir = '/Users/alison/Documents/DPhil/paper1.nosync/results/brown_resnick'
+figdir = '/Users/alison/Documents/DPhil/paper1.nosync/figures/paper/brownresnick'
+
 # %% -----Load data-----
-# load train/test data
 data = xr.open_dataset(os.path.join(datadir, "data.nc"))
 data = data.stack(grid=('lat', 'lon')).transpose('time', 'grid', 'param', 'channel')
 ntrain = 1000
@@ -67,46 +69,50 @@ samples_X = samples_X.set_index('grid')
 def format_str(s):
     return s.replace('_', ' ').title()
 
-pair = low_EC_pair # ['high' | 'middle' | 'low']
+pair = middle_EC_pair # ['high' | 'middle' | 'low']
+pairs = [high_EC_pair, middle_EC_pair, low_EC_pair]
+pair_names = ['high', 'middle', 'low']
+for pair, name in zip(pairs, pair_names):
+    xlim = (-.1, 1.1)
+    ylim = (-.1, 1.1)
 
-xlim = (-.1, 1.1)
-ylim = (-.1, 1.1)
+    i = pair['i'].astype(int)
+    j = pair['j'].astype(int)
 
-i = pair['i'].astype(int)
-j = pair['j'].astype(int)
+    fig, axs = plt.subplots(1, 4, figsize=(10, 4))
+    ax = axs[0]
+    x = data_train.isel(grid=i, channel=0).uniform.values
+    y = data_train.isel(grid=j, channel=0).uniform.values
+    scatter_density2(x, y, cmap='magma', ax=ax)
+    ax.set_title("Training Set")
 
-fig, axs = plt.subplots(1, 4, figsize=(10, 4))
-ax = axs[0]
-x = data_train.isel(grid=i, channel=0).uniform.values
-y = data_train.isel(grid=j, channel=0).uniform.values
-scatter_density2(x, y, cmap='magma', ax=ax)
-ax.set_title("Training Set")
+    ax = axs[1]
+    x = data_test.isel(grid=i, channel=0).uniform.values
+    y = data_test.isel(grid=j, channel=0).uniform.values
+    scatter_density2(x, y, cmap='magma', ax=ax)
+    ax.set_title("Test Set")
 
-ax = axs[1]
-x = data_test.isel(grid=i, channel=0).uniform.values
-y = data_test.isel(grid=j, channel=0).uniform.values
-scatter_density2(x, y, cmap='magma', ax=ax)
-ax.set_title("Test Set")
+    ax = axs[2]
+    x = samples_gan.isel(grid=i, channel=0).uniform.values
+    y = samples_gan.isel(grid=j, channel=0).uniform.values
+    scatter_density2(x, y, cmap='magma', ax=ax)
+    ax.set_title("hazGAN")
 
-ax = axs[2]
-x = samples_gan.isel(grid=i, channel=0).uniform.values
-y = samples_gan.isel(grid=j, channel=0).uniform.values
-scatter_density2(x, y, cmap='magma', ax=ax)
-ax.set_title("hazGAN")
+    ax = axs[-1]
+    x = samples_br.loc[i, '1':].values.astype(float)
+    y = samples_br.loc[j, '1':].values.astype(float)
+    scatter_density2(x, y, cmap='magma', ax=ax)
+    ax.set_title("Brown-Resnick")
 
-ax = axs[-1]
-x = samples_br.loc[i, '1':].values.astype(float)
-y = samples_br.loc[j, '1':].values.astype(float)
-scatter_density2(x, y, cmap='magma', ax=ax)
-ax.set_title("Brown-Resnick")
+    for ax in axs:
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        ax.set_xlabel(format_str(samples_br.loc[i, 'obs_pt']))
+        ax.set_ylabel(format_str(samples_br.loc[j, 'obs_pt']))
+        ax.label_outer()
 
-for ax in axs:
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
-    ax.set_xlabel(format_str(samples_br.loc[i, 'obs_pt']))
-    ax.set_ylabel(format_str(samples_br.loc[j, 'obs_pt']))
-    ax.label_outer()
-fig.suptitle(r"$\hat \theta =${:.2f}".format(pair['train_EC']))
+    fig.suptitle(r"$\hat \theta =${:.2f}".format(pair['train_EC']))
+    fig.savefig(os.path.join(figdir, f"uniform_{channels[channel]}_{name}.png"), **fig_kws)
 
 # %% -------Anomaly scatterplots-------
 i = pair['i'].astype(int)

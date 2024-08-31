@@ -21,7 +21,7 @@ def open_config(runname, dir):
 
 # %%
 res = (18, 22)
-RUNNAME = "vital-sweep-30"
+RUNNAME = "vital-sweep-30__precipsota"
 datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/{res[0]}x{res[1]}'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 config = open_config("clean-sweep-3", "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
@@ -50,7 +50,6 @@ def get_channel_corrs(x, channel0, channel1):
 
 channels = [0, 1]
 for c0, c1 in combinations(channels, 2):
-
     train_corrs = get_channel_corrs(train, c0, c1)
     test_corrs = get_channel_corrs(test, c0, c1)
     gan_corrs = get_channel_corrs(samples, c0, c1)
@@ -116,7 +115,7 @@ ax[1].set_title('Test')
 ax[2].set_title('hazGAN');
 
 fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
-fig.suptitle(r'$\hat \theta$ across both channels');
+fig.suptitle(r'$\hat \theta$ between channels');
 plt.scatter(test_corrs, gan_corrs);
 
 rmse_chi_train_test = np.sqrt(np.nanmean((excoefs_train - excoefs_test) ** 2))
@@ -165,7 +164,7 @@ vmax = max(ecs_gen.max(), ecs_train.max(), ecs_test.max())
 vmin, vmax = 1, 2
 
 cmap = plt.cm.coolwarm_r
-cmap.set_over('lightgrey')
+# cmap.set_over('lightgrey')
 cmap_kws = {'cmap': cmap, 'vmin': vmin, 'vmax': vmax}
 
 fig, axs = plt.subplots(1, 3, figsize=(10, 3))
@@ -177,7 +176,8 @@ fig.colorbar(im, ax=axs, extend="max", orientation="vertical", shrink=0.8, aspec
 axs[0].set_title("Train data")
 axs[1].set_title("Test data")
 axs[2].set_title("Generated data")
-fig.suptitle(r"Pairwise $\hat \theta$ for channel {}".format(channel))
+# fig.suptitle(r"Pairwise $\hat \theta$ for channel {}".format(channel))
+fig.suptitle(r"Pairwise $\hat \theta$ for maximum wind".format(channel))
 
 # look at differences
 diffs = abs(ecs_gen - ecs_test)

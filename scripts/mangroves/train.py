@@ -38,7 +38,7 @@ from MangroveDamage import MangroveDamageModel
 
 SCALING = True
 VISUALS = False
-THRESHOLD = 0.2 # mangroves being 10% damaged or more
+THRESHOLD = 0.2 # mangroves being 20% damaged or more
 
 # %%
 def convert_ibtracs_vars(df):
