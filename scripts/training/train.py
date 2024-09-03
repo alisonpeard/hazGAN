@@ -162,8 +162,7 @@ def main(config):
 
 # %% run this cell to train the model
 if __name__ == "__main__":
-    interactive = check_interactive(sys)
-    if not interactive:
+    if not check_interactive(sys):
         # parse arguments (if running from command line)
         parser = argparse.ArgumentParser()
         parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
@@ -174,6 +173,7 @@ if __name__ == "__main__":
         cluster = args.cluster
         force_cpu = args.force_cpu
     else:
+        # set defaults for interactive mode
         dry_run = True
         cluster = False
         force_cpu = False

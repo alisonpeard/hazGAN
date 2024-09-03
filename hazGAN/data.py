@@ -12,9 +12,10 @@ def load_datasets(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
 
 
 def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
-                  numpy=False, gumbel_marginals=False):
+                  numpy=False, gumbel_marginals=False, channels=['u10', 'tp']):
     """Note numpy arrays will appear upside down because of latitude."""
     data = xr.open_dataset(os.path.join(datadir, "data.nc"))
+    data = data.sel(channel=channels)
     X = tf.image.resize(data.anomaly, image_shape)
     U = tf.image.resize(data.uniform, image_shape)
     M = tf.image.resize(data.medians, image_shape)
