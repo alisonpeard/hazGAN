@@ -90,7 +90,7 @@ q <- qs[ind[2]]
 
 # make dataframe of events
 thresh <- quantile(df$u10, q)
-print(r, q, thresh) # for paper
+print(paste(r, q, thresh, sep=", ")) # for paper
 
 plot(df$u10)
 abline(h=thresh, col='red')
@@ -151,8 +151,6 @@ wind.transformed.df <- data.frame(matrix(nrow=0, ncol=length(fields)))
 colnames(wind.transformed.df) <- fields
 for(i in 1:ngrid){
   GRIDCELL <- grid.cells[i]
-  
-  # process wind
   era5.df <- era5.df.all[era5.df.all$grid == GRIDCELL,]
   era5.df <- era5.df[era5.df$time %in% times,]
   era5.df <- left_join(era5.df, cluster.df[,c('time', 'storm', 'storm.rp')], by=c('time'='time'))
@@ -165,7 +163,7 @@ for(i in 1:ngrid){
               grid = grid)
   thresh.u10 <- quantile(maxima$u10, q)
   
-  # valid
+  # validation
   excesses <- maxima$u10[maxima$u10 >= thresh.u10]
   Box.test(excesses) # H0: independent
   hist(excesses)
@@ -178,18 +176,22 @@ for(i in 1:ngrid){
     scale <- fit.u10$theta[1]
     shape <- fit.u10$theta[2]
     maxima$thresh <- thresh.u10
-    maxima$scale <- scale
-    maxima$shape <- shape
-    maxima$p <- fit.u10$p.value
+    maxima$scale  <- scale
+    maxima$shape  <- shape
+    maxima$p      <- fit.u10$p.value
     
-    # semiparametric transform
-    maxima$ecdf <- maxima$u10
-    maxima$ecdf[maxima$u10 < thresh.u10] <- ecdf(maxima$u10)(maxima$u10[maxima$u10 < thresh.u10])
-    f.exceed <- 1 - ecdf(maxima$u10)(thresh.u10)
+    # semiparametric cdf transform (old 03-09-2024)
+    ecdf.func <- ecdf(maxima$u10)
+    maxima$scdf <- maxima$u10
+    maxima$scdf[maxima$u10 < thresh.u10] <- ecdf.func(maxima$u10[maxima$u10 < thresh.u10])
+    f.exceed <- 1 - ecdf.func(thresh.u10)
     survival.probs <- f.exceed * (1 - pgpd(maxima$u10[maxima$u10 >= thresh.u10], thresh.u10, scale, shape))
-    maxima$ecdf[maxima$u10 >= thresh.u10] <- 1 - survival.probs
-    maxima
+    maxima$scdf[maxima$u10 >= thresh.u10] <- 1 - survival.probs
     
+    # empirical cdf transform (new 03-09-2024)
+    maxima$ecdf <- ecdf.func(maxima$u10)
+    
+    maxima # assigns maxima to new.row
   }, error=function(e){
     print(paste0("skipping grid cell ", GRIDCELL, ' ', e))
     missing.columns <- setdiff(names(wind.transformed.df), names(maxima))
@@ -236,14 +238,18 @@ for(i in 1:ngrid){
     maxima$shape <- shape
     maxima$p <- fit.msl$p.value
     
-    # semiparametric transform
-    maxima$ecdf <- maxima$msl
-    maxima$ecdf[maxima$msl < thresh.msl] <- ecdf(maxima$msl)(maxima$msl[maxima$msl < thresh.msl])
-    f.exceed <- 1 - ecdf(maxima$msl)(thresh.msl)
-    survival.probs <- 1 - pgpd(maxima$msl[maxima$msl >= thresh.msl], thresh.msl, scale, shape)
-    maxima$ecdf[maxima$msl >= thresh.msl] <- 1 - f.exceed * survival.probs
-    maxima
+    # semiparametric cdf transform (old 03-09-2024)
+    ecdf.func <- ecdf(maxima$msl)
+    maxima$scdf <- maxima$msl
+    maxima$scdf[maxima$msl < thresh.msl] <- ecdf.func(maxima$msl[maxima$msl < thresh.msl])
+    f.exceed <- 1 - ecdf.func(thresh.msl)
+    survival.probs <- f.exceed * (1 - pgpd(maxima$msl[maxima$msl >= thresh.msl], thresh.msl, scale, shape))
+    maxima$scdf[maxima$msl >= thresh.msl] <- 1 - survival.probs
     
+    # empirical cdf transform (new 03-09-2024)
+    maxima$ecdf <- ecdf.func(maxima$msl)
+    
+    maxima # assigns maxima to new.row
   }, error=function(e){
     print(paste0("skipping grid cell ", GRIDCELL, e))
     missing.columns <- setdiff(names(mslp.transformed.df), names(maxima))
@@ -289,15 +295,19 @@ for(i in 1:ngrid){
     maxima$scale <- scale
     maxima$shape <- shape
     maxima$p <- fit.tp$p.value
+
+    # semiparametric cdf transform (old 03-09-2024)
+    ecdf.func <- ecdf(maxima$tp)
+    maxima$scdf <- maxima$tp
+    maxima$scdf[maxima$tp < thresh.tp] <- ecdf.func(maxima$tp[maxima$tp < thresh.tp])
+    f.exceed <- 1 - ecdf.func(thresh.tp)
+    survival.probs <- f.exceed * (1 - pgpd(maxima$tp[maxima$tp >= thresh.tp], thresh.tp, scale, shape))
+    maxima$scdf[maxima$tp >= thresh.tp] <- 1 - survival.probs
     
-    # semiparametric transform
-    maxima$ecdf <- maxima$tp
-    maxima$ecdf[maxima$tp < thresh.tp] <- ecdf(maxima$tp)(maxima$tp[maxima$tp < thresh.tp])
-    f.exceed <- 1 - ecdf(maxima$tp)(thresh.tp)
-    survival.probs <- 1 - pgpd(maxima$tp[maxima$tp >= thresh.tp], thresh.tp, scale, shape)
-    maxima$ecdf[maxima$tp >= thresh.tp] <- 1 - f.exceed * survival.probs
-    maxima
+    # empirical cdf transform (new 03-09-2024)
+    maxima$ecdf <- ecdf.func(maxima$tp)
     
+    maxima # assigns maxima to new.row
   }, error=function(e){
     print(paste0("skipping grid cell ", GRIDCELL, e))
     missing.columns <- setdiff(names(tp.transformed.df), names(maxima))

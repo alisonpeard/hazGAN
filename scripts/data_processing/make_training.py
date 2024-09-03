@@ -98,7 +98,8 @@ lat = gdf["latitude"].unique()
 lon = gdf["longitude"].unique()
 X = gdf[channels].values.reshape([T, ny, nx, nchannels])
 D = gdf[["day_of_storm"]].values.reshape([T, ny, nx])
-U = gdf[[f"ecdf_{c}" for c in channels]].values.reshape([T, ny, nx, nchannels])
+Ue = gdf[[f"ecdf_{c}" for c in channels]].values.reshape([T, ny, nx, nchannels])
+Us = gdf[[f"scdf_{c}" for c in channels]].values.reshape([T, ny, nx, nchannels])
 M = gdf[[f"{c}_median" for c in channels]].values.reshape([T, ny, nx, nchannels])
 z = gdf[["storm", "storm_rp"]].groupby("storm").mean().values.reshape(T)
 s = gdf[["storm", "size"]].groupby("storm").mean().values.reshape(T)
@@ -124,7 +125,8 @@ shape = np.array(gdf_params[[f"shape_{var}" for var in channels]].values.reshape
 params = np.stack([shape, thresh, scale], axis=-2)
 
 # %%
-ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], U),
+ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], Ue),
+                 'uniform_semi': (['time', 'lat', 'lon', 'channel'], Us),
                  'anomaly': (['time', 'lat', 'lon', 'channel'], X),
                  'medians': (['time', 'lat', 'lon', 'channel'], M),
                  'day_of_storm': (['time', 'lat', 'lon'], D),
