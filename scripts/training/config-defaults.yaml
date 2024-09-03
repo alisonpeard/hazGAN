@@ -36,6 +36,9 @@ latent_space_distn:
 gumbel:
   desc: Train on Gumbel marginals instead of uniform marginals
   value: True
+uniform:
+  desc: Train on uniform marginals from ECDF or semi-parametric model
+  value: 'uniform'
 optimizer:
   desc: Optimizer to use, ['SGD', 'Adam']
   value: Adam

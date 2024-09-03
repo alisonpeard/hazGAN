@@ -22,8 +22,8 @@ parameters:
   beta_1:
     min: 0.1
     max: 0.5
-  use_ema:
-    values: [True, False]
+  uniform:
+    values: [uniform, uniform_semi]
   interpolation:
     values: [bilinear]
   lr_factor:

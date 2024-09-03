@@ -4,7 +4,7 @@ import xarray as xr
 from .extreme_value_theory import gumbel
 
 
-def load_datasets(datadir, ntrain, padding_mode='constant', image_shape=(18, 22), gumbel_marginals=False, batch_size=32):
+def load_datasets(datadir, ntrain, padding_mode='reflect', image_shape=(18, 22), gumbel_marginals=False, batch_size=32):
     [train_u, test_u], *_ = load_training(datadir, ntrain, padding_mode, image_shape, gumbel_marginals=gumbel_marginals)
     train = tf.data.Dataset.from_tensor_slices(train_u).batch(batch_size)
     test = tf.data.Dataset.from_tensor_slices(test_u).batch(batch_size)
@@ -12,12 +12,36 @@ def load_datasets(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
 
 
 def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
-                  numpy=False, gumbel_marginals=False, channels=['u10', 'tp']):
-    """Note numpy arrays will appear upside down because of latitude."""
+                  numpy=False, gumbel_marginals=True, channels=['u10', 'tp'],
+                  uniform='uniform'):
+    """
+    Load the hazGAN training data from the data.nc file.
+
+    Parameters:
+    ----------
+    datadir : str
+        Directory where the data.nc file is stored.
+    ntrain : int
+        Number of training samples.
+    padding_mode : {'constant', 'reflect', 'symmetric'}, default 'constant'
+        Padding mode for the uniform-transformed marginals.
+    image_shape : tuple, default=(18, 22)
+        Shape of the image data.
+    numpy : bool, default False
+        Whether to return numpy arrays or tensors.
+    gumbel_marginals : bool, default False
+        Whether to use Gumbel-transformed marginals.
+    channels : list, default ['u10', 'tp']
+        List of channels to use.
+    uniform : {'uniform', 'uniform'}, default 'uniform'
+        What type of uniform-transformed marginals to use. 'uniform' comes from
+        the ECDF and 'uniform_semi' comes from the semiparametric CDF of Heffernan
+        and Tawn  (2004).
+    """
     data = xr.open_dataset(os.path.join(datadir, "data.nc"))
     data = data.sel(channel=channels)
     X = tf.image.resize(data.anomaly, image_shape)
-    U = tf.image.resize(data.uniform, image_shape)
+    U = tf.image.resize(data[uniform], image_shape)
     M = tf.image.resize(data.medians, image_shape)
     z = data.storm_rp.values
     params = data.params.values
