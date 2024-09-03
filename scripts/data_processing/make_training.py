@@ -11,7 +11,7 @@ from calendar import month_name as month
 plt.rcParams['font.family'] = 'serif'
 
 # %%
-channels = ["u10", "tp"] # 'mslp'
+channels = ["u10", "tp", 'mslp']
 res = (22, 18)
 wd = "/Users/alison/Documents/DPhil/paper1.nosync"
 datadir = os.path.join(wd, "training", f'{res[1]}x{res[0]}')
