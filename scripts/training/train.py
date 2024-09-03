@@ -46,6 +46,16 @@ paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
 
+def check_interactive(sys):
+    """Check if running in interactive mode"""
+    if hasattr(sys, 'ps1'):
+        print("Running interactively")
+        return True
+    else:
+        print("Not running interactively")
+        return False
+    
+
 def log_image_to_wandb(fig, name: str, dir: str):
     impath = os.path.join(dir, f"{name}.png")
     fig.savefig(impath, **plot_kwargs)
@@ -152,19 +162,21 @@ def main(config):
 
 # %% run this cell to train the model
 if __name__ == "__main__":
-    # parse arguments (if running from command line)
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
-    parser.add_argument('--cluster', '-c', dest="cluster", action='store_true', default=False, help='Running on cluster')
-    parser.add_argument('--force-cpu', '-f', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
-    args = parser.parse_args()
-    dry_run = args.dry_run
-    cluster = args.cluster
-    force_cpu = args.force_cpu
-
-    # dry_run = True
-    # cluster = False
-    # force_cpu = False
+    interactive = check_interactive(sys)
+    if not interactive:
+        # parse arguments (if running from command line)
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
+        parser.add_argument('--cluster', '-c', dest="cluster", action='store_true', default=False, help='Running on cluster')
+        parser.add_argument('--force-cpu', '-f', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
+        args = parser.parse_args()
+        dry_run = args.dry_run
+        cluster = args.cluster
+        force_cpu = args.force_cpu
+    else:
+        dry_run = True
+        cluster = False
+        force_cpu = False
 
     # setup device
     device = config_tf_devices()
