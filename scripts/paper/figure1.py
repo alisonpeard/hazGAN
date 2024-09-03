@@ -11,6 +11,7 @@ figdir = '/Users/alison/Documents/DPhil/paper1.nosync/figures/paper/fig1'
 ds = xr.open_dataset('/Users/alison/Documents/DPhil/data/era5/bay_of_bengal__monthly.nosync/original/bangladesh_1951_07.nc')
 
 # %%
+fontsize = 20
 n = 6
 vmin = ds['u10'].quantile(0.01).values
 vmax = ds['u10'].quantile(0.99).values
@@ -20,9 +21,9 @@ for i in range(n):
     fig, ax = plt.subplots(1, 1, figsize=(3, 3.1))
     ds.isel(time=i).u10.plot(ax=ax, cmap='RdBu_r', add_colorbar=False, vmin=vmin, vmax=vmax)
     # ax.axis('off')
-    ax.set_title(r"$\tilde X_{{t,i,j,1}}, t={}$".format(i+1))
-    ax.set_xlabel('$j$')
-    ax.set_ylabel('$i$')
+    ax.set_title(r"$\tilde X_{{t={}}}$".format(i+1), fontsize=fontsize)
+    ax.set_xlabel('$j$', fontsize=fontsize)
+    ax.set_ylabel('$i$', fontsize=fontsize)
     ax.set_xticks([])   
     ax.set_yticks([])
     plt.savefig(os.path.join(figdir, 'era5_u10', f'era5_u10_day{i}.png'), transparent=True)

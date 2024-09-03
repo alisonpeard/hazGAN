@@ -17,27 +17,24 @@ grid = np.arange(0, 396).reshape(18, 22) # may need to modify this
 ds['grid'] = (('lat', 'lon'), grid)
 
 observation_points = {
-    # bangladesh
+    # ----bangladesh----
     'chittagong': (91.8466, 22.3569),
     'dhaka': (90.4125, 23.8103),
-    'khulna': (89.5911, 22.8456),
-    # mayanmar
-    'sittwe': (92.9000, 20.1500),
-    #'akyab': (92.9000, 20.1500),
-    'rangoon': (96.1561, 16.8409),
-    # india
-    'kolkata': (88.3639, 22.5726),
-    'madras': (80.2707, 13.0827),
-    #'chennai': (80.2707, 13.0827),
-    'vishakapatham': (83.3165, 17.6868),
-    'haldia': (87.9634, 22.0253),
-    # noaa buoys
+    # 'khulna': (89.5911, 22.8456),
+    # ----myanmar----
+    # 'sittwe': (92.9000, 20.1500),
+    # 'rangoon': (96.1561, 16.8409),
+    # ----india----
+    # 'kolkata': (88.3639, 22.5726),
+    # 'madras': (80.2707, 13.0827),
+    # 'vishakapatham': (83.3165, 17.6868),
+    # 'haldia': (87.9634, 22.0253),
+    # ----noaa buoys----
     'buoy_23223': (89.483, 17.333),
-    'buoy_23009': (90.0, 15.0),
-    'buoy_23219': (88.998, 13.472),
-    'buoy_23008': (90.0, 12.0),
+    # 'buoy_23219': (88.998, 13.472),
     'buoy_23218': (88.5, 10.165),
-    #'buoy_23401': (88.55, 8.86),
+    # 'buoy_23009': (90.0, 15.0),
+    'buoy_23008': (90.0, 12.0),
     'buoy_23007': (90.0, 8.0)
 }
 ops_gdf = gpd.GeoDataFrame.from_dict(observation_points, orient='index', columns=['lon', 'lat'], geometry=gpd.points_from_xy(*zip(*observation_points.values())))
@@ -56,6 +53,7 @@ ax.coastlines(linewidth=.5)
 ax.add_feature(feature.BORDERS, linestyle=':', linewidth=.2)
 ax.add_feature(feature.LAND, color='tan')
 ax.add_feature(feature.OCEAN, color='lightblue')
+ax.set_extent([80, 95, 8, 25], crs=ccrs.PlateCarree())
 
 ops_gdf.plot(ax=ax, marker='o', color='red', edgecolor='k', markersize=100, zorder=100)
 

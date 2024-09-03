@@ -21,7 +21,7 @@ def open_config(runname, dir):
 
 # %%
 res = (18, 22)
-RUNNAME = "vital-sweep-30__precipsota"
+RUNNAME = "volcanic-sweep-61" # "volcanic-sweep-61" # "vital-sweep-30__precipsota" #"vital-sweep-30"  # "vital-sweep-30__precipsota"
 datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/{res[0]}x{res[1]}'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 config = open_config("clean-sweep-3", "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
@@ -29,6 +29,7 @@ data = xr.open_dataset(os.path.join(datadir, "data.nc"))
 samples_ds = xr.open_dataset(os.path.join(samplesdir, f"{RUNNAME}.nc"))
 occurence_rate = 18.033 # from R 
 ntrain = config['train_size']
+# samples_ds = samples_ds.isel(sample=slice(0, ntrain)) # maybe fairer?
 train_ds = data.isel(time=slice(0, ntrain))
 test_ds = data.isel(time=slice(ntrain, 2*ntrain))
 samples_ds = samples_ds.rename({'sample': 'time'})
@@ -57,25 +58,29 @@ for c0, c1 in combinations(channels, 2):
     mask = np.ma.masked_invalid(train_corrs)
     gan_corrs[mask.mask] = np.nan
 
-    fig, ax = plt.subplots(1, 3, figsize=(10, 3))
+    fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
+                       gridspec_kw={
+                           'wspace': .02,
+                           'width_ratios': [1, 1, 1, .05]}
+                           )
     im = ax[0].imshow(train_corrs, vmin=0, vmax=1, cmap="coolwarm")
     ax[1].imshow(test_corrs, vmin=0, vmax=1, cmap="coolwarm")
     ax[2].imshow(gan_corrs, vmin=0, vmax=1, cmap="coolwarm")
-    
-    divider = make_axes_locatable(ax[2])
-    cax = divider.append_axes('right', size='5%', pad=0.05)
-    fig.colorbar(im, cax=cax, orientation='vertical')
-    
-    ax[0].set_title("Training")
-    ax[1].set_title("Test")
-    ax[2].set_title("hazGAN")
+
+    ax[0].set_title("Train", fontsize=16)
+    ax[1].set_title("Test", fontsize=16)
+    ax[2].set_title("hazGAN", fontsize=16)
     
     for a in ax:
         a.set_xticks([])
         a.set_yticks([])
         a.invert_yaxis()
+    hg.add_watermark(a, RUNNAME)
 
-    fig.suptitle("Correlation between {} and {}".format(hg.channel_labels[c0], hg.channel_labels[c1]))
+    fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
+    # fig.suptitle("Correlation between {} and {}".format(hg.channel_labels[c0], hg.channel_labels[c1]))
+    ax[0].set_ylabel('Correlation', fontsize=18);
+
 
 # %% ------Cross-channel extremal correlations------
 # now do the same for extremals (but in 3d because you can!)
@@ -95,11 +100,10 @@ fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
                            'wspace': .02,
                            'width_ratios': [1, 1, 1, .05]}
                            )
-
 cmap = plt.cm.coolwarm_r
-cmap.set_over('lightgrey')
+cmap.set_over(cmap(.99))
 cmap.set_under(cmap(0))
-cmap_kws = {'cmap': cmap, 'vmin': 1, 'vmax': 2.1}
+cmap_kws = {'cmap': cmap, 'vmin': 1, 'vmax': 2}
 
 im = ax[0].imshow(excoefs_train, **cmap_kws)
 im = ax[1].imshow(excoefs_test, **cmap_kws)
@@ -109,14 +113,15 @@ for a in ax:
     a.set_yticks([])
     a.set_xticks([])
     a.invert_yaxis()
+hg.add_watermark(a, RUNNAME)
     
-ax[0].set_title('Train')
-ax[1].set_title('Test')
-ax[2].set_title('hazGAN');
+ax[0].set_title('Train', fontsize=16)
+ax[1].set_title('Test', fontsize=16)
+ax[2].set_title('hazGAN', fontsize=16);
 
 fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
-fig.suptitle(r'$\hat \theta$ between channels');
-plt.scatter(test_corrs, gan_corrs);
+ax[0].set_ylabel(r'Extremal coeff.', fontsize=18);
+# fig.suptitle(r'$\hat \theta$ between channels');
 
 rmse_chi_train_test = np.sqrt(np.nanmean((excoefs_train - excoefs_test) ** 2))
 rmse_chi_train = np.sqrt(np.nanmean((excoefs_gan - excoefs_train) ** 2))
@@ -136,15 +141,25 @@ corr_train = hg.get_all_correlations(train)
 corr_test = hg.get_all_correlations(test)
 corr_gen = hg.get_all_correlations(samples)
 
-fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
+                       gridspec_kw={
+                           'wspace': .02,
+                           'width_ratios': [1, 1, 1, .05]}
+                           )
+
 axs[0].imshow(corr_train, cmap="coolwarm", vmin=0, vmax=1)
 axs[1].imshow(corr_test, cmap="coolwarm", vmin=0, vmax=1)
 im = axs[2].imshow(corr_gen, cmap="coolwarm", vmin=0, vmax=1)
-axs[0].set_title("Train data")
-axs[1].set_title("Test data")
-axs[2].set_title("Generated data")
-fig.suptitle(r"Pairwise Pearson correlation $\rho$ for channel {}".format(channel))
-fig.colorbar(im, ax=axs, orientation="vertical", shrink=0.8, aspect=20)
+axs[0].set_title("Train", fontsize=16)
+axs[1].set_title("Test", fontsize=16)
+axs[2].set_title("hazGAN", fontsize=16)
+
+for ax in axs:
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+fig.colorbar(im, cax=axs[3], extend='both', orientation='vertical')
+axs[0].set_ylabel(r'Correlation', fontsize=18);
 
 # %% ------Extremal Spatial correlations------
 ecs_train = hg.pairwise_extremal_coeffs(train.astype(np.float32)).numpy()
@@ -159,33 +174,40 @@ print(f"RMSE chi train-test: {rmse_chi_train_test:.4f}")
 print(f"RMSE chi train: {rmse_chi_train:.4f}")
 print(f"RMSE chi test: {rmse_chi_test:.4f}")
 
-vmin = min(ecs_gen.min(), ecs_train.min(), ecs_test.min())
+vmin = 1 # min(ecs_gen.min(), ecs_train.min(), ecs_test.min())
 vmax = max(ecs_gen.max(), ecs_train.max(), ecs_test.max())
-vmin, vmax = 1, 2
+# vmin, vmax = 1, 2.5
 
 cmap = plt.cm.coolwarm_r
-# cmap.set_over('lightgrey')
+cmap.set_over(cmap(.99))
 cmap_kws = {'cmap': cmap, 'vmin': vmin, 'vmax': vmax}
 
-fig, axs = plt.subplots(1, 3, figsize=(10, 3))
+fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
+                       gridspec_kw={
+                           'wspace': .02,
+                           'width_ratios': [1, 1, 1, .05]}
+                           )
+
 im = axs[0].imshow(ecs_train, **cmap_kws)
 im = axs[1].imshow(ecs_test, **cmap_kws)
 im = axs[2].imshow(ecs_gen, **cmap_kws)
-fig.colorbar(im, ax=axs, extend="max", orientation="vertical", shrink=0.8, aspect=40)
+for ax in axs:
+    ax.set_xticks([])
+    ax.set_yticks([])
 
-axs[0].set_title("Train data")
-axs[1].set_title("Test data")
-axs[2].set_title("Generated data")
-# fig.suptitle(r"Pairwise $\hat \theta$ for channel {}".format(channel))
-fig.suptitle(r"Pairwise $\hat \theta$ for maximum wind".format(channel))
+fig.colorbar(im, cax=axs[3], extend='both', orientation='vertical');
+
+axs[0].set_title("Train", fontsize=16)
+axs[1].set_title("Test", fontsize=16)
+axs[2].set_title("hazGAN", fontsize=16)
+axs[0].set_ylabel('Extremal coeff.', fontsize=18);
 
 # look at differences
 diffs = abs(ecs_gen - ecs_test)
 vmin = diffs.min()
 vmax = diffs.max()
 fig, ax = plt.subplots(1, 1, figsize=(5, 5))
-im = ax.imshow(diffs, cmap="coolwarm", vmin=vmin, vmax=vmax)
+im = ax.imshow(diffs, cmap="coolwarm_r", vmin=vmin, vmax=vmax)
 fig.colorbar(im)
-ax.set_title(r"$\hat\theta_{\text{GAN}}-\hat\theta_{\text{test}}$")# %%
-
+# ax.set_title(r"$\hat\theta_{\text{GAN}}-\hat\theta_{\text{test}}$");
 # %%

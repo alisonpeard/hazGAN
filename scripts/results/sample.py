@@ -10,8 +10,8 @@ import wandb
 
 # %%
 wd = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN"
-RUNNAME = "vital-sweep-30" # "denim-sweep-78" # "logical-sweep-75" # "clean-sweep-3"
-TEMPERATURE = 1.1
+RUNNAME = "volcanic-sweep-61" # "vital-sweep-30" # "denim-sweep-78" # "logical-sweep-75" # "clean-sweep-3"
+TEMPERATURE = 1.0
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 occurrence_rate = 18.033
@@ -78,10 +78,10 @@ axs[1].hist(samples_independent[..., 0].flatten(), **hist_kws);
 axs[2].hist(samples_dependent[..., 0].flatten(), **hist_kws);
 axs[3].hist(train.uniform.values[..., 0].flatten(), **hist_kws);
 
-axs[0].set_title('HazGAN samples for wind')
-axs[1].set_title('Independent samples for wind')
-axs[2].set_title('Dependent samples for wind')
-axs[3].set_title('Training samples for wind')
+axs[0].set_title('HazGAN samples for max wind anomaly')
+axs[1].set_title('Independent samples for max wind anomalyd')
+axs[2].set_title('Dependent samples for max wind anomaly')
+axs[3].set_title('Training samples for max wind anomaly')
 
 channel = 1
 axs = axes[1, :]
@@ -90,10 +90,10 @@ axs[1].hist(samples_independent[..., 1].flatten(), **hist_kws);
 axs[2].hist(samples_dependent[..., 1].flatten(), **hist_kws);
 axs[3].hist(train.uniform.values[..., 1].flatten(), **hist_kws);
 
-axs[0].set_title('HazGAN samples for pressure')
-axs[1].set_title('Independent samples for pressure')
-axs[2].set_title('Dependent samples for pressure')
-axs[3].set_title('Training samples for pressure')
+axs[0].set_title('HazGAN samples for cumulative precipitation anomaly')
+axs[1].set_title('Independent samples for cumulative precipitation anomaly')
+axs[2].set_title('Dependent samples for cumulative precipitation anomaly')
+axs[3].set_title('Training samples for cumulative precipitation anomaly')
 
 for ax in axes.flatten():
     ax.axhline(1, color='r', linestyle='--', label='Target shape')
