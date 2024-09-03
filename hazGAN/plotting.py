@@ -10,6 +10,13 @@ from .utils import *
 from .defaults import *
 
 
+def add_watermark(ax, text):
+        ax.text(-1, 0.01, text,
+        fontsize=8, color='k', alpha=0.5,
+        ha='right', va='bottom',
+        transform=plt.gca().transAxes)
+
+
 def add_colorbar(fig, im, ax, pad=0.05):
     divider = make_axes_locatable(ax)
     cax = divider.append_axes('right', size='5%', pad=pad)
