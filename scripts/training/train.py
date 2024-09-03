@@ -2,7 +2,7 @@
 -----Requirements-----
     - env: hazGAN
     - GAN configuratino: config-defaults.yaml
-    - data: era5_data/res_18x22/data.nc
+    - data: traininga/18x22/data.nc
 
 -----Output-----
     - saved_models: generator.weights.h5, critic.weights.h5
@@ -28,12 +28,12 @@ import argparse
 import yaml
 import numpy as np
 import tensorflow as tf
-tf.keras.backend.clear_session()
+import matplotlib.pyplot as plt
 
 import wandb
 import hazGAN as hg
 from hazGAN import WandbMetricsLogger
-
+tf.keras.backend.clear_session()
 
 global rundir
 global runname
@@ -151,13 +151,76 @@ def main(config):
     gan.critic.save_weights(os.path.join(rundir, f"critic.weights.h5"))
     save_config(rundir)
 
-    # generate images to visualise some results
+    # ----Figures----
     paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
-    train_u = hg.unpad(train_u, paddings).numpy()
-    test_u = hg.unpad(test_u, paddings).numpy()
+    train_u = hg.inv_gumbel(hg.unpad(train_u, paddings)).numpy()
+    test_u = hg.inv_gumbel(hg.unpad(test_u, paddings)).numpy()
     fake_u = hg.unpad(gan(nsamples=1000), paddings).numpy()
-    fig = hg.plot_generated_marginals(fake_u, vmin=None, vmax=None, runname=runname)
-    log_image_to_wandb(fig, f"generated_marginals", imdir)
+    
+    cmap = plt.cm.coolwarm_r
+    vmin = 1
+    vmax = 2
+    cmap.set_under(cmap(0))
+    cmap.set_over(cmap(.99))
+
+    # channel extremal coefficients
+    def get_channel_ext_coefs(x):
+        n, h, w, c = x.shape
+        excoefs = hg.get_extremal_coeffs_nd(x, [*range(h * w)])
+        excoefs = np.array([*excoefs.values()]).reshape(h, w)
+        return excoefs
+    
+    excoefs_train = get_channel_ext_coefs(train_u)
+    excoefs_test = get_channel_ext_coefs(test_u)
+    excoefs_gan = get_channel_ext_coefs(fake_u)
+    # vmin = 1 # min(excoefs_train.min(), excoefs_test.min(), excoefs_gan.min())
+    # vmax = 2 # max(excoefs_train.max(), excoefs_test.max(), excoefs_gan.max())
+
+    fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
+                       gridspec_kw={
+                           'wspace': .02,
+                           'width_ratios': [1, 1, 1, .05]}
+                           )
+    im = ax[0].imshow(excoefs_train, vmin=vmin, vmax=vmax, cmap=cmap)
+    im = ax[1].imshow(excoefs_test, vmin=vmin, vmax=vmax, cmap=cmap)
+    im = ax[2].imshow(excoefs_gan, vmin=vmin, vmax=vmax, cmap=cmap)
+    for a in ax:
+        a.set_yticks([])
+        a.set_xticks([])
+        a.invert_yaxis()
+    ax[0].set_title('Train', fontsize=16)
+    ax[1].set_title('Test', fontsize=16)
+    ax[2].set_title('hazGAN', fontsize=16);
+    fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
+    ax[0].set_ylabel(r'Extremal coeff.', fontsize=18);
+    log_image_to_wandb(fig, f"extremal_dependence", imdir)
+    plt.show()
+
+    # spatial extremal coefficients
+    i = 0 # only look at wind speed
+    ecs_train = hg.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., i]).numpy()
+    ecs_test = hg.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., i]).numpy()
+    ecs_gen = hg.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., i]).numpy()
+    # vmin = 1 # min(ecs_train.min(), ecs_test.min(), ecs_gen.min())
+    # vmax = 2 # max(ecs_train.max(), ecs_test.max(), ecs_gen.max())
+    fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
+                        gridspec_kw={
+                            'wspace': .02,
+                            'width_ratios': [1, 1, 1, .05]}
+                            )
+    im = axs[0].imshow(ecs_train, vmin=vmin, vmax=vmax, cmap=cmap)
+    im = axs[1].imshow(ecs_test, vmin=vmin, vmax=vmax, cmap=cmap)
+    im = axs[2].imshow(ecs_gen, vmin=vmin, vmax=vmax, cmap=cmap)
+    for ax in axs:
+        ax.set_xticks([])
+        ax.set_yticks([])
+    fig.colorbar(im, cax=axs[3], extend='both', orientation='vertical');
+    axs[0].set_title("Train", fontsize=16)
+    axs[1].set_title("Test", fontsize=16)
+    axs[2].set_title("hazGAN", fontsize=16)
+    axs[0].set_ylabel('Extremal coeff.', fontsize=18);
+    log_image_to_wandb(fig, f"spatial_dependence", imdir)
+    plt.show()
 
 
 # %% run this cell to train the model
@@ -196,7 +259,7 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 2,
+            'nepochs': 1,
             'batch_size': 1,
             'train_size': 1,
             'chi_frequency': 1
