@@ -21,11 +21,11 @@ def open_config(runname, dir):
 
 # %%
 res = (18, 22)
-RUNNAME = "volcanic-sweep-61" # "volcanic-sweep-61" # "vital-sweep-30__precipsota" #"vital-sweep-30"  # "vital-sweep-30__precipsota"
+RUNNAME = "amber-sweep-13" # "vital-sweep-30__precipsota" #"vital-sweep-30"  # "vital-sweep-30__precipsota"
 datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/{res[0]}x{res[1]}'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
-config = open_config("clean-sweep-3", "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
-data = xr.open_dataset(os.path.join(datadir, "data.nc"))
+config = open_config(RUNNAME, "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
+data = xr.open_dataset(os.path.join(datadir, "data.nc")).sel(channel=['u10', 'tp'])
 samples_ds = xr.open_dataset(os.path.join(samplesdir, f"{RUNNAME}.nc"))
 occurence_rate = 18.033 # from R 
 ntrain = config['train_size']
@@ -101,9 +101,9 @@ fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
                            'width_ratios': [1, 1, 1, .05]}
                            )
 cmap = plt.cm.coolwarm_r
-cmap.set_over(cmap(.99))
+cmap.set_over('lightgrey') #cmap(.99)
 cmap.set_under(cmap(0))
-cmap_kws = {'cmap': cmap, 'vmin': 1, 'vmax': 2}
+cmap_kws = {'cmap': cmap, 'vmin': 1, 'vmax': 2.5}
 
 im = ax[0].imshow(excoefs_train, **cmap_kws)
 im = ax[1].imshow(excoefs_test, **cmap_kws)
@@ -175,8 +175,8 @@ print(f"RMSE chi train: {rmse_chi_train:.4f}")
 print(f"RMSE chi test: {rmse_chi_test:.4f}")
 
 vmin = 1 # min(ecs_gen.min(), ecs_train.min(), ecs_test.min())
-vmax = max(ecs_gen.max(), ecs_train.max(), ecs_test.max())
-# vmin, vmax = 1, 2.5
+# vmax = max(ecs_gen.max(), ecs_train.max(), ecs_test.max())
+vmin, vmax = 1, 2.5
 
 cmap = plt.cm.coolwarm_r
 cmap.set_over(cmap(.99))
