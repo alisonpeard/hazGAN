@@ -2,6 +2,8 @@
 import os
 import xarray as xr
 import geopandas as gpd
+import matplotlib.ticker as ticker
+import matplotlib.pyplot as plt
 
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Garamond'] + plt.rcParams['font.serif']
@@ -23,9 +25,7 @@ totals_independent = totals_independent.rename({'independent_damagearea': 'damag
 totals_hazGAN = totals_hazGAN.rename({'hazGAN_damagearea': 'damagearea'})
 
 # %%
-import matplotlib.ticker as ticker
-import matplotlib.pyplot as plt
-eps = .0
+eps = .25
 
 def plot_totals(totals, ax, label, color, eps=.25, scatter=True,
                 line=True, line_kws={}, scatter_kws={}):
