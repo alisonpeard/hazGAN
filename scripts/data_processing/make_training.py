@@ -27,9 +27,10 @@ df = df.rename(columns={"msl": "mslp"})
 df['day_of_storm'] = df.groupby('storm')['time_u10'].rank('dense')
 
 # %% add event sizes
-events = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))[["storm", "storm.size"]].groupby("storm").mean()
-events = events.to_dict()["storm.size"]
+events = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))
 rate = events['lambda'][0]
+events = events[["storm", "storm.size", "lambda"]].groupby("storm").mean()
+events = events.to_dict()["storm.size"]
 df["size"] = df["storm"].map(events)
 gdf = gpd.GeoDataFrame(df, geometry="geometry").set_crs("EPSG:4326")
 
