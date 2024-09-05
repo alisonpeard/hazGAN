@@ -29,8 +29,10 @@ df['day_of_storm'] = df.groupby('storm')['time_u10'].rank('dense')
 # %% add event sizes
 events = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))[["storm", "storm.size"]].groupby("storm").mean()
 events = events.to_dict()["storm.size"]
+rate = events['lambda'][0]
 df["size"] = df["storm"].map(events)
 gdf = gpd.GeoDataFrame(df, geometry="geometry").set_crs("EPSG:4326")
+
 # %%
 import cartopy
 from cartopy import crs as ccrs
@@ -140,7 +142,11 @@ ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], Ue),
                         'channel': channels,
                         'param': ['shape', 'loc', 'scale']
                  },
-                 attrs={'CRS': 'EPSG:4326', 'u10': '10m wind speed', 'tp': 'total precipitation'})
+                 attrs={'CRS': 'EPSG:4326',
+                        'u10': '10m Wind Speed [ms-1]',
+                        'tp': 'Total Precipitation [m]',
+                        'mslp': 'Mean Sea Level Pressure [wind spePa]',
+                        'yearly_freq': rate})
 
 ds.to_netcdf(os.path.join(datadir, "data.nc"))
 
