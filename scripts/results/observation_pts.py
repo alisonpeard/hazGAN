@@ -61,10 +61,6 @@ texts = []
 for x, y, label in zip(ops_gdf.geometry.x, ops_gdf.geometry.y, ops_gdf.index):
     texts.append(ax.text(x, y, label.title().replace('_', ':'), fontsize=12, color='k', fontweight='bold'))
 
-    # ax.annotate(label.title().replace('_', ':'), xy=(x, y), xytext=(3, 3),
-    #             textcoords="offset points", fontsize=12, color='k')
-# fix the above so that labels don't overlap
-
 adjust_text(texts, expand=(1.5, 1.5), arrowprops=dict(arrowstyle="-", color='k', lw=0.2))
 fig.savefig(os.path.join(figdir, 'observation_points.png'), transparent=True)
 

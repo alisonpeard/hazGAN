@@ -2,34 +2,54 @@
 Load a pretrained model then plot and display EADs
 
 ---- To do ----
-    - Make into functions
-    - Do for training data
-    - Do for hazGAN samples
-    - Do for dependent/independent assumptions
+    - Tidy up and refactor
 """
 # %% ---- Setup ----
 import os
+import yaml
 import pandas as pd
 import numpy as np
+import geopandas as gpd
+from shapely.geometry import box
 from joblib import load
 import xarray as xr
+import xagg as xa
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.ticker import PercentFormatter
+import cartopy.crs as ccrs
+from cartopy import feature
+from sklearn.metrics import auc
 from sklearn.preprocessing import StandardScaler
 import warnings
+
+from hazGAN import (
+    xmin, xmax, ymin, ymax,
+    bay_of_bengal_crs,
+    occurrence_rate
+)
+
+global model
 
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Garamond'] + plt.rcParams['font.serif']
 plt.style.use('bmh')
 
-global model
+def open_config(runname, dir):
+    configfile = open(os.path.join(dir, runname, "config-defaults.yaml"), "r")
+    config = yaml.load(configfile, Loader=yaml.FullLoader)
+    config = {key: value["value"] for key, value in config.items()}
+    return config
 
-month = 7
-DEV = False
+month     = 7
+DEV       = False
 SMOOTHING = False
-run = 'vital-sweep-30__precipsota'
-yearly_rate = 18 # from R
-wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')
+PLOT      = False
+run       = 'amber-sweep-13' # 'vital-sweep-30__precipsota'
+wd        = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')
+
+config = open_config(run, "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
+ntrain = config['train_size']
 
 # %% ---- Load model and samples ----
 modelpath = os.path.join(wd, 'results', 'mangroves', 'damagemodel.pkl')
@@ -43,20 +63,20 @@ samples = xr.open_dataset(samplespath)
 month_medians = samples.sel(month=month).medians
 samples_month = samples[['anomaly', 'dependent', 'independent']] + month_medians
 samples_month = samples_month.rename({'anomaly': 'hazGAN'})
-# samples_month = samples_month.stack(grid=['lat', 'lon'])
 
 datapath = os.path.join(wd, 'training', '18x22', 'data.nc')
-data = xr.open_dataset(datapath)
+data = xr.open_dataset(datapath).sel(channel=['u10', 'tp'])
 data_month = data + month_medians # data['medians']
 data_month = data_month.rename({'anomaly': 'era5', 'time': 'sample'})
-# data_month = data_month.stack(grid=['lat', 'lon'])
-train_month = data_month.isel(sample=slice(0, 560))
-test_month = data_month.isel(sample=slice(560, None))
+train_month = data_month.isel(sample=slice(0, ntrain))
+test_month = data_month.isel(sample=slice(ntrain, None))
+yearly_rate = data.attrs['yearly_freq']
 
 # for dev
 if DEV:
     samples_month = samples_month.isel(sample=slice(0, 10))
     train_month = train_month.isel(sample=slice(0, 10))
+
 # %% ---- Predict  ----
 def damage_ufunc(X):
     X = X.reshape(1, -1)
@@ -91,46 +111,42 @@ def get_damages(
 
 damages_sample = get_damages(samples_month, ['dependent', 'independent', 'hazGAN'])
 damages_train = get_damages(train_month, ['era5'])
+damages_test = get_damages(test_month, ['era5'])
 
 # %% ---- Plot mangrove damage predictions for random storm ----
-# NOTE: might be good to interpolate these for nicer contours .contourf
-i = np.random.randint(0, damages_sample.sizes['sample']-1)
-j = np.random.randint(0, damages_train.sizes['sample']-1)
+if PLOT:
+    i = np.random.randint(0, damages_sample.sizes['sample']-1)
+    j = np.random.randint(0, damages_train.sizes['sample']-1)
 
-fig, axes = plt.subplots(3, 2, figsize=(15, 15))
+    fig, axes = plt.subplots(3, 2, figsize=(15, 15))
 
-axs = axes[0, :]
-heatmap_kwargs = {'cmap':'YlOrRd', 'cbar_kwargs': {'label': 'Wind speed [mps]'}}
-damages_sample.isel(sample=i, channel=0).hazGAN.plot.contourf(ax=axs[0], **heatmap_kwargs)
-damages_train.isel(sample=j, channel=0).era5.plot.contourf(ax=axs[1], **heatmap_kwargs)
-axs[0].set_title(f'Wind speed [mps] (sample storm nᵒ{i})')
-axs[1].set_title(f'Wind speed [mps] (real storm nᵒ{j})')
+    axs = axes[0, :]
+    heatmap_kwargs = {'cmap':'YlOrRd', 'cbar_kwargs': {'label': 'Wind speed [mps]'}}
+    damages_sample.isel(sample=i, channel=0).hazGAN.plot.contourf(ax=axs[0], **heatmap_kwargs)
+    damages_train.isel(sample=j, channel=0).era5.plot.contourf(ax=axs[1], **heatmap_kwargs)
+    axs[0].set_title(f'Wind speed [mps] (sample storm nᵒ{i})')
+    axs[1].set_title(f'Wind speed [mps] (real storm nᵒ{j})')
 
-axs = axes[1, :]
-heatmap_kwargs = {'cmap':'PuBu', 'cbar_kwargs': {'label': 'Total precipitation [m]'}} 
-damages_sample.isel(sample=i, channel=1).hazGAN.plot.contourf(ax=axs[0], **heatmap_kwargs)
-damages_train.isel(sample=j, channel=1).era5.plot.contourf(ax=axs[1], **heatmap_kwargs)
-axs[0].set_title(f'Total precipitation [m] (sample storm nᵒ{i})')
-axs[1].set_title(f'Total precipitation [m] (real storm nᵒ{j})')
+    axs = axes[1, :]
+    heatmap_kwargs = {'cmap':'PuBu', 'cbar_kwargs': {'label': 'Total precipitation [m]'}} 
+    damages_sample.isel(sample=i, channel=1).hazGAN.plot.contourf(ax=axs[0], **heatmap_kwargs)
+    damages_train.isel(sample=j, channel=1).era5.plot.contourf(ax=axs[1], **heatmap_kwargs)
+    axs[0].set_title(f'Total precipitation [m] (sample storm nᵒ{i})')
+    axs[1].set_title(f'Total precipitation [m] (real storm nᵒ{j})')
 
-axs = axes[2, :]
-heatmap_kwargs = {'cmap':'YlOrRd',
-                  'cbar_kwargs': {
-                      'label': 'Mangrove damage (%area)',
-                      'format': matplotlib.ticker.PercentFormatter(1, 0)
-                      }
-                  }
-damages_sample.isel(sample=i).hazGAN_damage.plot.contourf(ax=axs[0], **heatmap_kwargs)
-damages_train.isel(sample=j).era5_damage.plot.contourf(ax=axs[1], **heatmap_kwargs)
-axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ{i})')
-axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ{j})')
+    axs = axes[2, :]
+    heatmap_kwargs = {'cmap':'YlOrRd',
+                    'cbar_kwargs': {
+                        'label': 'Mangrove damage (%area)',
+                        'format': matplotlib.ticker.PercentFormatter(1, 0)
+                        }
+                    }
+    damages_sample.isel(sample=i).hazGAN_damage.plot.contourf(ax=axs[0], **heatmap_kwargs)
+    damages_train.isel(sample=j).era5_damage.plot.contourf(ax=axs[1], **heatmap_kwargs)
+    axs[0].set_title(f'Predicted mangrove damage (sample storm nᵒ{i})')
+    axs[1].set_title(f'Predicted mangrove damage (real storm nᵒ{j})')
 
 # %% ---- Step 2: Load mangrove data ----
-import cartopy.crs as ccrs
-import geopandas as gpd 
-from shapely.geometry import box
-from hazGAN import xmin, xmax, ymin, ymax, bay_of_bengal_crs
-
 aoi = box(xmin, ymin, xmax, ymax)
 global_mangrove_watch = '/Users/alison/Documents/DPhil/data/gmw-v3-2020.nosync/gmw_v3_2020_vec.gpkg'
 mangroves = gpd.read_file(global_mangrove_watch, mask=aoi)
@@ -143,11 +159,9 @@ mangrovesout = os.path.join(wd, 'results', 'mangroves', 'mangroves.geojson')
 mangroves.to_file(mangrovesout, driver='GeoJSON')
 
 # %% ---- Convert mangroves to xarray.Dataset with values as areas ----
-import xagg as xa
-
 def intersect_mangroves_with_damages(mangroves: gpd.GeoDataFrame,
                                      damages: xr.Dataset,
-                                     plot=True) -> xr.Dataset:
+                                     plot=PLOT) -> xr.Dataset:
     # calculate intersections
     mangroves = mangroves.to_crs(4326)
     weightmap = xa.pixel_overlaps(damages, mangroves)
@@ -196,80 +210,54 @@ damages_sample['independent_damagepercent'] = damages_sample.independent_damage.
 damages_train['era5_damagearea'] = mangroves_gridded.area * damages_train.era5_damage
 damages_train['era5_damagepercent'] = damages_train.era5_damage.where(mangroves_gridded.area > 0)
 
-# %% Explore smoothing
-if SMOOTHING: 
-    # %% just an example to incorporate later for paper figures
-    # NOTE: I think interpolation might be better than smoothing
-    from hazGAN import gaussian_blur
-
-    ds = damages_sample.copy()#.isel(sample=0)
-    da = ds.hazGAN_damage
-
-    x = da.data[..., np.newaxis]
-    xblur = gaussian_blur(x, kernel_size=2, sigma=5).numpy().squeeze()
-    ds['smoothed'] = (['sample', 'lat', 'lon'], xblur)
-
-    i = np.random.randint(0, damages_sample.sizes['sample'])
-    fig, ax = plt.subplots(2, 2, figsize=(12, 6))
-    ds.isel(sample=i).hazGAN_damage.plot(ax=ax[0, 0], cmap='YlOrRd')
-    ds.isel(sample=i).smoothed.plot(ax=ax[0, 1], cmap='YlOrRd')
-    ds.isel(sample=i).hazGAN_damage.plot.contourf(ax=ax[1, 0], cmap='YlOrRd', levels=10)
-    ds.isel(sample=i).smoothed.plot.contourf(ax=ax[1, 1], cmap='YlOrRd', levels=10)
-    fig.suptitle(f'Smoothing for sample {i}')
+damages_test['era5_damagearea'] = mangroves_gridded.area * damages_test.era5_damage
+damages_test['era5_damagepercent'] = damages_test.era5_damage.where(mangroves_gridded.area > 0)
 
 # %% Turn contourf on and off
-import cartopy.crs as ccrs
-from cartopy import feature
-from matplotlib.ticker import PercentFormatter
+if PLOT:
+    i = 7 # 969, i = np.random.randint(0, len(damages_sample.sample)
+    damages = damages_sample.copy()
+    
+    fig, axs = plt.subplots(2, 2, figsize=(12, 10), subplot_kw={'projection': ccrs.PlateCarree()})
+    mangroves_gridded.area.plot(ax=axs[0, 0], cmap="Greens",
+                                cbar_kwargs={'label': 'Mangrove area [km²]'})
+    damages.isel(sample=i).hazGAN_damage.plot(
+        ax=axs[0, 1],
+        cmap='YlOrRd',
+        cbar_kwargs={'label': 'Probability of mangrove damage',
+                    'format': PercentFormatter(1, 0)
+                    }
+                    )
+    damages.isel(sample=i).hazGAN_damage.plot.contour(
+        ax=axs[0, 1], colors='wheat', linewidths=.5)
 
-i = 7# 969
-damages = damages_sample.copy()
-# i = np.random.randint(0, len(damages_sample.sample)
+    damages.isel(sample=i).hazGAN_damagepercent.plot(
+        ax=axs[1, 0],
+        cmap='YlOrRd',
+        cbar_kwargs={'label': 'Probability of mangrove damage',
+                    'format': PercentFormatter(1, 0)}
+                    )
 
+    damages.isel(sample=i).hazGAN_damagearea.plot(
+        ax=axs[1, 1],
+        cmap='YlOrRd',
+        cbar_kwargs={'label': 'Expected area damaged [km²]'}
+        )
 
-fig, axs = plt.subplots(2, 2, figsize=(12, 10), subplot_kw={'projection': ccrs.PlateCarree()})
-mangroves_gridded.area.plot(ax=axs[0, 0], cmap="Greens",
-                            cbar_kwargs={'label': 'Mangrove area [km²]'})
-damages.isel(sample=i).hazGAN_damage.plot(
-    ax=axs[0, 1],
-    cmap='YlOrRd',
-    cbar_kwargs={'label': 'Probability of mangrove damage',
-                 'format': PercentFormatter(1, 0)
-                 }
-                 )
-damages.isel(sample=i).hazGAN_damage.plot.contour(
-    ax=axs[0, 1], colors='wheat', linewidths=.5)
+    axs[0, 0].set_title('Mangrove area')
+    axs[0, 1].set_title('Probability of mangrove damage')
+    axs[1, 0].set_title('Probability of mangrove damage')
+    axs[1, 1].set_title('Expected area damaged [km²]')
 
-damages.isel(sample=i).hazGAN_damagepercent.plot(
-    ax=axs[1, 0],
-    cmap='YlOrRd',
-    cbar_kwargs={'label': 'Probability of mangrove damage',
-                 'format': PercentFormatter(1, 0)}
-                 )
+    for ax in axs.ravel():
+        ax.add_feature(feature.COASTLINE)
+        ax.add_feature(feature.BORDERS)
+        ax.add_feature(feature.LAND, facecolor='wheat')
+        ax.add_feature(feature.OCEAN)
 
-damages.isel(sample=i).hazGAN_damagearea.plot(
-    ax=axs[1, 1],
-    cmap='YlOrRd',
-    cbar_kwargs={'label': 'Expected area damaged [km²]'}
-    )
-
-axs[0, 0].set_title('Mangrove area')
-axs[0, 1].set_title('Probability of mangrove damage')
-axs[1, 0].set_title('Probability of mangrove damage')
-axs[1, 1].set_title('Expected area damaged [km²]')
-
-for ax in axs.ravel():
-    ax.add_feature(feature.COASTLINE)
-    ax.add_feature(feature.BORDERS)
-    ax.add_feature(feature.LAND, facecolor='wheat')
-    ax.add_feature(feature.OCEAN)
-
-fig.suptitle('Sample storm damage to mangroves')
+    fig.suptitle('Sample storm damage to mangroves')
 
 # %% ---- Calculate return periods and EADs ----
-from sklearn.metrics import auc
-from hazGAN import occurrence_rate
-
 def auc_ufunc(x, y):
     x = sorted(x)
     y = sorted(y)
@@ -306,21 +294,22 @@ def calculate_eads(var, damages: xr.Dataset, yearly_rate: int) -> xr.Dataset:
 damages_sample = calculate_eads('hazGAN_damagearea', damages_sample, occurrence_rate)
 damages_sample = calculate_eads('independent_damagearea', damages_sample, occurrence_rate)
 damages_sample = calculate_eads('dependent_damagearea', damages_sample, occurrence_rate)
-damages_train= calculate_eads('era5_damagearea', damages_train, occurrence_rate)
-
+damages_train = calculate_eads('era5_damagearea', damages_train, occurrence_rate)
+damages_test = calculate_eads('era5_damagearea', damages_test, occurrence_rate)
 
 # %% ---- Plot EADs ----
-fig, axs = plt.subplots(1, 4, figsize=(15, 3.5), subplot_kw={'projection': ccrs.PlateCarree()})
+if PLOT:
+    fig, axs = plt.subplots(1, 4, figsize=(15, 3.5), subplot_kw={'projection': ccrs.PlateCarree()})
 
-damages_sample['dependent_EAD'].plot(ax=axs[0], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
-damages_sample['independent_EAD'].plot(ax=axs[1], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
-damages_sample['hazGAN_EAD'].plot(ax=axs[2], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
-damages_train['era5_EAD'].plot(ax=axs[3], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
+    damages_sample['dependent_EAD'].plot(ax=axs[0], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
+    damages_sample['independent_EAD'].plot(ax=axs[1], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
+    damages_sample['hazGAN_EAD'].plot(ax=axs[2], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
+    damages_train['era5_EAD'].plot(ax=axs[3], cmap='YlOrRd', cbar_kwargs={'label': 'Expected annual damages [km²]'})
 
-axs[0].set_title('All dependent')
-axs[1].set_title('All independent')
-axs[2].set_title('hazGAN')
-axs[3].set_title('Real data')
+    axs[0].set_title('All dependent')
+    axs[1].set_title('All independent')
+    axs[2].set_title('hazGAN')
+    axs[3].set_title('Real data')
 
 # %% ---- Return period vs. damages plots (Lamb 2010) ----
 def calculate_total_return_periods(damages: xr.Dataset,
@@ -337,70 +326,71 @@ def calculate_total_return_periods(damages: xr.Dataset,
 totals_independent = calculate_total_return_periods(damages_sample, occurrence_rate, 'independent_damagearea')
 totals_dependent = calculate_total_return_periods(damages_sample, occurrence_rate, 'dependent_damagearea')
 totals_hazGAN = calculate_total_return_periods(damages_sample, occurrence_rate, 'hazGAN_damagearea')
-totals_data = calculate_total_return_periods(damages_train, occurrence_rate, 'era5_damagearea')
-
-# %%
-fig, ax = plt.subplots()
-eps =.25
-
-mask = totals_hazGAN.return_period > eps
-ax.plot(
-    totals_hazGAN.where(mask).return_period,
-    totals_hazGAN.where(mask).hazGAN_damagearea,
-    color='k',
-    linewidth=1.5,
-    label='Modelled dependence'
-)
-
-mask = totals_dependent.return_period > eps
-ax.plot(
-    totals_dependent.where(mask).return_period,
-    totals_dependent.where(mask).dependent_damagearea,
-    color='blue',
-    linewidth=1.5,
-    linestyle='dotted',
-    label='Complete dependence'
-)
-
-mask = totals_independent.return_period > eps
-ax.plot(
-    totals_independent.where(mask).return_period,
-    totals_independent.where(mask).independent_damagearea,
-    color='r',
-    linestyle='dashed',
-    linewidth=1.5,
-    label='Independence'
-)
-
-mask = totals_data.return_period > eps
-ax.scatter(
-    totals_data.where(mask).return_period,
-    totals_data.where(mask).era5_damagearea,
-    color='k',
-    s=1.5,
-    label='Training data'
-)
-
-ax.set_xlabel('Return period (years)')
-ax.set_ylabel('Total damage to mangroves (km²)')
-ax.legend()
-if not DEV:
-    ax.set_xscale('log')
-    ax.set_xticks([2, 5, 25, 100, 200, 500])
-ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
-# ax.set_title('Based on Figure 7 Lamb (2010)')
+totals_train = calculate_total_return_periods(damages_train, occurrence_rate, 'era5_damagearea')
+totals_test = calculate_total_return_periods(damages_test, occurrence_rate, 'era5_damagearea')
 
 # %% Save damages files for train and samples, as well as total damages
 damages_sample_out = os.path.join(wd, 'results', 'mangroves', 'damages_sample.nc')
 damages_train_out = os.path.join(wd, 'results', 'mangroves', 'damages_train.nc')
+damages_test_out = os.path.join(wd, 'results', 'mangroves', 'damages_test.nc')
 totals_out = os.path.join(wd, 'results', 'mangroves', 'totals.nc')
 
 damages_sample.to_netcdf(damages_sample_out)
 damages_train.to_netcdf(damages_train_out)
+damages_test.to_netcdf(damages_test_out)
 
-totals_independent.to_netcdf(totals_out, group='independent')
-totals_dependent.to_netcdf(totals_out, group='dependent')
-totals_hazGAN.to_netcdf(totals_out, group='hazGAN')
+totals_independent.to_netcdf(totals_out, group='independent', mode='w')
+totals_dependent.to_netcdf(totals_out, group='dependent', mode='a')
+totals_hazGAN.to_netcdf(totals_out, group='hazGAN', mode='a')
+totals_train.to_netcdf(totals_out, group='train', mode='a')
+totals_test.to_netcdf(totals_out, group='test', mode='a')
+
+# %% Lamb (2010) Figure 7, NOTE: new script just for this
+if PLOT:
+    fig, ax = plt.subplots()
+    eps =.25
+    mask = totals_hazGAN.return_period > eps
+    ax.scatter(
+        totals_hazGAN.where(mask).return_period,
+        totals_hazGAN.where(mask).hazGAN_damagearea,
+        color='k',
+        linewidth=1.5,
+        label='Modelled dependence'
+    )
+    mask = totals_dependent.return_period > eps
+    ax.plot(
+        totals_dependent.where(mask).return_period,
+        totals_dependent.where(mask).dependent_damagearea,
+        color='blue',
+        linewidth=1.5,
+        linestyle='dotted',
+        label='Complete dependence'
+    )
+    mask = totals_independent.return_period > eps
+    ax.plot(
+        totals_independent.where(mask).return_period,
+        totals_independent.where(mask).independent_damagearea,
+        color='r',
+        linestyle='dashed',
+        linewidth=1.5,
+        label='Independence'
+    )
+    mask = totals_train.return_period > eps
+    ax.scatter(
+        totals_train.where(mask).return_period,
+        totals_train.where(mask).era5_damagearea,
+        color='k',
+        s=1.5,
+        label='Training data'
+    )
+    ax.set_xlabel('Return period (years)')
+    ax.set_ylabel('Total damage to mangroves (km²)')
+    ax.legend()
+    if not DEV:
+        ax.set_xscale('log')
+        ax.set_xticks([2, 5, 25, 100, 200, 500])
+    ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter());
+    # ax.set_title('Based on Figure 7 Lamb (2010)')
 
 # %%
 os.system('say done')

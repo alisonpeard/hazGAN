@@ -333,6 +333,7 @@ final.df <- wind.renamed %>%
   inner_join(tp.renamed, by = c('grid', 'storm', 'storm.rp'))
 
 final.df$thresh.q <- q # approx. extremeness measure
+cluster.df$lambda <- occurrence.rate
 
 ########### SAVE TO CSV FOR PYTHON #############################################
 write.csv(medians, paste0(indir, '/', 'monthly_medians.csv'), row.names=FALSE)

@@ -15,20 +15,28 @@ import matplotlib.pyplot as plt
 
 plt.rcParams['font.family'] = 'serif'
 
+def open_config(runname, dir):
+    configfile = open(os.path.join(dir, runname, "config-defaults.yaml"), "r")
+    config = yaml.load(configfile, Loader=yaml.FullLoader)
+    config = {key: value["value"] for key, value in config.items()}
+    return config
+
 channel = 0
 channels = ['u10', 'tp']
 fig_kws = {'dpi': 300, 'bbox_inches': 'tight', 'transparent': True}
 
-runname = 'colorful-sweep-40'
+runname = 'amber-sweep-13'
 datadir = '/Users/alison/Documents/DPhil/paper1.nosync/training/18x22'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 resdir = '/Users/alison/Documents/DPhil/paper1.nosync/results/brown_resnick'
 figdir = '/Users/alison/Documents/DPhil/paper1.nosync/figures/paper/brownresnick'
 
+config = open_config(runname, "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
+
 # %% -----Load data-----
 data = xr.open_dataset(os.path.join(datadir, "data.nc"))
-data = data.stack(grid=('lat', 'lon')).transpose('time', 'grid', 'param', 'channel')
-ntrain = 1000
+data = data.stack(grid=('lat', 'lon')).transpose('time', 'grid', 'param', 'channel').sel(channel=['u10', 'tp'])
+ntrain = config['train_size']
 data_train = data.isel(time=slice(0, ntrain))
 data_test = data.isel(time=slice(ntrain, None))
 
