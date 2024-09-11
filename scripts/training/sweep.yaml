@@ -1,29 +1,29 @@
 project: hazGAN
 program: train.py
 method: random
-name: compoundmetrics
+name: long
 metric:
   goal: minimize
   name: compound_metric
 parameters:
+  ntrain:
+    values: [560, 640, 720, 800, 880, 960, 1040]
   batch_size:
-    values: [32, 64, 128]
+    values: [24, 32, 48, 64, 128, 256]
   training_balance:
-    values: [1, 2, 5, 10]
+    values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
   latent_dims:
     values: [64, 128, 256]
   g_complexity:
-    values: [1, 2]
+    values: [1, 2, 3]
   d_complexity:
-    values: [1, 2]
+    values: [1, 2, 3]
   learning_rate:
-    min: 0.0001
-    max: 0.0003
+    min: 0.00001
+    max: 0.0005
   beta_1:
     min: 0.1
     max: 0.5
-  uniform:
-    values: [uniform, uniform_semi]
   interpolation:
     values: [bilinear]
   lr_factor:
