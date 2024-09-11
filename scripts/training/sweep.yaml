@@ -1,7 +1,7 @@
 project: hazGAN
 program: train.py
-method: random
-name: long
+method: bayes
+name: train_recent
 metric:
   goal: minimize
   name: compound_metric
