@@ -22,8 +22,8 @@ def config_tf_devices():
         print(f"Using GPU: {gpu_names[0]}")
         return gpu_names[0]
 
-# wd = os.path.join('/soge-home', 'projects', 'mistral', 'alison', 'hazGAN')
-wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')  # hazGAN directory
+wd = os.path.join('/soge-home', 'projects', 'mistral', 'alison', 'hazGAN')
+# wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')  # hazGAN directory
 datadir = os.path.join(wd, 'training', "18x22")
 figdir = os.path.join(wd, "figures", "training")
 
