@@ -14,7 +14,7 @@ def load_datasets(datadir, ntrain, padding_mode='reflect', image_shape=(18, 22),
 
 def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
                   numpy=False, gumbel_marginals=True, channels=['u10', 'tp'],
-                  uniform='uniform'):
+                  uniform='uniform', take_top=560):
     """
     Load the hazGAN training data from the data.nc file.
 
@@ -41,6 +41,15 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
     """
     data = xr.open_dataset(os.path.join(datadir, "data.nc"))
     data = data.sel(channel=channels)
+
+    if take_top is not None:
+        print(f"Taking top {take_top} samples for training.")
+        nsamples = take_top
+        ntrain = int(0.6 * take_top)
+        data = data.sortby('storm_rp', ascending=False)
+        data = data.isel(time=slice(0, nsamples))
+        data = data.sortby('time')
+
     X = tf.image.resize(data.anomaly, image_shape)
     U = tf.image.resize(data[uniform], image_shape)
     M = tf.image.resize(data.medians, image_shape)

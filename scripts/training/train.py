@@ -260,7 +260,6 @@ if __name__ == "__main__":
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
             'nepochs': 1,
-            'batch_size': 1,
             'train_size': 1,
             'chi_frequency': 1
             },

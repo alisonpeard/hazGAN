@@ -11,7 +11,7 @@ import wandb
 # %%
 wd = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN"
 RUNNAME = "soft-sweep-12" # "absurd-sweep-1" # "atomic-sweep-1" # "amber-sweep-13"
-TEMPERATURE = 1 + 1e-2
+TEMPERATURE = 1 #+ 1e-2
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 nyears = 500 # what return period do we want to go up to, breaks down after 242 right now
@@ -33,7 +33,27 @@ test = ds_ref.isel(time=slice(ntrain, None))
 occurrence_rate = ds_ref.attrs['yearly_freq']
 nsamples = int(occurrence_rate * nyears)
 # nsamples = 560
+# %% Temp: playing with data sizes
+nsamples = 560
+ntrain = 324
+ntest = 560 - ntrain
+print(nsamples, ntrain, ntest)
 
+# sort ds_ref by storm_rp
+ds_ref = ds_ref.sortby('storm_rp', ascending=False)
+ds_ref = ds_ref.isel(time=slice(0, nsamples))
+ds_ref = ds_ref.sortby('time')
+ds_train = ds_ref.isel(time=slice(0, ntrain))
+ds_test = ds_ref.isel(time=slice(ntrain, None))
+
+# plot examples from train and test
+plt.hist(ds_train.storm_rp, bins=20, alpha=0.5, label='train')
+plt.hist(ds_test.storm_rp, bins=20, alpha=0.5, label='test')
+plt.yscale('log')
+plt.legend();
+
+
+# %%
 def sample_to_xr(data, ds_ref, plot=False):
     nsamples = data.shape[0]
     samples = np.arange(nsamples)
@@ -56,7 +76,7 @@ def sample_to_xr(data, ds_ref, plot=False):
         ds.isel(sample=0, channel=0).uniform.plot.contourf(levels=20, cmap='viridis')
     return ds
 
-# %%
+
 def batch_sample_wgan(nsamples, batch_size, temp):
     samples = []
     for i in range(0, nsamples, batch_size):
@@ -66,6 +86,7 @@ def batch_sample_wgan(nsamples, batch_size, temp):
     samples = np.concatenate(samples, axis=0)
     return samples
 
+# %%
 samples_hazGAN = batch_sample_wgan(nsamples, 100, TEMPERATURE)
 ds_hazGAN = sample_to_xr(samples_hazGAN, train, plot=True)
 
