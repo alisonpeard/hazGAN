@@ -3,14 +3,14 @@ model:
   desc: Which model to train, ['wgan' | 'dcgan'].
   value: wgan
 nepochs:
-  value: 3000 # 3000 # or 1,500,000/train_size
+  value: 15000 # 3000 # or 1,500,000/train_size
 train_size:
   value: 560 # 560 # 840 # 50
 batch_size:
   value: 32
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
-  value: 10
+  value: 100
 
 # training features
 lr_factor:
@@ -38,7 +38,7 @@ gumbel:
   value: True
 uniform:
   desc: Train on uniform marginals from ECDF or semi-parametric model
-  value: 'uniform'
+  value: uniform
 optimizer:
   desc: Optimizer to use, ['SGD', 'Adam']
   value: Adam

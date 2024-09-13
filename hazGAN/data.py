@@ -1,3 +1,4 @@
+"""Data handling methods for the hazGAN model."""
 import os
 import tensorflow as tf
 import xarray as xr
@@ -50,14 +51,15 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
         paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
         U = tf.pad(U, paddings, mode=padding_mode)
 
-    train_u = U[:ntrain, ...]
-    test_u = U[ntrain:, ...]
-    train_x = X[:ntrain, ...]
-    test_x = X[ntrain:, ...]
-    train_m = M[:ntrain, ...]
-    test_m = M[ntrain:, ...]
-    train_z = z[:ntrain]
-    test_z = z[ntrain:]
+    # swap these so training is on most recent data
+    train_u = U[-ntrain:, ...]
+    test_u = U[:-ntrain, ...]
+    train_x = X[-ntrain:, ...]
+    test_x = X[:-ntrain, ...]
+    train_m = M[-ntrain:, ...]
+    test_m = M[:-ntrain, ...]
+    train_z = z[-ntrain:]
+    test_z = z[:-ntrain]
 
     if gumbel_marginals:
         train_u = gumbel(train_u)
