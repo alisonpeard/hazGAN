@@ -12,6 +12,7 @@ from itertools import combinations
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
 plt.rcParams['font.family'] = 'serif'
+hist_kws = {'bins': 25, 'color': 'lightgrey', 'edgecolor': 'k', 'alpha': 0.5, 'density': True}
 
 def open_config(runname, dir):
     configfile = open(os.path.join(dir, runname, "config-defaults.yaml"), "r")
@@ -21,7 +22,7 @@ def open_config(runname, dir):
 
 # %%
 res = (18, 22)
-RUNNAME = "amber-sweep-13"  #"soft-sweep-12" # "absurd-sweep-1"
+RUNNAME =  "amber-sweep-13" # "absurd-sweep-1" "soft-sweep-12"
 datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/{res[0]}x{res[1]}'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 config = open_config(RUNNAME, "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
@@ -44,7 +45,7 @@ DATASET = train_ds
 DATASET['variable'] = DATASET['anomaly'] + DATASET['medians']
 
 fig, ax = plt.subplots(figsize=(5, 5))
-ax.hist(DATASET['storm_rp'].values, bins=100)
+ax.hist(DATASET['storm_rp'].values, **hist_kws)
 ax.set_yscale('log')    
 
 return_periods = [0, 1, 5, 10, 40]
@@ -89,21 +90,18 @@ def calculate_total_return_periods(damages, yearly_rate, var='mangrove_damage_ar
     totals['rank'] = totals[var].rank(dim=index)
     totals['exceedence_probability'] = 1 - ( totals['rank'] / ( N + 1 ) )
     totals['return_period'] = 1 / ( yearly_rate * totals['exceedence_probability'] )
-    #totals = totals.sortby('return_period')
     return totals['return_period']
 
 samples_ds['return_period'] = calculate_total_return_periods(samples_ds.isel(channel=CHANNEL), occurence_rate, var='anomaly', index='time')
 
 rps = samples_ds['return_period'].values
-plt.hist(rps, bins=100)
+plt.hist(rps, **hist_kws)
 plt.yscale('log')
 plt.xlabel('Return period')
 plt.ylabel('Frequency (log)')
 
-
-return_periods = [0, 5, 25, 50, 100, 500]
-return_periods = [0, 1, 10, 20, 100]
-# return_periods = [0, 1, 5, 10, 40]
+return_periods = [0, 25, 50, 250, 500]
+return_periods = [0, 1, 5, 10, 40]
 
 medians = samples_ds['medians'].isel(month=MONTH)
 samples_ds['variable'] = samples_ds['anomaly'] + medians

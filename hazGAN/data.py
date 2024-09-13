@@ -23,7 +23,7 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
         Directory where the data.nc file is stored.
     ntrain : int
         Number of training samples.
-    padding_mode : {'constant', 'reflect', 'symmetric'}, default 'constant'
+    padding_mode : {'constant', 'reflect', 'symmetric', None}, default 'constant'
         Padding mode for the uniform-transformed marginals.
     image_shape : tuple, default=(18, 22)
         Shape of the image data.
