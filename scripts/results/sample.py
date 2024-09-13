@@ -10,8 +10,8 @@ import wandb
 
 # %%
 wd = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN"
-RUNNAME = "amber-sweep-13"
-TEMPERATURE = 1.0
+RUNNAME = "soft-sweep-12" # "absurd-sweep-1" # "atomic-sweep-1" # "amber-sweep-13"
+TEMPERATURE = 1 + 1e-2
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 nyears = 500 # what return period do we want to go up to, breaks down after 242 right now
@@ -21,7 +21,8 @@ figdir = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/figures/results"
 wandb.init(project="test", mode="disabled")
 config = wandb.config
 wgan = hg.WGAN(wandb.config, nchannels=2)
-wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generator.weights.h5"))
+# wgan.generator.load_weights(os.path.join(wd, "saved-models", RUNNAME, f"generator.weights.h5"))
+wgan.load_weights(os.path.join(wd, "saved-models", RUNNAME, "checkpoint.weights.h5"))
 wgan.generator.summary()
 ntrain = config.train_size
 
@@ -31,6 +32,7 @@ train = ds_ref.isel(time=slice(0, ntrain))
 test = ds_ref.isel(time=slice(ntrain, None))
 occurrence_rate = ds_ref.attrs['yearly_freq']
 nsamples = int(occurrence_rate * nyears)
+# nsamples = 560
 
 def sample_to_xr(data, ds_ref, plot=False):
     nsamples = data.shape[0]
@@ -57,12 +59,10 @@ def sample_to_xr(data, ds_ref, plot=False):
 # %%
 def batch_sample_wgan(nsamples, batch_size, temp):
     samples = []
-
     for i in range(0, nsamples, batch_size):
         batch_samples = min(batch_size, nsamples - i)
-        batch = hg.unpad(wgan(nsamples=batch_samples, temp=TEMPERATURE), paddings).numpy()
+        batch = hg.unpad(wgan(nsamples=batch_samples, temp=temp, seed=i), paddings).numpy()
         samples.append(batch)
-
     samples = np.concatenate(samples, axis=0)
     return samples
 
@@ -73,6 +73,11 @@ ds_hazGAN = sample_to_xr(samples_hazGAN, train, plot=True)
 samples_independent = np.random.uniform(size=(nsamples, 18, 22, 2))
 samples_dependent = np.random.uniform(size=(nsamples))
 samples_dependent = np.repeat(samples_dependent, 18*22*2, axis=0).reshape(nsamples, 18, 22, 2)
+
+# %% sanity check the totals from WGAN samples
+u10_totals = samples_hazGAN.sum(axis=(1, 2))[..., 0]
+u10_totals = np.unique(u10_totals)
+print(len(u10_totals))
 
 # %% plot the sampled uniform values
 import matplotlib.pyplot as plt
@@ -89,10 +94,11 @@ axs[1].hist(samples_independent[..., 0].flatten(), **hist_kws);
 axs[2].hist(samples_dependent[..., 0].flatten(), **hist_kws);
 axs[3].hist(train.uniform.values[..., 0].flatten(), **hist_kws);
 
-axs[0].set_title('HazGAN samples for max wind anomaly')
-axs[1].set_title('Independent samples for max wind anomalyd')
-axs[2].set_title('Dependent samples for max wind anomaly')
-axs[3].set_title('Training samples for max wind anomaly')
+axs[0].set_title('HazGAN')
+axs[1].set_title('Independent')
+axs[2].set_title('Dependent')
+axs[3].set_title('Training')
+axs[0].set_ylabel('Wind speed')
 
 channel = 1
 axs = axes[1, :]
@@ -101,10 +107,11 @@ axs[1].hist(samples_independent[..., 1].flatten(), **hist_kws);
 axs[2].hist(samples_dependent[..., 1].flatten(), **hist_kws);
 axs[3].hist(train.uniform.values[..., 1].flatten(), **hist_kws);
 
-axs[0].set_title('HazGAN samples for cumulative precipitation anomaly')
-axs[1].set_title('Independent samples for cumulative precipitation anomaly')
-axs[2].set_title('Dependent samples for cumulative precipitation anomaly')
-axs[3].set_title('Training samples for cumulative precipitation anomaly')
+axs[0].set_title('HazGAN')
+axs[1].set_title('Independent')
+axs[2].set_title('Dependent')
+axs[3].set_title('Training')
+axs[0].set_ylabel('Cumulative\nprecipitation')
 
 for ax in axes.flatten():
     ax.axhline(1, color='r', linestyle='--', label='Target shape')

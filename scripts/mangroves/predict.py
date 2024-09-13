@@ -4,6 +4,14 @@ Load a pretrained model then plot and display EADs
 ---- To do ----
     - Tidy up and refactor
 """
+# %% user vars
+month     = 7
+DEV       = False
+SMOOTHING = False
+PLOT      = False
+run       = 'amber-sweep-13' # 'vital-sweep-30__precipsota'
+wd        = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')
+
 # %% ---- Setup ----
 import os
 import yaml
@@ -40,14 +48,7 @@ def open_config(runname, dir):
     config = yaml.load(configfile, Loader=yaml.FullLoader)
     config = {key: value["value"] for key, value in config.items()}
     return config
-
-month     = 7
-DEV       = False
-SMOOTHING = False
-PLOT      = False
-run       = 'amber-sweep-13' # 'vital-sweep-30__precipsota'
-wd        = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')
-
+\
 config = open_config(run, "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
 ntrain = config['train_size']
 

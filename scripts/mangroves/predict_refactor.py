@@ -1,4 +1,5 @@
 """
+TODO: Fix, why is max RP for samples 10???
 Script to predict mangrove damage from storm data using a trained hazGAN model.
 
 Input files:
@@ -18,12 +19,12 @@ Output files:
 - results/mangroves/damages_test.nc: predicted damages for each test storm
 - results/mangroves/totals.nc: total predicted damages for each storm type
 """
-# %% arguments
-MONTH = 7
-DEV = False
-PLOT = False
-RUN = 'amber-sweep-13'
-WD = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')
+# %% user-defined arguments for script
+MONTH   = 7
+PLOT    = False
+DEV     = True
+RUN     = 'amber-sweep-13'
+WD      = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')
 DATADIR = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'data')
 
 # %% environment
@@ -45,8 +46,7 @@ import warnings
 
 from hazGAN import (
     xmin, xmax, ymin, ymax,
-    bay_of_bengal_crs,
-    occurrence_rate
+    bay_of_bengal_crs
 )
 
 plt.rcParams['font.family'] = 'serif'
@@ -70,12 +70,24 @@ def load_data(samplespath, datapath, month, ntrain):
     samples_month = samples_month.rename({'anomaly': 'hazGAN'})
 
     data = xr.open_dataset(datapath).sel(channel=['u10', 'tp'])
-    data_month = data + month_medians
+    data_month = data + month_medians 
     data_month = data_month.rename({'anomaly': 'era5', 'time': 'sample'})
     train_month = data_month.isel(sample=slice(0, ntrain))
     test_month = data_month.isel(sample=slice(ntrain, None))
+    occurrence_rate = data.attrs['yearly_freq']
     
-    return samples_month, train_month, test_month
+    # use chunking to improve efficiency
+    samples_month = samples_month.chunk({'sample': 100})
+    train_month = train_month.chunk({'sample': 100})
+    test_month = test_month.chunk({'sample': 100})
+
+    # make sure using parallelized dask
+    samples_month = samples_month.persist()
+    train_month = train_month.persist()
+    test_month = test_month.persist()
+    
+
+    return samples_month, train_month, test_month, occurrence_rate
 
 
 def damage_ufunc(X):
@@ -141,7 +153,7 @@ def calculate_damage_areas(damages, mangroves_gridded):
     return damages
 
 
-def plot_mangrove_damage_predictions(damages_sample, damages_train, mangroves_gridded, PLOT):
+def plot_mangrove_damage_predictions(damages_sample, damages_train, mangroves_gridded, PLOT=False):
     if PLOT:
         i = np.random.randint(0, damages_sample.sizes['sample']-1)
         j = np.random.randint(0, damages_train.sizes['sample']-1)
@@ -196,7 +208,6 @@ def calculate_eads(var, damages, yearly_rate):
         dask="parallelized",
         output_dtypes=[float]
     )
-    
     damages[f'{basename}_EAD'] = EADs
     return damages
 
@@ -205,8 +216,8 @@ def calculate_total_return_periods(damages, yearly_rate, var='mangrove_damage_ar
     totals = damages[var].sum(dim=['lat', 'lon']).to_dataset()
     N = totals[var].sizes['sample']
     totals['rank'] = totals[var].rank(dim='sample')
-    totals['exceedence_probability'] = 1 - totals['rank'] / (1 + N)
-    totals['return_period'] = 1 / (yearly_rate * totals['exceedence_probability'])
+    totals['exceedence_probability'] = 1 - ( totals['rank'] / ( N + 1 ) )
+    totals['return_period'] = 1 / ( yearly_rate * totals['exceedence_probability'] )
     totals = totals.sortby('return_period')
     return totals
 
@@ -228,52 +239,6 @@ def save_damages(damages_sample, damages_train, damages_test, totals_independent
     totals_test.to_netcdf(totals_out, group='test', mode='a')
 
 
-def plot_lamb_figure(totals_hazGAN, totals_dependent, totals_independent, totals_train, DEV):
-    fig, ax = plt.subplots()
-    eps = .25
-    mask = totals_hazGAN.return_period > eps
-    ax.scatter(
-        totals_hazGAN.where(mask).return_period,
-        totals_hazGAN.where(mask).hazGAN_damagearea,
-        color='k',
-        linewidth=1.5,
-        label='Modelled dependence'
-    )
-    mask = totals_dependent.return_period > eps
-    ax.plot(
-        totals_dependent.where(mask).return_period,
-        totals_dependent.where(mask).dependent_damagearea,
-        color='blue',
-        linewidth=1.5,
-        linestyle='dotted',
-        label='Complete dependence'
-    )
-    mask = totals_independent.return_period > eps
-    ax.plot(
-        totals_independent.where(mask).return_period,
-        totals_independent.where(mask).independent_damagearea,
-        color='r',
-        linestyle='dashed',
-        linewidth=1.5,
-        label='Independence'
-    )
-    mask = totals_train.return_period > eps
-    ax.scatter(
-        totals_train.where(mask).return_period,
-        totals_train.where(mask).era5_damagearea,
-        color='k',
-        s=1.5,
-        label='Training data'
-    )
-    ax.set_xlabel('Return period (years)')
-    ax.set_ylabel('Total damage to mangroves (km²)')
-    ax.legend()
-    if not DEV:
-        ax.set_xscale('log')
-        ax.set_xticks([2, 5, 25, 100, 200, 500])
-    ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
-
-
 # %% Main script
 if __name__ == "__main__":
     config = open_config(RUN, "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
@@ -285,15 +250,19 @@ if __name__ == "__main__":
 
     samplespath = os.path.join(WD, 'samples', f'{RUN}.nc')
     datapath = os.path.join(WD, 'training', '18x22', 'data.nc')
-    samples_month, train_month, test_month = load_data(samplespath, datapath, MONTH, ntrain)
+    samples_month, train_month, test_month, occurrence_rate = load_data(samplespath, datapath, MONTH, ntrain)
 
-    if DEV:
-        samples_month = samples_month.isel(sample=slice(0, 10))
-        train_month = train_month.isel(sample=slice(0, 10))
-
+    # %%
     damages_sample = get_damages(samples_month, ['dependent', 'independent', 'hazGAN'])
     damages_train = get_damages(train_month, ['era5'])
     damages_test = get_damages(test_month, ['era5'])
+
+    # x = damages_sample.hazGAN_damage.values
+    if PLOT:
+        fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+        damages_train.era5_damage.plot.hist(ax=axs[0], bins=50, alpha=0.5, label='train')
+        damages_test.era5_damage.plot.hist(ax=axs[1], bins=50, alpha=0.5, label='test')
+        damages_sample.hazGAN_damage.plot.hist(ax=axs[2], bins=50, alpha=0.5, label='sample')
 
     #%% clip mangroves to aoi
     mangrovesout = os.path.join(WD, 'results', 'mangroves', 'mangroves.geojson')
@@ -320,11 +289,18 @@ if __name__ == "__main__":
         mangroves_gridded = xr.open_dataset(mangrovegrid_out)
 
     # %% calculate damages per-storm
-    print('Calculating damages...')
+    print('Calculating damage areas...')
     damages_sample = calculate_damage_areas(damages_sample, mangroves_gridded)
     damages_train = calculate_damage_areas(damages_train, mangroves_gridded)
     damages_test = calculate_damage_areas(damages_test, mangroves_gridded)
+
     plot_mangrove_damage_predictions(damages_sample, damages_train, mangroves_gridded, PLOT)
+    if PLOT:
+        fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+        damages_sample.hazGAN_damagearea.plot.hist(ax=axs[0], bins=50, alpha=0.5, label='sample')
+        damages_test.era5_damagearea.plot.hist(ax=axs[1], bins=50, alpha=0.5, label='test')
+        damages_train.era5_damagearea.plot.hist(ax=axs[2], bins=50, alpha=0.5, label='train')
+
 
     # %% calculate EADs
     print('Calculating EADs...')
@@ -341,6 +317,15 @@ if __name__ == "__main__":
     totals_hazGAN = calculate_total_return_periods(damages_sample, occurrence_rate, 'hazGAN_damagearea')
     totals_train = calculate_total_return_periods(damages_train, occurrence_rate, 'era5_damagearea')
     totals_test = calculate_total_return_periods(damages_test, occurrence_rate, 'era5_damagearea')
+    print(f'Maximum return period: {totals_hazGAN.return_period.max().values}')
+
+    if PLOT:
+        fig, axs = plt.subplots(1, 5, figsize=(20, 5))
+        totals_independent.return_period.plot.hist(ax=axs[0], yscale='log')
+        totals_dependent.return_period.plot.hist(ax=axs[1], yscale='log')
+        totals_hazGAN.return_period.plot.hist(ax=axs[2], yscale='log')
+        totals_train.return_period.plot.hist(ax=axs[3], yscale='log')
+        totals_test.return_period.plot.hist(ax=axs[4], yscale='log')
 
     # %% save results
     print('Saving results...')
@@ -349,5 +334,6 @@ if __name__ == "__main__":
         totals_dependent, totals_hazGAN, totals_train, totals_test, WD
         )
     os.system('say done')
+    print('Done!')
     # %%
 # %%

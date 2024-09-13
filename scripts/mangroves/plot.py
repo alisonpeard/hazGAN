@@ -50,8 +50,8 @@ def plot_totals(totals, ax, label, color, eps=.25, scatter=True,
         )
 
 fig, ax = plt.subplots()
+plot_totals(totals_test, ax, 'Test data', 'c', line=False, scatter_kws={'marker': '+'})
 plot_totals(totals_train, ax, 'Training data', 'k', line=False)
-plot_totals(totals_test, ax, 'Test data', 'dimgrey', line=False, scatter_kws={'marker': '+'})
 
 plot_totals(totals_dependent, ax, 'Complete dependence', 'b', scatter=False, line_kws={'linestyle': 'dotted'})
 plot_totals(totals_independent, ax, 'Independence', 'r', scatter=False, line_kws={'linestyle': 'dashed'})
@@ -62,7 +62,7 @@ ax.set_ylabel('Total damage to mangroves (km²)')
 ax.legend()
 
 ax.set_xscale('log')
-ax.set_xticks([1, 2, 5, 25, 100, 200])
+ax.set_xticks([1, 2, 5, 25, 100, 200, 500])
 ax.get_xaxis().set_major_formatter(ticker.ScalarFormatter());
 # %%
 
