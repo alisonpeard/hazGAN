@@ -21,4 +21,4 @@ wandb agent alison-peard/hazGAN/$1
 # srun -p GPU --gres=gpu:tesla:1 --time=04:00:00 --pty wandb agent alison-peard/hazGAN/bodaevqp
 # GPUs: tesla, 3080ti, 1080ti
 # latest sweep: s9k8wgnb
-# e.g., sbatch train_sbatch.sh s9k8wgnb
+# e.g., sbatch train_sbatch.sh dp6gcvc4

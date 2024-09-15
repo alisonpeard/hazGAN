@@ -14,7 +14,7 @@ def load_datasets(datadir, ntrain, padding_mode='reflect', image_shape=(18, 22),
 
 def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
                   numpy=False, gumbel_marginals=True, channels=['u10', 'tp'],
-                  uniform='uniform', take_top=560):
+                  uniform='uniform', take_top=None):
     """
     Load the hazGAN training data from the data.nc file.
 
