@@ -6,8 +6,8 @@ metric:
   goal: minimize
   name: compound_metric
 parameters:
-  # ntrain:
-  #   values: [560, 640, 720, 800, 880, 960, 1040]
+  ntrain:
+    values: [560, 640, 720, 800, 880, 960, 1040]
   batch_size:
     values: [24, 32, 48, 64, 128, 256]
   training_balance:

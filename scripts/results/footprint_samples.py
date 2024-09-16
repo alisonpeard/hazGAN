@@ -22,14 +22,14 @@ def open_config(runname, dir):
 
 # %%
 res = (18, 22)
-RUNNAME =  "amber-sweep-13" # "absurd-sweep-1" "soft-sweep-12"
+RUNNAME =  "amber-sweep-13" # leafy-sweep-2"
 datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/{res[0]}x{res[1]}'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 config = open_config(RUNNAME, "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
 data = xr.open_dataset(os.path.join(datadir, "data.nc")).sel(channel=['u10', 'tp'])
 samples_ds = xr.open_dataset(os.path.join(samplesdir, f"{RUNNAME}.nc"))
 
-occurence_rate = data.attrs['yearly_freq']
+occurence_rate = 560 / 72 #data.attrs['yearly_freq'], if using top 560 only
 ntrain = config['train_size']
 # samples_ds = samples_ds.isel(sample=slice(0, ntrain)) # maybe fairer?
 train_ds = data.isel(time=slice(-ntrain, None))
@@ -100,7 +100,7 @@ plt.yscale('log')
 plt.xlabel('Return period')
 plt.ylabel('Frequency (log)')
 
-return_periods = [0, 25, 50, 250, 500]
+# return_periods = [0, 25, 50, 250, 500]
 return_periods = [0, 1, 5, 10, 40]
 
 medians = samples_ds['medians'].isel(month=MONTH)

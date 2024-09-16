@@ -173,9 +173,6 @@ def main(config):
     excoefs_train = get_channel_ext_coefs(train_u)
     excoefs_test = get_channel_ext_coefs(test_u)
     excoefs_gan = get_channel_ext_coefs(fake_u)
-    # vmin = 1 # min(excoefs_train.min(), excoefs_test.min(), excoefs_gan.min())
-    # vmax = 2 # max(excoefs_train.max(), excoefs_test.max(), excoefs_gan.max())
-
     fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
                        gridspec_kw={
                            'wspace': .02,
@@ -201,8 +198,6 @@ def main(config):
     ecs_train = hg.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., i]).numpy()
     ecs_test = hg.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., i]).numpy()
     ecs_gen = hg.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., i]).numpy()
-    # vmin = 1 # min(ecs_train.min(), ecs_test.min(), ecs_gen.min())
-    # vmax = 2 # max(ecs_train.max(), ecs_test.max(), ecs_gen.max())
     fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
                         gridspec_kw={
                             'wspace': .02,
@@ -220,8 +215,19 @@ def main(config):
     axs[2].set_title("hazGAN", fontsize=16)
     axs[0].set_ylabel('Extremal coeff.', fontsize=18);
     log_image_to_wandb(fig, f"spatial_dependence", imdir)
-    plt.show()
 
+    # plot most extreme samples
+    fake_u = fake_u[..., 0]
+    maxima = np.max(fake_u, axis=(1, 2))
+    idx = np.argsort(maxima)
+    fake_u = fake_u[idx, ...]
+    fig, axs = plt.subplots(1, 5, figsize=(20, 3))
+    for i in range(5):
+        axs[i].imshow(fake_u[i, ...], cmap='Spectral_r')
+        axs[i].set_title(f"Max: {maxima[i]:.2f}")
+        axs[i].set_xticks([])
+        axs[i].set_yticks([])
+    log_image_to_wandb(fig, f"samples", imdir)
 
 # %% run this cell to train the model
 if __name__ == "__main__":
@@ -275,6 +281,6 @@ if __name__ == "__main__":
     wandb.config["seed"] = np.random.randint(0, 1e6)
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
     tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations
-    
+
     main(wandb.config)
 # %% 
