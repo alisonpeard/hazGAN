@@ -1,7 +1,7 @@
 project: hazGAN
 program: train.py
 method: bayes
-name: top-storms
+name: last-ditch-attempt
 metric:
   goal: minimize
   name: compound_metric
@@ -9,27 +9,29 @@ parameters:
   ntrain:
     values: [560, 640, 720, 800, 880, 960, 1040]
   batch_size:
-    values: [24, 32, 48, 64, 128, 256]
+    values: [32, 64, 128, 256]
   training_balance:
-    values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    values: [1, 2, 3, 4, 5]
   latent_dims:
-    values: [64, 128, 256]
+    values: [64, 100, 128, 256]
   g_complexity:
-    values: [1, 2, 3]
+    values: [1, 2]
   d_complexity:
-    values: [1, 2, 3]
+    values: [1, 2]
   learning_rate:
-    min: 0.00001
-    max: 0.0005
+    values: [0.00005, 0.0001, 0.00015, 0.0002, 0.00025, 0.0003, 0.0004, 0.0005, 0.001]
   beta_1:
-    min: 0.1
-    max: 0.5
-  interpolation:
-    values: [bilinear]
-  lr_factor:
-    values: [0.01, 0.1, 0.5]
-  lr_patience:
-    values: [5, 10, 20]
+    values: [0.1, 0.3, 0.5, 0.7, 0.9]
+  beta_2:
+    values: [0.9, 0.95, 0.99, 0.999]
+  use_ema:
+    values: [True, False]
+  ema_momentum:
+    values: [0.9, 0.95, 0.99, 0.995, 0.999]
+  gumbel:
+    values: [True, False]
+  lambda_gp:
+    values: [1, 5, 10, 15, 20]
 run_cap: 100
 command:
   - ${env}

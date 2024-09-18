@@ -3,7 +3,7 @@ model:
   desc: Which model to train, ['wgan' | 'dcgan'].
   value: wgan
 nepochs:
-  value: 30000 # 3000 # or 1,500,000/train_size
+  value: 10000 # 3000 # or 1,500,000/train_size
 train_size:
   value: 560 # 560 # 840 # 50
 batch_size:
@@ -11,7 +11,6 @@ batch_size:
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
   value: 100
-
 # training features
 lr_factor:
   value: 0.5
@@ -42,7 +41,6 @@ uniform:
 optimizer:
   desc: Optimizer to use, ['SGD', 'Adam']
   value: Adam
-
 # architecture
 lrelu:
   value: 0.2
@@ -63,7 +61,6 @@ d_complexity:
 interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
   value: bilinear
-
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
 learning_rate:
   value: 0.0001
@@ -71,18 +68,19 @@ beta_1:
   value: 0 
 beta_2:
   value: 0.9 
-weight_decay:
-  value: 0.01
-global_clipnorm:
-  value: False
 use_ema:
   desc: Use exponential moving average in training, causes issues when re-loading weights.
   value: True # only set to true if not loading weights
 ema_momentum:
+  desc: Momentum of exponential moving average for tf.keras.optimizers.Adam
   value: 0.9
 ema_overwrite_frequency:
   desc: How often to overwrite weights with ema.
   value: 1
+weight_decay:
+  value: 0.01
+global_clipnorm:
+  value: False
 
 # for linux cluster
 # export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/soge-home/users/spet5107/micromamba/envs/tensorflow/lib

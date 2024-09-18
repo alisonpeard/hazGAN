@@ -5,7 +5,7 @@
 #SBATCH --array=1-100%1
 #SBATCH --partition=GPU
 #SBATCH --gres=gpu:3080ti:1
-#SBATCH --time=10:00:00
+#SBATCH --time=12:00:00
 
 
 echo "TASK ID: " $SLURM_ARRAY_TASK_ID
@@ -21,4 +21,4 @@ wandb agent alison-peard/hazGAN/$1
 # srun -p GPU --gres=gpu:tesla:1 --time=04:00:00 --pty wandb agent alison-peard/hazGAN/bodaevqp
 # GPUs: tesla, 3080ti, 1080ti
 # latest sweep: s9k8wgnb
-# e.g., sbatch train_sbatch.sh dp6gcvc4
+# e.g., sbatch train_sbatch.sh 0m4yg0d1

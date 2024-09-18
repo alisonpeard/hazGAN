@@ -88,7 +88,7 @@ def config_tf_devices():
 # %%
 def main(config):
     # load data
-    data = hg.load_training(datadir, config.train_size, 'reflect', gumbel_marginals=config.gumbel, take_top=560)
+    data = hg.load_training(datadir, config.train_size, 'reflect', gumbel_marginals=config.gumbel)
     train_u = data['train_u']
     test_u = data['test_u']
     train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
@@ -142,6 +142,7 @@ def main(config):
                 compound,
                 WandbMetricsLogger(),
                 # visualiser,
+                # reduce_on_plateau,
                 checkpoint
                 ]
         )
@@ -189,9 +190,8 @@ def main(config):
     ax[1].set_title('Test', fontsize=16)
     ax[2].set_title('hazGAN', fontsize=16);
     fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
-    ax[0].set_ylabel(r'Extremal coeff.', fontsize=18);
+    ax[0].set_ylabel('Extremal coeff', fontsize=18);
     log_image_to_wandb(fig, f"extremal_dependence", imdir)
-    plt.show()
 
     # spatial extremal coefficients
     i = 0 # only look at wind speed
