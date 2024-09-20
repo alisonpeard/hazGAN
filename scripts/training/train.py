@@ -139,7 +139,7 @@ def main(config):
     # compile
     with tf.device(device):
         gan = getattr(hg, f"compile_{config.model}")(config, nchannels=2)
-        gan.fit(
+        history = gan.fit(
             train,
             epochs=config.nepochs,
             callbacks=[
@@ -154,86 +154,94 @@ def main(config):
         )
 
     # reproducibility
-    gan.generator.save_weights(os.path.join(rundir, f"generator.weights.h5"))
-    gan.critic.save_weights(os.path.join(rundir, f"critic.weights.h5"))
-    save_config(rundir)
+    final_chi_rmse = history.history['chi_rmse'][-1]
+    print(f"Final chi_rmse: {final_chi_rmse}")
 
-    # ----Figures----
-    paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
-    train_u = hg.inv_gumbel(hg.unpad(train_u, paddings)).numpy()
-    test_u = hg.inv_gumbel(hg.unpad(test_u, paddings)).numpy()
-    fake_u = hg.unpad(gan(nsamples=1000), paddings).numpy()
-    
-    cmap = plt.cm.coolwarm_r
-    vmin = 1
-    vmax = 2
-    cmap.set_under(cmap(0))
-    cmap.set_over(cmap(.99))
+    if final_chi_rmse <= 0.3:
+        gan.generator.save_weights(os.path.join(rundir, f"generator.weights.h5"))
+        gan.critic.save_weights(os.path.join(rundir, f"critic.weights.h5"))
+        save_config(rundir)
 
-    # channel extremal coefficients
-    def get_channel_ext_coefs(x):
-        n, h, w, c = x.shape
-        excoefs = hg.get_extremal_coeffs_nd(x, [*range(h * w)])
-        excoefs = np.array([*excoefs.values()]).reshape(h, w)
-        return excoefs
-    
-    excoefs_train = get_channel_ext_coefs(train_u)
-    excoefs_test = get_channel_ext_coefs(test_u)
-    excoefs_gan = get_channel_ext_coefs(fake_u)
-    fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
-                       gridspec_kw={
-                           'wspace': .02,
-                           'width_ratios': [1, 1, 1, .05]}
-                           )
-    im = ax[0].imshow(excoefs_train, vmin=vmin, vmax=vmax, cmap=cmap)
-    im = ax[1].imshow(excoefs_test, vmin=vmin, vmax=vmax, cmap=cmap)
-    im = ax[2].imshow(excoefs_gan, vmin=vmin, vmax=vmax, cmap=cmap)
-    for a in ax:
-        a.set_yticks([])
-        a.set_xticks([])
-        a.invert_yaxis()
-    ax[0].set_title('Train', fontsize=16)
-    ax[1].set_title('Test', fontsize=16)
-    ax[2].set_title('hazGAN', fontsize=16);
-    fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
-    ax[0].set_ylabel('Extremal coeff', fontsize=18);
-    log_image_to_wandb(fig, f"extremal_dependence", imdir)
+        # ----Figures----
+        paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
+        train_u = hg.inv_gumbel(hg.unpad(train_u, paddings)).numpy()
+        test_u = hg.inv_gumbel(hg.unpad(test_u, paddings)).numpy()
+        fake_u = hg.unpad(gan(nsamples=1000), paddings).numpy()
+        
+        cmap = plt.cm.coolwarm_r
+        vmin = 1
+        vmax = 2
+        cmap.set_under(cmap(0))
+        cmap.set_over(cmap(.99))
 
-    # spatial extremal coefficients
-    i = 0 # only look at wind speed
-    ecs_train = hg.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., i]).numpy()
-    ecs_test = hg.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., i]).numpy()
-    ecs_gen = hg.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., i]).numpy()
-    fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
+        # channel extremal coefficients
+        def get_channel_ext_coefs(x):
+            n, h, w, c = x.shape
+            excoefs = hg.get_extremal_coeffs_nd(x, [*range(h * w)])
+            excoefs = np.array([*excoefs.values()]).reshape(h, w)
+            return excoefs
+        
+        excoefs_train = get_channel_ext_coefs(train_u)
+        excoefs_test = get_channel_ext_coefs(test_u)
+        excoefs_gan = get_channel_ext_coefs(fake_u)
+        fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
                         gridspec_kw={
                             'wspace': .02,
                             'width_ratios': [1, 1, 1, .05]}
                             )
-    im = axs[0].imshow(ecs_train, vmin=vmin, vmax=vmax, cmap=cmap)
-    im = axs[1].imshow(ecs_test, vmin=vmin, vmax=vmax, cmap=cmap)
-    im = axs[2].imshow(ecs_gen, vmin=vmin, vmax=vmax, cmap=cmap)
-    for ax in axs:
-        ax.set_xticks([])
-        ax.set_yticks([])
-    fig.colorbar(im, cax=axs[3], extend='both', orientation='vertical');
-    axs[0].set_title("Train", fontsize=16)
-    axs[1].set_title("Test", fontsize=16)
-    axs[2].set_title("hazGAN", fontsize=16)
-    axs[0].set_ylabel('Extremal coeff.', fontsize=18);
-    log_image_to_wandb(fig, f"spatial_dependence", imdir)
+        im = ax[0].imshow(excoefs_train, vmin=vmin, vmax=vmax, cmap=cmap)
+        im = ax[1].imshow(excoefs_test, vmin=vmin, vmax=vmax, cmap=cmap)
+        im = ax[2].imshow(excoefs_gan, vmin=vmin, vmax=vmax, cmap=cmap)
+        for a in ax:
+            a.set_yticks([])
+            a.set_xticks([])
+            a.invert_yaxis()
+        ax[0].set_title('Train', fontsize=16)
+        ax[1].set_title('Test', fontsize=16)
+        ax[2].set_title('hazGAN', fontsize=16);
+        fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
+        ax[0].set_ylabel('Extremal coeff', fontsize=18);
+        log_image_to_wandb(fig, f"extremal_dependence", imdir)
 
-    # plot most extreme samples
-    fake_u = fake_u[..., 0]
-    maxima = np.max(fake_u, axis=(1, 2))
-    idx = np.argsort(maxima)
-    fake_u = fake_u[idx, ...]
-    fig, axs = plt.subplots(1, 5, figsize=(20, 3))
-    for i in range(5):
-        axs[i].imshow(fake_u[i, ...], cmap='Spectral_r')
-        axs[i].set_title(f"Max: {maxima[i]:.2f}")
-        axs[i].set_xticks([])
-        axs[i].set_yticks([])
-    log_image_to_wandb(fig, f"samples", imdir)
+        # spatial extremal coefficients
+        i = 0 # only look at wind speed
+        ecs_train = hg.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., i]).numpy()
+        ecs_test = hg.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., i]).numpy()
+        ecs_gen = hg.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., i]).numpy()
+        fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
+                            gridspec_kw={
+                                'wspace': .02,
+                                'width_ratios': [1, 1, 1, .05]}
+                                )
+        
+        im = axs[0].imshow(ecs_train, vmin=vmin, vmax=vmax, cmap=cmap)
+        im = axs[1].imshow(ecs_test, vmin=vmin, vmax=vmax, cmap=cmap)
+        im = axs[2].imshow(ecs_gen, vmin=vmin, vmax=vmax, cmap=cmap)
+        for ax in axs:
+            ax.set_xticks([])
+            ax.set_yticks([])
+        fig.colorbar(im, cax=axs[3], extend='both', orientation='vertical');
+        axs[0].set_title("Train", fontsize=16)
+        axs[1].set_title("Test", fontsize=16)
+        axs[2].set_title("hazGAN", fontsize=16)
+        axs[0].set_ylabel('Extremal coeff.', fontsize=18);
+        log_image_to_wandb(fig, f"spatial_dependence", imdir)
+
+        # plot most extreme samples
+        fake_u = fake_u[..., 0]
+        maxima = np.max(fake_u, axis=(1, 2))
+        idx = np.argsort(maxima)
+        fake_u = fake_u[idx, ...]
+        fig, axs = plt.subplots(1, 5, figsize=(20, 3))
+        for i in range(5):
+            axs[i].imshow(fake_u[i, ...], cmap='Spectral_r')
+            axs[i].set_title(f"Max: {maxima[i]:.2f}")
+            axs[i].set_xticks([])
+            axs[i].set_yticks([])
+        log_image_to_wandb(fig, f"samples", imdir)
+    else: # delete rundir and its contents
+        print("Chi score too high, deleting run directory")
+        os.system(f"rm -r {rundir}")
 
 # %% run this cell to train the model
 if __name__ == "__main__":
