@@ -88,7 +88,13 @@ def config_tf_devices():
 # %%
 def main(config):
     # load data
-    data = hg.load_training(datadir, config.train_size, 'reflect', gumbel_marginals=config.gumbel, take_top=config.take_top)
+    data = hg.load_training(datadir,
+                            config.train_size,
+                            'reflect',
+                            gumbel_marginals=config.gumbel,
+                            take_top=config.take_top
+                            )
+    
     train_u = data['train_u']
     test_u = data['test_u']
     train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
