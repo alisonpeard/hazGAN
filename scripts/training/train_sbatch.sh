@@ -2,7 +2,7 @@
 #SBATCH --job-name=hazGAN
 #SBATCH --output=sbatch/hazGAN_%A_%a.out
 #SBATCH --error=sbatch/hazGAN_%A_%a.err
-#SBATCH --array=1-100%1
+#SBATCH --array=1-20%1
 #SBATCH --partition=GPU
 #SBATCH --gres=gpu:3080ti:1
 #SBATCH --time=12:00:00
@@ -21,4 +21,4 @@ wandb agent alison-peard/hazGAN/$1
 # srun -p GPU --gres=gpu:tesla:1 --time=04:00:00 --pty wandb agent alison-peard/hazGAN/bodaevqp
 # GPUs: tesla, 3080ti, 1080ti
 # latest sweep: s9k8wgnb
-# e.g., sbatch train_sbatch.sh 0m4yg0d1
+# e.g., sbatch train_sbatch.sh dslczmgj

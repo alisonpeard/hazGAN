@@ -1,15 +1,13 @@
 project: hazGAN
 program: train.py
 method: bayes
-name: last-ditch-attempt
+name: boulaguiem-style
 metric:
   goal: minimize
   name: compound_metric
 parameters:
   ntrain:
-    values: [560, 640, 720, 800, 880, 960, 1040]
-  batch_size:
-    values: [32, 64, 128, 256]
+    values: [50, 100, 200]
   training_balance:
     values: [1, 2, 3, 4, 5]
   latent_dims:
