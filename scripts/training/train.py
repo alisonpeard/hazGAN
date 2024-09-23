@@ -227,26 +227,31 @@ def main(config):
         axs[0].set_ylabel('Extremal coeff.', fontsize=18);
         log_image_to_wandb(fig, f"spatial_dependence", imdir)
 
-        # # plot most extreme samples
-        # fake_u = fake_u[..., 0]
-        # maxima = np.max(fake_u, axis=(1, 2))
-        # idx = np.argsort(maxima)
-        # fake_u = fake_u[idx, ...]
-        # fig, axs = plt.subplots(1, 5, figsize=(20, 3))
-        # for i in range(5):
-        #     axs[i].imshow(fake_u[i, ...], cmap='Spectral_r')
-        #     axs[i].set_title(f"Max: {maxima[i]:.2f}")
-        #     axs[i].set_xticks([])
-        #     axs[i].set_yticks([])
-        # log_image_to_wandb(fig, f"samples", imdir)
-
-        # plot 64
+        # ----Plot 64 samples with highest max winds----
+        # inverse transform 
         X = data['train_x'].numpy()
         U = hg.unpad(data['train_u']).numpy()
         params = data['params']
-        print(fake_u.shape, X.shape, U.shape)
-        sample_X = hg.POT.inv_probability_integral_transform(fake_u, X, U)
-        return sample_X
+        x = hg.POT.inv_probability_integral_transform(fake_u, X, U)
+
+        # plot the 64 samples with highest max winds
+        x = x[..., 0]
+        maxima = np.max(x, axis=(1, 2))
+        idx = np.argsort(maxima)
+        x = x[idx, ...]
+        lon = np.linspace(90, 95, 22)
+        lat = np.linspace(10, 25, 18)
+        lon, lat = np.meshgrid(lon, lat)
+        fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
+                                gridspec_kw={'hspace': 0, 'wspace': 0})
+        for i, ax in enumerate(axs.ravel()):
+            ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r')
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.invert_yaxis()
+
+        log_image_to_wandb(fig, f"max_samples", imdir)
+    
     else: # delete rundir and its contents
         print("Chi score too high, deleting run directory")
         os.system(f"rm -r {rundir}")
