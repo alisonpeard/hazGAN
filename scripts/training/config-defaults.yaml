@@ -9,7 +9,7 @@ train_size:
 batch_size:
   value: 50
 take_top:
-  value: True
+  value: False
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
   value: 100
