@@ -157,7 +157,7 @@ def main(config):
     final_chi_rmse = history.history['chi_rmse'][-1]
     print(f"Final chi_rmse: {final_chi_rmse}")
 
-    if final_chi_rmse <= 0.3:
+    if True: #final_chi_rmse <= 0.3:
         gan.generator.save_weights(os.path.join(rundir, f"generator.weights.h5"))
         gan.critic.save_weights(os.path.join(rundir, f"critic.weights.h5"))
         save_config(rundir)
@@ -227,18 +227,26 @@ def main(config):
         axs[0].set_ylabel('Extremal coeff.', fontsize=18);
         log_image_to_wandb(fig, f"spatial_dependence", imdir)
 
-        # plot most extreme samples
-        fake_u = fake_u[..., 0]
-        maxima = np.max(fake_u, axis=(1, 2))
-        idx = np.argsort(maxima)
-        fake_u = fake_u[idx, ...]
-        fig, axs = plt.subplots(1, 5, figsize=(20, 3))
-        for i in range(5):
-            axs[i].imshow(fake_u[i, ...], cmap='Spectral_r')
-            axs[i].set_title(f"Max: {maxima[i]:.2f}")
-            axs[i].set_xticks([])
-            axs[i].set_yticks([])
-        log_image_to_wandb(fig, f"samples", imdir)
+        # # plot most extreme samples
+        # fake_u = fake_u[..., 0]
+        # maxima = np.max(fake_u, axis=(1, 2))
+        # idx = np.argsort(maxima)
+        # fake_u = fake_u[idx, ...]
+        # fig, axs = plt.subplots(1, 5, figsize=(20, 3))
+        # for i in range(5):
+        #     axs[i].imshow(fake_u[i, ...], cmap='Spectral_r')
+        #     axs[i].set_title(f"Max: {maxima[i]:.2f}")
+        #     axs[i].set_xticks([])
+        #     axs[i].set_yticks([])
+        # log_image_to_wandb(fig, f"samples", imdir)
+
+        # plot 64
+        X = data['train_x'].numpy()
+        U = hg.unpad(data['train_u']).numpy()
+        params = data['params']
+        print(fake_u.shape, X.shape, U.shape)
+        sample_X = hg.POT.inv_probability_integral_transform(fake_u, X, U)
+        return sample_X
     else: # delete rundir and its contents
         print("Chi score too high, deleting run directory")
         os.system(f"rm -r {rundir}")
@@ -296,5 +304,6 @@ if __name__ == "__main__":
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
     tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations
 
-    main(wandb.config)
+    X = main(wandb.config) # NOTE: stop returning stuff later
+
 # %% 
