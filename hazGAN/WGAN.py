@@ -166,6 +166,14 @@ class WGAN(keras.Model):
         return self.inv(raw)
 
 
+    def freeze(self):
+        # unfreeze highest resolution layers
+        for layer in self.generator.layers[:-6]:
+            layer.trainable = False
+        for layer in self.critic.layers[5:]:
+            layer.trainable = False
+
+        
     def train_step(self, data):
         batch_size = tf.shape(data)[0]
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
