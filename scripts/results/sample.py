@@ -10,7 +10,7 @@ import wandb
 
 # %%
 wd = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN"
-RUNNAME = "leafy-sweep-2" # "absurd-sweep-1" # "atomic-sweep-1" # "amber-sweep-13"
+RUNNAME = "absurd-sweep-1" # "absurd-sweep-1" # "atomic-sweep-1" # "amber-sweep-13"
 # first draft: amber-sweep-13
 TEMPERATURE = 1 #+ 1e-2
 os.chdir(os.path.join(wd, "saved-models", RUNNAME))
@@ -29,12 +29,11 @@ ntrain = config.train_size
 
 # %%
 ds_ref = xr.open_dataset(os.path.join(wd, "..", "training", "18x22", "data.nc")).sel(channel=['u10', 'tp'])
-train = ds_ref.isel(time=slice(0, ntrain))
-test = ds_ref.isel(time=slice(ntrain, None))
+train = ds_ref.isel(time=slice(-ntrain, None))
+test = ds_ref.isel(time=slice(0, -ntrain))
 occurrence_rate = ds_ref.attrs['yearly_freq']
 nsamples = int(occurrence_rate * nyears)
 # nsamples = 560
-
 
 # %%
 def sample_to_xr(data, ds_ref, plot=False):
@@ -131,7 +130,7 @@ fig.suptitle('Uniformity of pixels', fontsize=16)
 sample_U = ds_hazGAN.uniform.values
 X = train.anomaly.values
 U = train.uniform.values
-sample_X = POT.inv_probability_integral_transform(sample_U, X, U, ds_ref.isel(time=slice(0, ntrain)).params.values)
+sample_X = POT.inv_probability_integral_transform(sample_U, X, U, ds_ref.params.values)
 sample_ind = POT.inv_probability_integral_transform(samples_independent, X, U, ds_ref.isel(time=slice(0, ntrain)).params.values)
 sample_dep = POT.inv_probability_integral_transform(samples_dependent, X, U, ds_ref.isel(time=slice(0, ntrain)).params.values)
 ds_hazGAN['anomaly'] = (('sample', 'lat', 'lon', 'channel'), sample_X)

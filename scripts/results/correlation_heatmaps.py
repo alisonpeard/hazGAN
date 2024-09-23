@@ -21,7 +21,7 @@ def open_config(runname, dir):
 
 # %%
 res = (18, 22)
-RUNNAME = "amber-sweep-13" # "vital-sweep-30__precipsota" #"vital-sweep-30"  # "vital-sweep-30__precipsota"
+RUNNAME = "colorful-sweep-2" #"amber-sweep-13" 
 datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/{res[0]}x{res[1]}'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 config = open_config(RUNNAME, "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
@@ -30,8 +30,8 @@ samples_ds = xr.open_dataset(os.path.join(samplesdir, f"{RUNNAME}.nc"))
 occurence_rate = 18.033 # from R 
 ntrain = config['train_size']
 # samples_ds = samples_ds.isel(sample=slice(0, ntrain)) # maybe fairer?
-train_ds = data.isel(time=slice(0, ntrain))
-test_ds = data.isel(time=slice(ntrain, 2*ntrain))
+train_ds = data.isel(time=slice(-ntrain, None))
+test_ds = data.isel(time=slice(0, -ntrain))
 samples_ds = samples_ds.rename({'sample': 'time'})
 
 # %% ------Cross-channel correlations------

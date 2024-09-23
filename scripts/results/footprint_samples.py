@@ -22,11 +22,12 @@ def open_config(runname, dir):
 
 # %%
 res = (18, 22)
-RUNNAME =  "amber-sweep-13" # leafy-sweep-2"
+RUNNAME =  "amber-sweep-13" #"amber-sweep-13" # leafy-sweep-2"
 datadir = f'/Users/alison/Documents/DPhil/paper1.nosync/training/{res[0]}x{res[1]}'
 samplesdir = f'/Users/alison/Documents/DPhil/paper1.nosync/samples'
 config = open_config(RUNNAME, "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
 data = xr.open_dataset(os.path.join(datadir, "data.nc")).sel(channel=['u10', 'tp'])
+# data = data.where(data.storm_rp > 1, drop=True) # NOTE: this is for testing
 samples_ds = xr.open_dataset(os.path.join(samplesdir, f"{RUNNAME}.nc"))
 
 occurence_rate = 560 / 72 #data.attrs['yearly_freq'], if using top 560 only
@@ -78,6 +79,20 @@ for i in np.arange(1, len(return_periods)):
     samples = samples.isel(channel=CHANNEL).std(dim='time')
     samples.variable.plot.contourf(ax=ax[i-1], cmap='Spectral_r', add_colorbar=True, levels=20)
     ax[i-1].set_title(f"1-in-{upper} year")
+
+# %% ----Plot the four highest RP footprints----
+# 1 -> 5 shows what GAN is making
+# 5 -> 40 shows nice cyclones
+bounds = [(1, 5), (5, 10), (10, 40)]
+for lower, upper in bounds:
+    samples = DATASET.where((DATASET.storm_rp > lower) & (DATASET.storm_rp <= upper), drop=True)
+    n = min(samples.time.size, 5)
+
+    fig, axs = plt.subplots(1, n, figsize=(20, 3))
+    for i, ax in enumerate(axs):
+        samples_i = samples.isel(time=i, channel=CHANNEL)
+        samples_i.variable.plot.contourf(ax=ax, cmap='Spectral_r', add_colorbar=True, levels=20)
+        ax.set_title(f"1-in-{int(samples_i.storm_rp.values)} year")
 
 # %% ----Plot GAN footprints with different return periods----
 MONTH = 7
