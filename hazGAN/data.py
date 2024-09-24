@@ -5,6 +5,16 @@ import xarray as xr
 from .extreme_value_theory import gumbel
 
 
+def top_samples(data, ntrain, take_top=False):
+    print(f"Taking top {ntrain} samples for training.")
+    if take_top:
+        nsamples = int(2 * ntrain)
+        data = data.sortby('storm_rp', ascending=False)
+        data = data.isel(time=slice(0, nsamples))
+        data = data.sortby('time')
+    return data
+
+
 def load_datasets(datadir, ntrain, padding_mode='reflect', image_shape=(18, 22), gumbel_marginals=False, batch_size=32):
     [train_u, test_u], *_ = load_training(datadir, ntrain, padding_mode, image_shape, gumbel_marginals=gumbel_marginals)
     train = tf.data.Dataset.from_tensor_slices(train_u).batch(batch_size)
@@ -14,7 +24,7 @@ def load_datasets(datadir, ntrain, padding_mode='reflect', image_shape=(18, 22),
 
 def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
                   numpy=False, gumbel_marginals=True, channels=['u10', 'tp'],
-                  uniform='uniform', take_top=False):
+                  uniform='uniform', take_top=False, balance=False):
     """
     Load the hazGAN training data from the data.nc file.
 
@@ -41,13 +51,8 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
     """
     data = xr.open_dataset(os.path.join(datadir, "data.nc"))
     data = data.sel(channel=channels)
-
-    if take_top:
-        print(f"Taking top {ntrain} samples for training.")
-        nsamples = int(2 * ntrain)
-        data = data.sortby('storm_rp', ascending=False)
-        data = data.isel(time=slice(0, nsamples))
-        data = data.sortby('time')
+    data = top_samples(data, ntrain, take_top=take_top)
+    data = resample(data, balance=balance)
 
     X = tf.image.resize(data.anomaly, image_shape)
     U = tf.image.resize(data[uniform], image_shape)
