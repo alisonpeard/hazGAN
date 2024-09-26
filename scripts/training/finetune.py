@@ -91,7 +91,6 @@ def config_tf_devices():
         print(f"Using GPU: {gpu_names[0]}")
         return gpu_names[0]
 
-
 # %%
 def main(config):
     # load data
@@ -99,7 +98,7 @@ def main(config):
                             config.train_size,
                             'reflect',
                             gumbel_marginals=config.gumbel,
-                            take_top=True
+                            take_top=config.take_top
                             )
     
     train_u = data['train_u']
@@ -225,7 +224,7 @@ def main(config):
         fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
                                 gridspec_kw={'hspace': 0, 'wspace': 0})
         for i, ax in enumerate(axs.ravel()):
-            ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r')
+            ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r', levels=20)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.invert_yaxis()
@@ -270,16 +269,16 @@ if __name__ == "__main__":
     config = open_config(BASE, os.path.join(wd, "hazGAN", "saved-models"))
     wandb.init(config=config, name=f"{BASE}-transfer", project='test')
     wandb.config.update({
-        'nepochs': 1000,
-        'train_size': 50
+        'nepochs': 3000,
+        'train_size': 64,
+        'batch_size': 32
         },
-        allow_val_change=True
-        )
+        allow_val_change=True)
 
     rundir = os.path.join(wd, "_wandb-runs", f"{BASE}-transfer")
     os.makedirs(rundir, exist_ok=True)
 
-    # set seed for reproductibility
+    # %% set seed for reproductibility
     wandb.config["seed"] = np.random.randint(0, 1e6)
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
     tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations

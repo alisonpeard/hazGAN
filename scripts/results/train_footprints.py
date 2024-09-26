@@ -10,7 +10,7 @@ ds
 
 # %%
 CHANNEL = 0
-RP_lower, RP_upper = (1, 100)
+RP_lower, RP_upper = (0.5, 1)
 OUTLIERS = np.array([
     '1992-04-15T00:00:00.000000000',
     '1952-05-09T00:00:00.000000000',
@@ -22,6 +22,7 @@ ds1 = ds.where(ds.storm_rp > RP_lower, drop=True)
 ds1 = ds.where(ds1.storm_rp <= RP_upper, drop=True)
 ds1 = ds1.where(~ds1.time.isin(OUTLIERS), drop=True)
 ds1 = ds1.sortby('storm_rp', ascending=True)
+maxima = ds1.isel(channel=CHANNEL).anomaly.max(dim=['lon', 'lat'])
 
 # set colorbar to have center at zero
 vmax = ds1.isel(channel=CHANNEL, time=slice(0, 64))['anomaly'].max().values
@@ -72,5 +73,6 @@ for i, ax in enumerate(axs.ravel()):
 fig.colorbar(ax=axs, mappable=im, orientation='vertical', label='Wind anomaly', aspect=80)
 fig.suptitle(f"64 wind footprints with {RP_lower} < RP < {RP_upper} (biggest)", y=.95)
 print(f"Number of samples with {RP_lower} < RP < {RP_upper}: {ds1.time.size}")
-
+print(f"Minimimum wind", maxima.min().values)
+print(f"Maximum wind", maxima.max().values)
 # %%
