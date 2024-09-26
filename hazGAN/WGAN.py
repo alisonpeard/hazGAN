@@ -72,20 +72,20 @@ def define_generator(config, nchannels=2):
     bn0 = layers.BatchNormalization(axis=-1)(drop0)  # normalise along features layer (1024)
 
     # Deconvolution, 5 x 5 x 1024 -> 7 x 7 x 512
-    conv1 = layers.Conv2DTranspose(config["g_complexity"] * config["g_layers"][1], 3, 1, use_bias=False)(bn0)
+    conv1 = layers.Conv2DTranspose(config["g_complexity"] * config["g_layers"][1], 3, 1)(bn0)
     lrelu1 = layers.LeakyReLU(config.lrelu)(conv1)
     drop1 = layers.Dropout(config.dropout)(lrelu1)
     bn1 = layers.BatchNormalization(axis=-1)(drop1)
 
     # Deconvolution, 6 x 8 x 512 -> 14 x 18 x 256
-    conv2 = layers.Conv2DTranspose(config["g_complexity"] * config["g_layers"][2], (3, 4), 1, use_bias=False)(bn1)
+    conv2 = layers.Conv2DTranspose(config["g_complexity"] * config["g_layers"][2], (3, 4), 1)(bn1)
     lrelu2 = layers.LeakyReLU(config.lrelu)(conv2)
     drop2 = layers.Dropout(config.dropout)(lrelu2)
     bn2 = layers.BatchNormalization(axis=-1)(drop2)
 
     # Output layer, 17 x 21 x 128 -> 20 x 24 x nchannels
     conv3 = layers.Resizing(20, 24, interpolation=config.interpolation)(bn2)
-    score = layers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same')(conv3)
+    score = layers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same', use_bias=False)(conv3)
     o = score if config.gumbel else tf.keras.activations.sigmoid(score) # NOTE: check
     return tf.keras.Model(z, o, name="generator")
 
