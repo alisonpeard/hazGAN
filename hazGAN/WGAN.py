@@ -13,6 +13,7 @@ from tensorflow.keras import layers
 from inspect import signature
 from .extreme_value_theory import chi_loss, inv_gumbel
 
+DIM = 64
 
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
     """Sample from Gumbel(0, 1)"""
@@ -65,8 +66,8 @@ def define_generator(config, nchannels=2):
     z = tf.keras.Input(shape=(config.latent_dims,))
 
     # First fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
-    fc = layers.Dense(config["g_complexity"] * config["g_layers"][0])(z)
-    fc = layers.Reshape((5, 5, int(config["g_complexity"] * config["g_layers"][0] / 25)))(fc)
+    fc = layers.Dense(config["g_complexity"] * config["g_layers"][0] * 5 * 5 * nchannels)(z)
+    fc = layers.Reshape((5, 5, int(nchannels * config["g_complexity"] * config["g_layers"][0])))(fc)
     lrelu0 = layers.LeakyReLU(config.lrelu)(fc)
     drop0 = layers.Dropout(config.dropout)(lrelu0)
     bn0 = layers.BatchNormalization(axis=-1)(drop0)  # normalise along features layer (1024)
@@ -185,7 +186,7 @@ class WGAN(keras.Model):
             with tf.GradientTape() as tape:
                 score_real = self.critic(data)
                 score_fake = self.critic(fake_data)
-                critic_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality (Gulrajani 2017))
+                critic_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality --Gulrajani 2017)
                 eps = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
                 differences = fake_data - data
                 interpolates = data + (eps * differences)  # interpolated data
@@ -193,7 +194,7 @@ class WGAN(keras.Model):
                     tape_gp.watch(interpolates)
                     score = self.critic(interpolates)
                 gradients = tape_gp.gradient(score, [interpolates])[0]
-                slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]))
+                slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1])) # NOTE: previously , axis=[1, 2, 3] but Gulrajani code has [1]
                 gradient_penalty = tf.reduce_mean((slopes - 1.0) ** 2)
                 critic_loss += self.lambda_gp * gradient_penalty
 

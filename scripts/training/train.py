@@ -14,6 +14,10 @@
 or
 >>> new_gan.load_weights(os.path.join(rundir, 'checkpoint.weights.h5'))
 
+------To run locally----
+>>> mamba activate hazGAN
+>>> python train.py
+
 -----Linux cluster examples-----
 >>> srun -p Short --pty python train.py --dry-run --cluster
 >>> srun -p GPU --gres=gpu:tesla:1 --pty python train.py --dry-run --cluster
@@ -85,7 +89,7 @@ def config_tf_devices():
         return gpu_names[0]
 
 
-# %%
+# %% ----Main function----
 def main(config):
     # load data
     data = hg.load_training(datadir,
@@ -145,7 +149,7 @@ def main(config):
     final_chi_rmse = history.history['chi_rmse'][-1]
     print(f"Final chi_rmse: {final_chi_rmse}")
 
-    if True: #final_chi_rmse <= 0.3:
+    if final_chi_rmse <= 10.0: # TODO: make stricter later
         gan.generator.save_weights(os.path.join(rundir, f"generator.weights.h5"))
         gan.critic.save_weights(os.path.join(rundir, f"critic.weights.h5"))
         save_config(rundir)
@@ -244,7 +248,7 @@ def main(config):
         print("Chi score too high, deleting run directory")
         os.system(f"rm -r {rundir}")
 
-# %% run this cell to train the model
+# %% ----Train the model----
 if __name__ == "__main__":
     if not check_interactive(sys):
         # parse arguments (if running from command line)
@@ -280,8 +284,9 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 1,
-            'train_size': 1,
+            'nepochs': 200,
+            'train_size': 128,
+            'batch_size': 32,
             'chi_frequency': 1
             },
             allow_val_change=True)
@@ -297,6 +302,6 @@ if __name__ == "__main__":
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
     tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations
 
-    main(wandb.config) # NOTE: stop returning stuff later
+    main(wandb.config)
 
 # %% 

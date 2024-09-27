@@ -1,37 +1,28 @@
-# training settings
+# training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
 model:
   desc: Which model to train, ['wgan' | 'dcgan'].
   value: wgan
 nepochs:
-  value: 30000 # 3000 # or 1,500,000/train_size
+  desc: Gulrajani et al. 2017 use 200_000
+  value: 400 # 3000 # or 1,500,000/train_size
 train_size:
-  value: 64 # 560 # 840 # 50
+  value: 128 # 840 # 50
 batch_size:
-  value: 32
+  value: 64
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
   value: 100
 u10_min:
   desc: Minimum value of u10 anomaly for training data
   value: 15.0
+
 # training features
-lr_factor:
-  value: 0.5
-lr_patience:
-  value: 20
-lambda_chi:
-  value: 0
-lambda_gp:
-  value: 10.
-lambda_chi:
-  desc: Weight of penalty on extremal coefficient rmse in generator loss
-  value: 0
+optimizer:
+  desc: Optimizer to use, ['SGD', 'Adam']
+  value: Adam
 training_balance:
-  desc: How many more times to train discriminator than generator
+  desc: Gulrajani et al. 2017 use 5
   value: 5
-true_label_smooth:
-  desc: Multiply true labels by this to smooth discriminator's labels
-  value: 0.9
 latent_space_distn:
   desc: Distribution of latent space, ['normal', 'uniform', 'gumbel', 't']
   value: gumbel
@@ -40,20 +31,29 @@ gumbel:
   value: True
 uniform:
   desc: Train on uniform marginals from ECDF or semi-parametric model
-  value: uniform
-optimizer:
-  desc: Optimizer to use, ['SGD', 'Adam']
-  value: Adam
+  value: uniform_semi
+lambda_gp:
+  value: 10.
+lambda_chi:
+  desc: Weight of penalty on extremal coefficient rmse in generator loss
+  value: 0
+true_label_smooth:
+  desc: Multiply true labels by this to smooth discriminator's labels
+  value: 1.
+
 # architecture
 lrelu:
+  desc: Gulrajani et al. 2017 use 0.2
   value: 0.2
 dropout:
-  value: 0.4
+  desc: Gulrajani et al. 2017 don't use dropout
+  value: 0
 latent_dims:
-  value: 128
+  desc: Gulrajani et al. 2017 use 128
+  value: 256
 g_layers:
   desc: Number of channels in the hidden layers for the generator.
-  value: [25600, 512, 256]
+  value: [512, 256, 128]
 d_layers:
   desc: Number of channels in the hidden layers for the discriminator.
   value: [128, 256, 512]
@@ -64,26 +64,30 @@ d_complexity:
 interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
   value: bilinear
+
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
 learning_rate:
+  desc: Gulrajani et al. 2017 use 0.0001 (Appendix B)
   value: 0.0001
 beta_1:
-  value: 0 
+  desc: Gulrajani et al. 2017 use 0.5
+  value: 0.
 beta_2:
-  value: 0.9 
+  desc: Gulrajani et al. 2017 use 0.9
+  value: 0.9
+weight_decay:
+  desc: Gulrajani et al. 2017 use 10-3
+  value: 0.001
 use_ema:
   desc: Use exponential moving average in training, causes issues when re-loading weights.
-  value: True # only set to true if not loading weights
+  value: False # only set to true if not loading weights
 ema_momentum:
   desc: Momentum of exponential moving average for tf.keras.optimizers.Adam
   value: 0.9
 ema_overwrite_frequency:
   desc: How often to overwrite weights with ema.
   value: 1
-weight_decay:
-  value: 0.01
-global_clipnorm:
-  value: False
 
 # for linux cluster
 # export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/soge-home/users/spet5107/micromamba/envs/tensorflow/lib
+# Distributions: https://docs.wandb.ai/guides/sweeps/sweep-config-keys/#distribution-options-for-random-and-bayesian-search

@@ -1,15 +1,17 @@
 project: hazGAN
 program: train.py
 method: bayes
-name: boulaguiem-style
+name: greater-than-15
 metric:
   goal: minimize
-  name: compound_metric
+  name: chi_rmse
 parameters:
   ntrain:
-    values: [50, 100, 200]
+    values: [64, 128]
   training_balance:
-    values: [1, 2, 3, 4, 5]
+    distribution: int_uniform
+    min: 1
+    max: 5
   latent_dims:
     values: [64, 100, 128, 256]
   g_complexity:
