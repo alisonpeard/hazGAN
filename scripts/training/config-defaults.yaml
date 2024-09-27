@@ -8,11 +8,12 @@ train_size:
   value: 64 # 560 # 840 # 50
 batch_size:
   value: 32
-take_top:
-  value: True
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
   value: 100
+u10_min:
+  desc: Minimum value of u10 anomaly for training data
+  value: 15.0
 # training features
 lr_factor:
   value: 0.5

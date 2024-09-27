@@ -92,7 +92,7 @@ def main(config):
                             config.train_size,
                             'reflect',
                             gumbel_marginals=config.gumbel,
-                            take_top=config.take_top
+                            u10_min=config.u10_min
                             )
     
     train_u = data['train_u']
@@ -309,6 +309,6 @@ if __name__ == "__main__":
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
     tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations
 
-    X = main(wandb.config) # NOTE: stop returning stuff later
+    main(wandb.config) # NOTE: stop returning stuff later
 
 # %% 
