@@ -11,7 +11,7 @@ batch_size:
   value: 64
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
-  value: 100
+  value: 1
 u10_min:
   desc: Minimum value of u10 anomaly for training data
   value: 15.0
@@ -53,7 +53,7 @@ latent_dims:
   value: 256
 g_layers:
   desc: Number of channels in the hidden layers for the generator.
-  value: [512, 256, 128]
+  value: [256, 128, 64]
 d_layers:
   desc: Number of channels in the hidden layers for the discriminator.
   value: [128, 256, 512]
@@ -71,7 +71,7 @@ learning_rate:
   value: 0.0001
 beta_1:
   desc: Gulrajani et al. 2017 use 0.5
-  value: 0.
+  value: 0.5
 beta_2:
   desc: Gulrajani et al. 2017 use 0.9
   value: 0.9

@@ -1,30 +1,45 @@
 """
------Requirements-----
+Training script for hazGAN.
+
+This script trains a GAN model on ERA5 data to generate
+synthetic wind fields. The script uses the hazGAN package, which is a custom implementation
+of a Wasserstein GAN with gradient penalty (WGAN-GP) for spatial data. The script uses
+the wandb library for logging and tracking experiments. The script also uses the hazGAN
+package for data loading, metrics, and plotting.
+
+Requirements:
+-------------
     - env: hazGAN
     - GAN configuratino: config-defaults.yaml
-    - data: traininga/18x22/data.nc
+    - data: training/18x22/data.nc
 
------Output-----
+Output:
+-------
+    - best checkpoint: checkpoint.weights.h5
     - saved_models: generator.weights.h5, critic.weights.h5
 
------To use saved weights-----
->>> new_gan = WGAN.WGAN(config)
->>> new_gan.generator.load_weights(os.path.join(wd, 'saved_models', runname, 'generator_weights'))
->>> new_gan.critic.load_weights(os.path.join(wd, 'saved_models', runname, 'critic_weights'))
-or
+To use pretrained weights:
+--------------------------
+>>> import hazGAN
+>>> new_gan = hazGAN.WGAN(config)
 >>> new_gan.load_weights(os.path.join(rundir, 'checkpoint.weights.h5'))
 
-------To run locally----
->>> mamba activate hazGAN
+To run locally:
+---------------
+>>> micromamba activate hazGAN
 >>> python train.py
 
------Linux cluster examples-----
+To run on linux cluster:
+------------------------
 >>> srun -p Short --pty python train.py --dry-run --cluster
 >>> srun -p GPU --gres=gpu:tesla:1 --pty python train.py --dry-run --cluster
 
+To run sweep:
+-------------
 >>> wandb sweep sweep.yaml
->>> wandb agent alison/hazGAN/2x1z5z5z
+>>> wandb agent alison/hazGAN/<sweep_id>
 """
+
 # %%
 import os
 import sys
@@ -129,6 +144,15 @@ def main(config):
         mode="min",
         verbose=1
         )
+    
+    early_stopping = tf.keras.callbacks.EarlyStopping(
+        monitor="chi_rmse",
+        patience=50,
+        mode="min",
+        verbose=True,
+        restore_best_weights=True,
+        start_from_epoch=10
+        )
 
     # compile
     with tf.device(device):
@@ -141,17 +165,15 @@ def main(config):
                 chi_squared,
                 compound,
                 WandbMetricsLogger(),
-                checkpoint
+                checkpoint,
+                early_stopping
                 ]
         )
 
-    # reproducibility
     final_chi_rmse = history.history['chi_rmse'][-1]
     print(f"Final chi_rmse: {final_chi_rmse}")
 
-    if final_chi_rmse <= 10.0: # TODO: make stricter later
-        gan.generator.save_weights(os.path.join(rundir, f"generator.weights.h5"))
-        gan.critic.save_weights(os.path.join(rundir, f"critic.weights.h5"))
+    if final_chi_rmse <= 10.0:
         save_config(rundir)
 
         # ----Figures----
@@ -166,7 +188,7 @@ def main(config):
         cmap.set_under(cmap(0))
         cmap.set_over(cmap(.99))
 
-        # channel extremal coefficients
+        # Fig 1: channel extremal coefficients
         def get_channel_ext_coefs(x):
             n, h, w, c = x.shape
             excoefs = hg.get_extremal_coeffs_nd(x, [*range(h * w)])
@@ -195,7 +217,7 @@ def main(config):
         ax[0].set_ylabel('Extremal coeff', fontsize=18);
         log_image_to_wandb(fig, f"extremal_dependence", imdir)
 
-        # spatial extremal coefficients
+        # Fig 2: spatial extremal coefficients
         i = 0 # only look at wind speed
         ecs_train = hg.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., i]).numpy()
         ecs_test = hg.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., i]).numpy()
@@ -219,7 +241,7 @@ def main(config):
         axs[0].set_ylabel('Extremal coeff.', fontsize=18);
         log_image_to_wandb(fig, f"spatial_dependence", imdir)
 
-        # ----Plot 64 samples with highest max winds----
+        # Fig 3: 64 most extreme samples
         # inverse transform 
         X = data['train_x'].numpy()
         U = hg.unpad(data['train_u']).numpy()
@@ -231,7 +253,7 @@ def main(config):
         maxima = np.max(x, axis=(1, 2))
         idx = np.argsort(maxima)
         x = x[idx, ...]
-        lon = np.linspace(90, 95, 22)
+        lon = np.linspace(80, 95, 22)
         lat = np.linspace(10, 25, 18)
         lon, lat = np.meshgrid(lon, lat)
         fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
@@ -241,6 +263,7 @@ def main(config):
             ax.set_xticks([])
             ax.set_yticks([])
             ax.invert_yaxis()
+        fig.suptitle('64 most extreme samples', fontsize=20)
 
         log_image_to_wandb(fig, f"max_samples", imdir)
     
@@ -285,7 +308,7 @@ if __name__ == "__main__":
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
             'nepochs': 200,
-            'train_size': 128,
+            'train_size': 96,
             'batch_size': 32,
             'chi_frequency': 1
             },
