@@ -102,8 +102,6 @@ def main(config):
     print(f"Training data shape: {train_u.shape}")
     
     # define callbacks
-    visualiser = hg.Visualiser(1, runname=runname)
-    
     chi_score = hg.ChiScore({
             "train": next(iter(train)),
             "test": next(iter(test))
@@ -119,14 +117,6 @@ def main(config):
     
     compound = hg.CompoundMetric(frequency=config.chi_frequency)
 
-    reduce_on_plateau = tf.keras.callbacks.ReduceLROnPlateau(
-        monitor="generator_loss",
-        factor=config.lr_factor,
-        patience=config.lr_patience,
-        mode="min",
-        verbose=1
-        )
-    
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         os.path.join(rundir, "checkpoint.weights.h5"),
         monitor="compound_metric",
@@ -147,8 +137,6 @@ def main(config):
                 chi_squared,
                 compound,
                 WandbMetricsLogger(),
-                # visualiser,
-                # reduce_on_plateau,
                 checkpoint
                 ]
         )
