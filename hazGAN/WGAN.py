@@ -5,7 +5,7 @@ References:
 ..[1] Gulrajani (2017) https://github.com/igul222/improved_wgan_training/blob/master/gan_mnist.py 
 ..[2] Harris (2022) - application
 """
-
+import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import optimizers
@@ -203,7 +203,8 @@ class WGAN(keras.Model):
                     score = self.critic(interpolates)
                 gradients = tape_gp.gradient(score, [interpolates])[0]
                 slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1])) # NOTE: previously , axis=[1, 2, 3] but Gulrajani code has [1]
-                gradient_penalty = tf.reduce_mean((slopes - 1.0) ** 2)
+                # gradient_penalty = tf.reduce_mean((slopes - 1.0) ** 2)
+                gradient_penalty = tf.reduce_mean(tf.clip_by_value(slopes - 1., 0., np.infty)**2) # https://openreview.net/forum?id=B1hYRMbCW
                 critic_loss += self.lambda_gp * gradient_penalty
 
             grads = tape.gradient(critic_loss, self.critic.trainable_weights)
