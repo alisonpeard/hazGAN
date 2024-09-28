@@ -31,14 +31,14 @@ gumbel:
   value: True
 uniform:
   desc: Train on uniform marginals from ECDF or semi-parametric model
-  value: uniform_semi
+  value: uniform
 lambda_gp:
   value: 5.
 lambda_chi:
-  desc: Weight of penalty on extremal coefficient rmse in generator loss
+  desc: Weight of penalty on l2 error of extremal coefficient
   value: 0
 true_label_smooth:
-  desc: Multiply true labels by this to smooth discriminator's labels
+  desc: Regularization: multiply true labels by this to smooth discriminator's labels
   value: 1.
 
 # architecture
