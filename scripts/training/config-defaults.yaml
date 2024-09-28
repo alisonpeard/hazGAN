@@ -57,10 +57,6 @@ g_layers:
 d_layers:
   desc: Number of channels in the hidden layers for the discriminator.
   value: [128, 256, 512]
-g_complexity:
-  value: 1
-d_complexity:
-  value: 1
 interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
   value: bilinear
