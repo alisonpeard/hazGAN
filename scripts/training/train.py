@@ -146,7 +146,7 @@ def main(config):
         )
     
     early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor="chi_rmse",
+        monitor="chi_rmse", # or value_function
         patience=50,
         mode="min",
         verbose=True,
@@ -161,19 +161,19 @@ def main(config):
             train,
             epochs=config.nepochs,
             callbacks=[
+                # early_stopping,
                 chi_score,
                 chi_squared,
                 compound,
                 WandbMetricsLogger(),
                 checkpoint
-                # early_stopping
                 ]
         )
 
     final_chi_rmse = history.history['chi_rmse'][-1]
     print(f"Final chi_rmse: {final_chi_rmse}")
 
-    if final_chi_rmse <= 20.0:
+    if True: #final_chi_rmse <= 20.0:
         save_config(rundir)
 
         # ----Figures----
@@ -242,13 +242,10 @@ def main(config):
         log_image_to_wandb(fig, f"spatial_dependence", imdir)
 
         # Fig 3: 64 most extreme samples
-        # inverse transform 
         X = data['train_x'].numpy()
         U = hg.unpad(data['train_u']).numpy()
         params = data['params']
-        x = hg.POT.inv_probability_integral_transform(fake_u, X, U)
-
-        # plot the 64 samples with highest max winds
+        x = hg.POT.inv_probability_integral_transform(fake_u, X, U, params)
         x = x[..., 0]
         maxima = np.max(x, axis=(1, 2))
         idx = np.argsort(maxima)
@@ -264,8 +261,25 @@ def main(config):
             ax.set_yticks([])
             ax.invert_yaxis()
         fig.suptitle('64 most extreme samples', fontsize=18)
-
         log_image_to_wandb(fig, f"max_samples", imdir)
+
+        # Fig 4: 63 most extreme training samples
+        X = data['train_x'].numpy()[..., 0]
+        if X.shape[0] < 64:
+            # repeat X until it has 64 samples
+            X = np.concatenate([X] * (64 // X.shape[0]), axis=0)
+        maxima = np.max(X, axis=(1, 2))
+        idx = np.argsort(maxima)
+        X = X[idx, ...]
+        fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
+                                gridspec_kw={'hspace': 0, 'wspace': 0})
+        for i, ax in enumerate(axs.ravel()):
+            ax.contourf(lon, lat, X[i, ...], cmap='Spectral_r', levels=20)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.invert_yaxis()
+        fig.suptitle('64 most extreme training samples', fontsize=18)
+        log_image_to_wandb(fig, f"max_train_samples", imdir)
     
     else: # delete rundir and its contents
         print("Chi score too high, deleting run directory")
@@ -307,9 +321,9 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 10000,
-            'train_size': 64,
-            'batch_size': 6,
+            'nepochs': 100,
+            'train_size': 128,
+            'batch_size': 64,
             'chi_frequency': 1
             },
             allow_val_change=True)
