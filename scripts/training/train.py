@@ -165,15 +165,15 @@ def main(config):
                 chi_squared,
                 compound,
                 WandbMetricsLogger(),
-                checkpoint,
-                early_stopping
+                checkpoint
+                # early_stopping
                 ]
         )
 
     final_chi_rmse = history.history['chi_rmse'][-1]
     print(f"Final chi_rmse: {final_chi_rmse}")
 
-    if final_chi_rmse <= 10.0:
+    if final_chi_rmse <= 20.0:
         save_config(rundir)
 
         # ----Figures----
@@ -259,11 +259,11 @@ def main(config):
         fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
                                 gridspec_kw={'hspace': 0, 'wspace': 0})
         for i, ax in enumerate(axs.ravel()):
-            ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r')
+            ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r', levels=20)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.invert_yaxis()
-        fig.suptitle('64 most extreme samples', fontsize=20)
+        fig.suptitle('64 most extreme samples', fontsize=18)
 
         log_image_to_wandb(fig, f"max_samples", imdir)
     
@@ -307,9 +307,9 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 200,
-            'train_size': 96,
-            'batch_size': 32,
+            'nepochs': 10000,
+            'train_size': 64,
+            'batch_size': 6,
             'chi_frequency': 1
             },
             allow_val_change=True)
@@ -321,10 +321,9 @@ if __name__ == "__main__":
     os.makedirs(rundir, exist_ok=True)
 
     # set seed for reproductibility
-    wandb.config["seed"] = np.random.randint(0, 1e6)
+    wandb.config["seed"] = np.random.randint(0, 500)
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
     tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations
-
     main(wandb.config)
 
 # %% 

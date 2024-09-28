@@ -13,7 +13,6 @@ from tensorflow.keras import layers
 from inspect import signature
 from .extreme_value_theory import chi_loss, inv_gumbel
 
-DIM = 64
 
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
     """Sample from Gumbel(0, 1)"""
@@ -42,6 +41,14 @@ def process_optimizer_kwargs(config):
     }
     params = get_optimizer_kwargs(config.optimizer)
     kwargs = {key: val for key, val in kwargs.items() if key in params}
+
+    lr_schedule = keras.optimizers.schedules.ExponentialDecay(
+        initial_learning_rate=config.learning_rate,
+        decay_steps=100_000,
+        decay_rate=0.96,
+        staircase=True
+    )
+    kwargs["learning_rate"] = lr_schedule
     return kwargs
 
 

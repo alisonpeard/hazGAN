@@ -14,7 +14,7 @@ chi_frequency:
   value: 1
 u10_min:
   desc: Minimum value of u10 anomaly for training data
-  value: 15.0
+  value: 15.
 
 # training features
 optimizer:
@@ -33,7 +33,7 @@ uniform:
   desc: Train on uniform marginals from ECDF or semi-parametric model
   value: uniform_semi
 lambda_gp:
-  value: 10.
+  value: 5.
 lambda_chi:
   desc: Weight of penalty on extremal coefficient rmse in generator loss
   value: 0
@@ -50,7 +50,7 @@ dropout:
   value: 0
 latent_dims:
   desc: Gulrajani et al. 2017 use 128
-  value: 256
+  value: 128
 g_layers:
   desc: Number of channels in the hidden layers for the generator.
   value: [256, 128, 64]
@@ -68,7 +68,7 @@ interpolation:
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
 learning_rate:
   desc: Gulrajani et al. 2017 use 0.0001 (Appendix B)
-  value: 0.0001
+  value: 0.001
 beta_1:
   desc: Gulrajani et al. 2017 use 0.5
   value: 0.5
