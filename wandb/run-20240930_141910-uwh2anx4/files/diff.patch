@@ -1,0 +1,76 @@
+diff --git a/hazGAN/callbacks.py b/hazGAN/callbacks.py
+index c373f65..57d882d 100644
+--- a/hazGAN/callbacks.py
++++ b/hazGAN/callbacks.py
+@@ -16,6 +16,37 @@ class WandbMetricsLogger(Callback):
+         wandb.log(logs)
+ 
+ 
++class CountImagesSeen(Callback):
++    def __init__(self):
++        super().__init__()
++        self.images_seen = 0
++
++    def on_train_batch_begin(self, batch, logs=None):
++        pass  # We'll count at the end of the batch instead
++
++    def on_train_batch_end(self, batch, logs=None):
++        if logs is None:
++            logs = {}
++        
++        # Access the actual batch data
++        if hasattr(self.model, 'train_function'):
++            inputs = self.model.train_function.inputs
++            if inputs:
++                batch_size = tf.shape(inputs[0])[0].numpy()
++                self.images_seen += int(batch_size)
++                print(f"Batch {batch} end. Batch size: {batch_size}, Total images seen: {self.images_seen}")
++            else:
++                print(f"Batch {batch} end. Unable to determine batch size.")
++        else:
++            print(f"Batch {batch} end. Model train function not available.")
++
++    def on_epoch_end(self, epoch, logs=None):
++        if logs is None:
++            logs = {}
++        print(f"Epoch {epoch + 1} ended. Total images seen: {self.images_seen}")
++        wandb.log({"images_seen": self.images_seen, "epoch": epoch + 1})
++
++
+ class Visualiser(Callback):
+     def __init__(self, frequency=1, runname='untitled'):
+         super().__init__()
+diff --git a/scripts/training/config-defaults.yaml b/scripts/training/config-defaults.yaml
+index 205201b..8d2e199 100644
+--- a/scripts/training/config-defaults.yaml
++++ b/scripts/training/config-defaults.yaml
+@@ -4,7 +4,7 @@ model:
+   value: wgan
+ nepochs:
+   desc: Gulrajani et al. 2017 use 200_000
+-  value: 5000 # 3000 # or 1,500,000/train_size
++  value: 10 # 3000 # or 1,500,000/train_size
+ train_size:
+   value: 128 # 840 # 50
+ batch_size:
+diff --git a/scripts/training/train.py b/scripts/training/train.py
+index 31fc025..78d2f4f 100644
+--- a/scripts/training/train.py
++++ b/scripts/training/train.py
+@@ -135,6 +135,8 @@ def main(config):
+         )
+     
+     critic_val = hg.CriticVal(test, frequency=config.chi_frequency)
++
++    images_seen = hg.CountImagesSeen()
+     
+     compound = hg.CompoundMetric(frequency=config.chi_frequency)
+ 
+@@ -165,6 +167,7 @@ def main(config):
+             callbacks=[
+                 # early_stopping,
+                 # critic_val,
++                images_seen,
+                 chi_score,
+                 chi_squared,
+                 compound,

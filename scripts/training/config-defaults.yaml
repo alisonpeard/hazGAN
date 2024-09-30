@@ -4,7 +4,7 @@ model:
   value: wgan
 nepochs:
   desc: Gulrajani et al. 2017 use 200_000
-  value: 5000 # 3000 # or 1,500,000/train_size
+  value: 10 # 3000 # or 1,500,000/train_size
 train_size:
   value: 128 # 840 # 50
 batch_size:

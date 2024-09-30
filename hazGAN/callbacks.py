@@ -16,6 +16,37 @@ class WandbMetricsLogger(Callback):
         wandb.log(logs)
 
 
+class CountImagesSeen(Callback):
+    def __init__(self):
+        super().__init__()
+        self.images_seen = 0
+
+    def on_train_batch_begin(self, batch, logs=None):
+        pass  # We'll count at the end of the batch instead
+
+    def on_train_batch_end(self, batch, logs=None):
+        if logs is None:
+            logs = {}
+        
+        # Access the actual batch data
+        if hasattr(self.model, 'train_function'):
+            inputs = self.model.train_function.inputs
+            if inputs:
+                batch_size = tf.shape(inputs[0])[0].numpy()
+                self.images_seen += int(batch_size)
+                print(f"Batch {batch} end. Batch size: {batch_size}, Total images seen: {self.images_seen}")
+            else:
+                print(f"Batch {batch} end. Unable to determine batch size.")
+        else:
+            print(f"Batch {batch} end. Model train function not available.")
+
+    def on_epoch_end(self, epoch, logs=None):
+        if logs is None:
+            logs = {}
+        print(f"Epoch {epoch + 1} ended. Total images seen: {self.images_seen}")
+        wandb.log({"images_seen": self.images_seen, "epoch": epoch + 1})
+
+
 class Visualiser(Callback):
     def __init__(self, frequency=1, runname='untitled'):
         super().__init__()
