@@ -14,7 +14,10 @@ chi_frequency:
   value: 1
 u10_min:
   desc: Minimum value of u10 anomaly for training data
-  value: -999 # you get two footprints if 40, 6 for 32.5 [15, 32.5, 40]
+  value: 15 # you get two footprints if 40, 6 for 32.5 [15, 32.5, 40]
+augment_policy:
+  desc: Subset of 'color,translation,cutout' or ''
+  value: 'color,translation,cutout'
 
 # training features
 optimizer:

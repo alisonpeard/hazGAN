@@ -12,6 +12,7 @@ from tensorflow.keras import optimizers
 from tensorflow.keras import layers
 from inspect import signature
 from .extreme_value_theory import chi_loss, inv_gumbel
+from .augment import DiffAugment
 
 
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
@@ -146,6 +147,7 @@ class WGAN(keras.Model):
             self.inv = inv_gumbel
         else:
             self.inv = lambda x: x
+        self.augment = lambda x: DiffAugment(x, config.augment_policy)
 
         # trackers average over batches
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
@@ -187,8 +189,8 @@ class WGAN(keras.Model):
         # https://github.com/igul222/improved_wgan_training/blob/master/gan_mnist.py:134
         for _ in range(self.config.training_balance):
             with tf.GradientTape() as tape:
-                score_real = self.critic(data)
-                score_fake = self.critic(fake_data)
+                score_real = self.critic(self.augment(data))
+                score_fake = self.critic(self.augment(fake_data))
                 critic_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality --Gulrajani 2017)
                 eps = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
                 differences = fake_data - data
@@ -209,7 +211,7 @@ class WGAN(keras.Model):
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
         with tf.GradientTape() as tape:
             generated_data = self.generator(random_latent_vectors)
-            score = self.critic(generated_data, training=False)
+            score = self.critic(self.augment(generated_data), training=False)
             generator_loss_raw = -tf.reduce_mean(score)
             chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # think this is safe inside GradientTape
             if self.lambda_chi > 0: # NOTE: this doesn't work with GPU

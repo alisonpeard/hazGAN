@@ -62,7 +62,7 @@ class CriticVal(Callback):
             nbatch = 0
             score = 0
             for batch in self.validation_data:
-                score += self.model.critic(batch, training=False)
+                score += self.model.critic(self.model.augment(batch), training=False)
                 nbatch += 1
             score = score / nbatch
             logs["critic_val"] = tf.reduce_mean(score).numpy()

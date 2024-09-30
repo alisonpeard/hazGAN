@@ -164,7 +164,7 @@ def main(config):
             epochs=config.nepochs,
             callbacks=[
                 # early_stopping,
-                critic_val,
+                # critic_val,
                 chi_score,
                 chi_squared,
                 compound,
@@ -329,9 +329,9 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 1,
-            'train_size': 3,
-            'batch_size': 2,
+            'nepochs': 128,
+            'train_size': 128,
+            'batch_size': 128,
             'chi_frequency': 1
             },
             allow_val_change=True)
