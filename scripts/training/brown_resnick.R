@@ -5,10 +5,10 @@ library(ncdf4)
 library(mvPot)
 library(SpatialExtremes)
 
-channel <- 1
-channel.names <- c('u10', 'mslp')
+channel <- 2
+channel.names <- c('u10', 'tp')
 ntrain <- 1000
-outdir <- '/Users/alison/Documents/DPhil/multivariate/results/brown_resnick/'
+outdir <- '/Users/alison/Documents/DPhil/paper1.nosync/results/brown_resnick/'
 
 extCoeffBR <- function(h, par){
   s=par[1]
@@ -51,19 +51,19 @@ BRIsoSim <- function(n, par, coord){
   simu=t(z)
 }
 
-coord <- read_parquet('/Users/alison/Documents/DPhil/multivariate/era5_data/coords.parquet')
-coord <- as.matrix(coord[,c('latitude', 'longitude')])
-nc_data <- nc_open('/Users/alison/Documents/DPhil/multivariate/era5_data/data.nc')
+nc_data <- nc_open('/Users/alison/Documents/DPhil/paper1.nosync/training/18x22/data.nc')
 lon <- ncvar_get(nc_data, "lon")
 lat <- ncvar_get(nc_data, "lat")
+coord <- expand.grid(lon = lon, lat = lat)
 t <- ncvar_get(nc_data, "time")
 U <- ncvar_get(nc_data, "uniform")[channel,,,]
 heatmap(U[,,1], Rowv=NA, Colv=NA)
-
-dim(U) <- c(18*22,2715)
+nsamples <- dim(U)[3]
+dim(U) <- c(18*22,nsamples)
 frechet <- -1 / log(U) # transform to unit Fréchet
 train <- frechet[,1:ntrain]
-test <- frechet[,(ntrain+1):2715]
+test <- frechet[,(ntrain+1):nsamples]
+
 ##### FIT EXTREMAL COEFFICIENTS ################################################
 if(TRUE){
   test_ECs <- fitextcoeff(t(test), as.matrix(coord), estim="ST", marge="frech", plot=T)$ext.coeff
@@ -87,7 +87,7 @@ if(TRUE){
 }
 ##### SAMPLE FROM FITTED BR ####################################################
 ECs <- read_parquet(paste0(outdir, 'ECs_', channel.names[channel], '.parquet'))
-ops <- read_parquet("/Users/alison/Documents/DPhil/multivariate/era5_data/ops.parquet")
+ops <- read_parquet("/Users/alison/Documents/DPhil/paper1.nosync/training/18x22/ops.parquet")
 ii <- ops$grid
 
 nsamples <- ntrain

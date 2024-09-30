@@ -5,23 +5,20 @@ References:
 ..[1] Gulrajani (2017) https://github.com/igul222/improved_wgan_training/blob/master/gan_mnist.py 
 ..[2] Harris (2022) - application
 """
-
+import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import optimizers
 from tensorflow.keras import layers
 from inspect import signature
-import tensorflow_probability as tfp
 from .extreme_value_theory import chi_loss, inv_gumbel
 
 
-# tf.random.gumbel = tfp.distributions.Gumbel(0, 1).sample # so can sample as normal
-
-def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0.):
+def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
     """Sample from Gumbel(0, 1)"""
     T = tf.constant(temperature, dtype=tf.float32)
     O = tf.constant(offset, dtype=tf.float32)
-    U = tf.random.uniform(shape, minval=0, maxval=1)
+    U = tf.random.uniform(shape, minval=0, maxval=1, seed=seed)
     return O - T * tf.math.log(-tf.math.log(U + eps) + eps)
 tf.random.gumbel = sample_gumbel
 
@@ -44,6 +41,14 @@ def process_optimizer_kwargs(config):
     }
     params = get_optimizer_kwargs(config.optimizer)
     kwargs = {key: val for key, val in kwargs.items() if key in params}
+
+    lr_schedule = keras.optimizers.schedules.ExponentialDecay(
+        initial_learning_rate=config.learning_rate,
+        decay_steps=100_000,
+        decay_rate=0.96,
+        staircase=True
+    )
+    kwargs["learning_rate"] = lr_schedule
     return kwargs
 
 
@@ -67,21 +72,21 @@ def define_generator(config, nchannels=2):
     """
     z = tf.keras.Input(shape=(config.latent_dims,))
 
-    # First fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
-    fc = layers.Dense(config["g_complexity"] * config["g_layers"][0])(z)
-    fc = layers.Reshape((5, 5, int(config["g_complexity"] * config["g_layers"][0] / 25)))(fc)
+    # Fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
+    fc = layers.Dense(config["g_layers"][0] * 5 * 5 * nchannels, use_bias=False)(z)
+    fc = layers.Reshape((5, 5, int(nchannels * config["g_layers"][0])))(fc)
     lrelu0 = layers.LeakyReLU(config.lrelu)(fc)
     drop0 = layers.Dropout(config.dropout)(lrelu0)
     bn0 = layers.BatchNormalization(axis=-1)(drop0)  # normalise along features layer (1024)
 
-    # Deconvolution, 5 x 5 x 1024 -> 7 x 7 x 512
-    conv1 = layers.Conv2DTranspose(config["g_complexity"] * config["g_layers"][1], 3, 1, use_bias=False)(bn0)
+    # 1st deconvolution block, 5 x 5 x 1024 -> 7 x 7 x 512
+    conv1 = layers.Conv2DTranspose(config["g_layers"][1], 3, 1, use_bias=False)(bn0)
     lrelu1 = layers.LeakyReLU(config.lrelu)(conv1)
     drop1 = layers.Dropout(config.dropout)(lrelu1)
     bn1 = layers.BatchNormalization(axis=-1)(drop1)
 
-    # Deconvolution, 6 x 8 x 512 -> 14 x 18 x 256
-    conv2 = layers.Conv2DTranspose(config["g_complexity"] * config["g_layers"][2], (3, 4), 1, use_bias=False)(bn1)
+    # 2nd deconvolution block, 6 x 8 x 512 -> 14 x 18 x 256
+    conv2 = layers.Conv2DTranspose(config["g_layers"][2], (3, 4), 1, use_bias=False)(bn1)
     lrelu2 = layers.LeakyReLU(config.lrelu)(conv2)
     drop2 = layers.Dropout(config.dropout)(lrelu2)
     bn2 = layers.BatchNormalization(axis=-1)(drop2)
@@ -101,22 +106,23 @@ def define_critic(config, nchannels=2):
     x = tf.keras.Input(shape=(20, 24, nchannels))
 
     # 1st hidden layer 9x10x64
-    conv1 = layers.Conv2D(config["d_complexity"] * config["d_layers"][0], (4, 5), (2, 2), "valid", kernel_initializer=tf.keras.initializers.GlorotUniform())(x)
+    conv1 = layers.Conv2D(config["d_layers"][0], (4, 5), (2, 2), "valid",
+                          kernel_initializer=tf.keras.initializers.GlorotUniform())(x)
     lrelu1 = layers.LeakyReLU(config.lrelu)(conv1)
     drop1 = layers.Dropout(config.dropout)(lrelu1)
 
     # 2nd hidden layer 7x7x128
-    conv1 = layers.Conv2D(config["d_complexity"] * config["d_layers"][1], (3, 4), (1, 1), "valid", use_bias=False)(drop1)
+    conv1 = layers.Conv2D(config["d_layers"][1], (3, 4), (1, 1), "valid")(drop1)
     lrelu2 = layers.LeakyReLU(config.lrelu)(conv1)
     drop2 = layers.Dropout(config.dropout)(lrelu2)
 
     # 3rd hidden layer 5x5x256
-    conv2 = layers.Conv2D(config["d_complexity"] * config["d_layers"][2], (3, 3), (1, 1), "valid", use_bias=False)(drop2)
+    conv2 = layers.Conv2D(config["d_layers"][2], (3, 3), (1, 1), "valid")(drop2)
     lrelu3 = layers.LeakyReLU(config.lrelu)(conv2)
     drop3 = layers.Dropout(config.dropout)(lrelu3)
 
     # fully connected 1x1
-    flat = layers.Reshape((-1, 5 * 5 * config["d_complexity"] * config["d_layers"][2]))(drop3)
+    flat = layers.Reshape((-1, 5 * 5 * config["d_layers"][2]))(drop3)
     score = layers.Dense(1)(flat)
     out = layers.Reshape((1,))(score)
     return tf.keras.Model(x, out, name="critic")
@@ -142,10 +148,13 @@ class WGAN(keras.Model):
             self.inv = lambda x: x
 
         # trackers average over batches
-        self.critic_loss_tracker = keras.metrics.Mean(name="critic_loss")
-        self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
+        self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
+        self.critic_loss_tracker = keras.metrics.Mean(name="critic_loss")
         self.value_function_tracker = keras.metrics.Mean(name="value_function")
+        self.critic_real_tracker = keras.metrics.Mean(name="critic_real")
+        self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
+        self.seed = config.seed
         
     
     def compile(self, d_optimizer, g_optimizer, *args, **kwargs):
@@ -156,13 +165,19 @@ class WGAN(keras.Model):
         self.g_optimizer.build(self.generator.trainable_variables)
 
 
-    def call(self, nsamples=5, temp=1., offset=0):
+    def call(self, nsamples=5, temp=1., offset=0, seed=None):
         """Return uniformly distributed samples from the generator."""
-        random_latent_vectors = self.latent_space_distn((nsamples, self.latent_dim), temperature=temp, offset=offset)
+        random_latent_vectors = self.latent_space_distn(
+            (nsamples, self.latent_dim),
+            temperature=temp,
+            offset=offset,
+            seed=seed
+            )
         raw = self.generator(random_latent_vectors, training=False)
         return self.inv(raw)
 
-
+        
+    @tf.function
     def train_step(self, data):
         batch_size = tf.shape(data)[0]
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
@@ -174,7 +189,7 @@ class WGAN(keras.Model):
             with tf.GradientTape() as tape:
                 score_real = self.critic(data)
                 score_fake = self.critic(fake_data)
-                critic_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality (Gulrajani 2017))
+                critic_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality --Gulrajani 2017)
                 eps = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
                 differences = fake_data - data
                 interpolates = data + (eps * differences)  # interpolated data
@@ -182,8 +197,9 @@ class WGAN(keras.Model):
                     tape_gp.watch(interpolates)
                     score = self.critic(interpolates)
                 gradients = tape_gp.gradient(score, [interpolates])[0]
-                slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]))
-                gradient_penalty = tf.reduce_mean((slopes - 1.0) ** 2)
+                slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1])) # NOTE: previously , axis=[1, 2, 3] but Gulrajani code has [1]
+                # gradient_penalty = tf.reduce_mean((slopes - 1.0) ** 2)
+                gradient_penalty = tf.reduce_mean(tf.clip_by_value(slopes - 1., 0., np.infty)**2) # https://openreview.net/forum?id=B1hYRMbCW
                 critic_loss += self.lambda_gp * gradient_penalty
 
             grads = tape.gradient(critic_loss, self.critic.trainable_weights)
@@ -211,7 +227,9 @@ class WGAN(keras.Model):
 
         return {
             "chi_rmse": self.chi_rmse_tracker.result(),
-            "critic_loss": self.critic_loss_tracker.result(),
             "generator_loss": self.generator_loss_tracker.result(),
-            "value_function": self.value_function_tracker.result()
+            "critic_loss": self.critic_loss_tracker.result(),
+            "value_function": self.value_function_tracker.result(),
+            'critic_real': tf.reduce_mean(score_real),
+            'critic_fake': tf.reduce_mean(score_fake),
         }

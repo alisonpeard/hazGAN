@@ -5,130 +5,274 @@ To load model elsewhere, you can use the following snippet:
 >>> with open(modelpath, "rb") as f:
 >>>     model = load(f)
 
+----Full regressor options----
+regressor_rename = {
+    'landingSpeed': 'storm_speed',
+    'totalPrec_total': 'precip',
+    'elevation_mean': 'elevation',
+    'bathymetry_mean': 'bathymetry',
+    'era5_wind': 'wind',
+    'era5_precip': 'precip',
+    'era5_pressure': 'mslp',
+    'wind': 'wind',
+    'mslp': 'mslp',
+    'continent': 'continent',
+    'slope': 'slope',
+    'landingWindMaxLocal2': 'wind',
+    'landingPressure': 'mslp',
+    'stormFrequency_mean': 'freq',
+    'coastDist': 'dist_coast'
+    }
 
------Input files-----
-  - /Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v3__mine/era5_and_slope_0.csv
------Output files-----
-  - /Users/alison/Documents/DPhil/paper1.nosync/results/mangroves/model.pkl
 """
 #%%
 import os
 import numpy as np
 import pandas as pd
 import geopandas as gpd
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import root_mean_squared_error, r2_score
+from tqdm import tqdm
+from joblib import dump # for pickling
 import matplotlib.pyplot as plt
+import seaborn as sns
+from MangroveDamage import MangroveDamageModel
+
+SCALING = True
+VISUALS = False
+THRESHOLD = 0.2 # mangroves being 20% damaged or more
+
+# %%
+def convert_ibtracs_vars(df):
+    df = df.copy()
+    def kmph_to_mps(x):
+            return x * 1000 / 3600
+    def mm_to_m(x):
+        return x / 1000
+    df['landingWindMaxLocal2'] = df['landingWindMaxLocal2'].apply(kmph_to_mps)
+    df['totalPrec_total'] = df['totalPrec_total'].apply(mm_to_m)
+    return df
+
+def rsquared(y, yhat):
+    """Psuedo R^2"""
+    ymean = np.mean(y)
+    y = np.where(y == ymean, np.nan, y)
+    yhat = np.where(yhat == ymean, np.nan, yhat)
+    sse = sum((y - yhat)**2)     # sum squared residuals
+    sst = sum((y - ymean)**2)    # total sum of squares
+    ssr = sum((yhat - ymean)**2) # sum of squares of regression
+    return ssr / (ssr + sse) # Krueck (2020)
+    # return ssr / sst # https://doi.org/10.1016/j.neunet.2009.07.002
+
+
+def root_mean_squared_error(y, yhat):
+    return np.sqrt(np.mean((y - yhat)**2))
+
 
 bob_crs = 24346
-# %%
-gdf = gpd.read_file('/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v3__mine/data_with_slopes.gpkg')
-df = pd.read_csv('/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v3__mine/data_with_era5.csv')
-df['storm'] = df['storm'].str.capitalize()
-# %%
-final_df = gdf.merge(df, left_on=['center_centerLat', 'center_centerLon', 'stormName'], right_on=['lat', 'lon', 'storm'], how='left')
-final_df = final_df.dropna()
-final_df.to_csv('/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v3__mine/final.csv', index=False)
-# %%
-path = '/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v3__mine/final.csv'
-df = pd.read_csv(path)
-[*df.columns]
-# %% ------Train a model------
-# TODO: pressure, precipitation checks
-regressors = [
-    'slope',
-    # 'landingWindMaxLocal2',
-    # 'landingPressure',
-    'era5_wind',
-    'era5_pressure',
-    # 'era5_precip',
-    # 'stormFrequency_mean',
-    # 'elevation_mean',
-    # 'totalPrec_total',
-    # 'bathymetry_mean',
-    # 'landingSpeed',
-    # 'coastDist'
-    ]
-response = ['intensity']
-# %%
-gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.center_centerLon, df.center_centerLat)).set_crs(epsg=4326)
+indir_alison = '/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v3__mine'
+indir_yu = '/Users/alison/Documents/DPhil/paper1.nosync/mangrove_data/v2'
+infile0 = os.path.join(indir_yu, 'result/model/input_fixedCNTRY_rmOutlier.csv')
+infile1 = os.path.join(indir_alison, 'data_with_slopes.csv')
+infile2 = os.path.join(indir_alison, 'final.csv')
+infile3 = os.path.join(indir_alison, 'era5_and_slope_0.csv')
+infile4 = os.path.join(indir_alison, 'data_with_imdaa.csv')
 
-gdf = gdf.dropna()
-X = gdf[regressors]
-y = gdf[response]
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+infile = infile2
+response = 'intensity'
+regressor_rename = {
+    # "imdaa_gust": "wind",
+    # "imdaa_precip": "precip",
+    # 'elevation_mean': 'elevation',
+    # 'era5_wind': 'wind',
+    # 'era5_precip': 'precip',
+    # 'era5_pressure': 'mslp'
+    # 'stormFrequency_mean': 'freq', # add this back in later
+    # 'slope': 'slope',
+    # # 'landingPressure': 'mslp'
+    'totalPrec_total': 'precip',
+    'landingWindMaxLocal2': 'wind'
+    }
+regressors = [value for value in regressor_rename.values()]
+
+# %% load and process data
+eventcol = 'stormName'
+trainratio = 0.9
+bootstrap = False
+df = pd.read_csv(infile)
+
 # %%
-if True:
-  import seaborn as sns
+df = convert_ibtracs_vars(df)
+df = df.rename(columns=regressor_rename)
+df = df.dropna(subset=regressors + [response])
+events = list(set(df[eventcol]))
+ntrain = int(len(events) * trainratio)
 
-  sns.pairplot(gdf, x_vars=regressors, y_vars=response)
-  sns.pairplot(X)
-# %% 
+df[response] = (df[response] >= THRESHOLD).astype(int) # binary problem
+df[response].value_counts()
 
-from sklearn.preprocessing import StandardScaler
-scaler = StandardScaler()
-X_train = scaler.fit_transform(X_train)
-X_test = scaler.transform(X_test)
-# %% train a random forest
-for i in [1, 2, 5, 10, 20, 50, 100, 200]:
-  model = RandomForestRegressor(n_estimators=i * len(regressors), random_state=42).fit(X_train, y_train)
+# %% ----Train model eventwise OOB---- 
+# results = df[['landing', 'intensity']].rename(columns={'intensity': 'y'})
+observations = []
+predictions = []
+rmses = []
+rsqs = []
+rmse_fitted = []
+rsq_fitted = []
+winds = []
+precips = []
 
+# loop through events
+for i in range(100):
+  train_events = np.random.choice(events, ntrain, replace=bootstrap)
+  df_train = df[df[eventcol].isin(train_events)]
+  df_test = df[~df[eventcol].isin(train_events)]
+  print("train : test", len(df_train), ":", len(df_test))
+
+  X_train, y_train = df_train[regressors], df_train[response]
+  X_test, y_test = df_test[regressors], df_test[response]
+
+  # ensemble model
+  model = MangroveDamageModel(scaling=SCALING)
+  model.fit(X_train, y_train)
+  y_fit = model.predict(X_train)
   y_pred = model.predict(X_test)
+
+  # fit metrics
+  rmse_fit = root_mean_squared_error(y_train, y_fit)
+  rsq_fit = rsquared(y_train, y_fit)
+
+  # predict and view test metrics
   rmse = root_mean_squared_error(y_test, y_pred)
-  rsq = r2_score(y_test, y_pred)
+  rsq = rsquared(y_test, y_pred)
 
-  print(f'RMSE: {rmse:.4f}, R^2: {rsq:.4f}, nestimars factor: {i})')
-# %%
-# import simple mlp
-from sklearn.neural_network import MLPRegressor
-# %%
-# try svm, xgboost, gaussian process regressors
-from sklearn.svm import SVR
-from xgboost import XGBRegressor
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import DotProduct, WhiteKernel, RBF, Matern
+  print(f'Bootstrap {i}: fitted rmse:  {rmse_fit:.4f}, fitted R^2: {rsq_fit:.4f}')
+  print(f' ---- rmse: {rmse:.4f}, R^2: {rsq:.4f}')
 
-# %%
-# model = XGBRegressor().fit(X_train, y_train)
-# model = SVR().fit(X_train, y_train)
-model = GaussianProcessRegressor(kernel=DotProduct() + WhiteKernel()).fit(X_train, y_train)
-# model = RandomForestRegressor().fit(X_train, y_train)
-# model = MLPRegressor(hidden_layer_sizes=(100, 100)).fit(X_train, y_train)
-# model = MLPRegressor(hidden_layer_sizes=(100, 100, 100)).fit(X_train, y_train)
-# model = MLPRegressor(hidden_layer_sizes=(100, 100, 100, 100)).fit(X_train, y_train)
-# model = MLPRegressor(hidden_layer_sizes=(100, 100, 100, 100, 100)).fit(X_train, y_train)
-# model = MLPRegressor().fit(X_train, y_train)
+  # store results
+  observations.append(y_test)
+  predictions.append(y_pred)
+  rmse_fitted.append(rmse_fit)
+  rsq_fitted.append(rsq_fit)
+  rmses.append(rmse)
+  rsqs.append(rsq)
+  winds.append(df_test['wind'])
+  precips.append(df_test['precip'])
+  
 
-# other variations of the gaussian process regressor
-# model = GaussianProcessRegressor(kernel=RBF() + WhiteKernel()).fit(X_train, y_train)
-model = GaussianProcessRegressor(kernel=Matern() + WhiteKernel()).fit(X_train, y_train)
+# gather results
+observations = np.concatenate(observations)
+predictions = np.concatenate(predictions)
+winds = np.concatenate(winds)
+precips = np.concatenate(precips)
+rsqs = [rsq for rsq in rsqs if not np.isnan(rsq)]
+mses = [rmse for rmse in rmses if not np.isnan(rmse)]
+rsq_fitted = [rsq for rsq in rsq_fitted if not np.isnan(rsq)]
+rmse_fitted = [rmse for rmse in rmse_fitted if not np.isnan(rmse)]
 
+# %% ----Visualise results----
+hist_kwargs = {'bins': 50, 'alpha': 0.5, 'color': 'lightgrey', 'edgecolor': 'k'}
+plt.rcParams['font.family'] = 'serif'
 
-y_pred = model.predict(X_test)
-rmse = root_mean_squared_error(y_test, y_pred)
-rsq = r2_score(y_test, y_pred)
-print(f'RMSE: {rmse:.4f}, R^2: {rsq:.4f}')
-# %%
-fig, ax = plt.subplots()
-ax.scatter(y_test, y_pred, color='k')
-ax.plot(y_test, y_test, color='r', label='test')
-ax.set_xlabel('Observed')
-ax.set_ylabel('Predicted')
-ax.set_title(f'R^2 = {rsq:.4f}')
-# %% plot the feature importances
-importances = model.feature_importances_
-indices = np.argsort(importances)[::-1]
-plt.bar(model.feature_names_in_, importances[indices])
-plt.xticks(rotation=45)
+fig, axs = plt.subplots(1, 4, figsize=(15, 3))
+ax = axs[0]
+ax.hist(rmses, **hist_kwargs)
+ax.set_xlabel('MSE')
+ax.set_ylabel('Frequency')
+ax.set_title('Mean squared error')
 
-# %%
-model.feature_names_in_
-# %% pickle model to use later -- try other methods later
-# Here you can replace pickle with joblib or cloudpickle
-from joblib import dump
-modelpath = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync', 'results', 'mangroves', 'model.pkl')
+ax = axs[1]
+q = .9
+rsqs_clipped = np.clip(rsqs, np.quantile(rsqs, 0), np.quantile(rsqs, q))
+ax.hist(rsqs_clipped, **hist_kwargs)
+ax.set_xlabel('Pseudo-R²')
+ax.set_ylabel('Frequency')
+ax.set_title(f"Pseudo-R² (clipped at {q:.0%})")
+
+ax = axs[2]
+indx = np.argsort(winds)
+ax.scatter(winds[indx], observations[indx], color='k', s=.1, label='Observations')
+ax.scatter(winds[indx], predictions[indx], color='r', s=.1, label='Predictions')
+ax.set_ylabel('Greater than 20\% damage')
+ax.set_xlabel('Wind speed (m/s)')
+ax.legend(loc='upper left', fontsize='small')
+ax.set_title('Predictions vs observations')
+
+ax = axs[3]
+indx = np.argsort(winds)
+ax.scatter(precips[indx], observations[indx], color='k', s=.1, label='Observations')
+ax.scatter(precips[indx], predictions[indx], color='r', s=.1, label='Predictions')
+ax.set_ylabel('Greater than 20\% damage')
+ax.set_xlabel('Cumulative precipitation (m)')
+ax.legend(loc='upper left', fontsize='small')
+ax.set_title('Predictions vs observations')
+
+fig.suptitle('Logistic regression model', y=1.05)
+
+# calculate fitted RMSE and R2
+rmse_fitted = np.mean(rmse_fitted)
+rsq_fitted = np.mean(rsq_fitted)
+print(f'Fitted scores: rmse:  {rmse_fitted:.4f}, R²: {rsq_fitted:.4f}')
+
+#  calculate final RMSE and R2 
+rmse = root_mean_squared_error(observations, predictions)
+rsq = rsquared(observations, predictions)
+print(f'Averaged OOB scores: RMSE: {rmse:.4f}, R²: {rsq:.4f}')
+
+# %% fit model on all data and save
+X, y = df[regressors], df[response]
+model.fit(X, y)
+model.set_metrics({'rmse': rmse, 'rsq': rsq, 'rmse_fitted': rmse_fitted, 'rsq_fitted': rsq_fitted})
+modelpath = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync', 'results', 'mangroves', 'damagemodel.pkl')
 with open(modelpath, "wb") as f:
     dump(model, f, protocol=5)
 
+# %% ----Get coefficients and significance----
+coefs = model.base.coef_
+coefs
+
+# %% ----Make a 2D versio of this plot----
+from matplotlib.ticker import PercentFormatter
+
+windmax, precipmax = np.max(X, axis=0)
+windmin, precipmin = np.min(X, axis=0)
+windregular = np.linspace(windmin, windmax, 100)
+precipregular = np.linspace(precipmin, precipmax, 100)
+windregular, precipregular = np.meshgrid(windregular, precipregular)
+preds = model.predict(np.column_stack((windregular.flatten(), precipregular.flatten())))
+
+preds = preds.reshape((100, 100))
+winds = windregular.reshape((100, 100))
+precips = precipregular.reshape((100, 100))
+
+LEVELS = 20
+plt.figure(figsize=(5, 4))
+im = plt.contourf(winds, precips, preds, levels=LEVELS, cmap='viridis', origin='lower')
+plt.contour(winds, precips, preds, levels=LEVELS, colors='k', origin='lower', linewidths=0.2)
+plt.ylabel('Wind speed (m/s)')
+plt.xlabel('Precipitation (m)')
+# add colorbar with percent formatting
+plt.colorbar(im, label='Probability of >20% damage', format=PercentFormatter(1, 0))
+plt.title('Mangrove damage probability surface\nfrom logistic regression')
+
+# %%
+y_binary = np.where(observations > .5, 1, 0)
+predictions_binary = np.where(predictions > .5, 1, 0)
+
+confusion_matrix = pd.crosstab(y_binary, predictions_binary, rownames=['Actual'], colnames=['Predicted'])
+print(confusion_matrix)
+#%%
+# calculate precision, recall, and csi
+TP = confusion_matrix[1][1]
+FP = confusion_matrix[0][1]
+FN = confusion_matrix[1][0]
+TN = confusion_matrix[0][0]
+
+precision = TP / (TP + FP)
+recall = TP / (TP + FN)
+csi = TP / (TP + FN + FP)
+
+print(f'Fitted scores: rmse:  {rmse_fitted:.4f}, R²: {rsq_fitted:.4f}')
+print(f'Averaged OOB scores: RMSE: {rmse:.4f}, R²: {rsq:.4f}')
+print(f'Precision: {precision:.4f}, Recall: {recall:.4f}, CSI: {csi:.4f}')
+print(model.base.coef_)
 # %%
