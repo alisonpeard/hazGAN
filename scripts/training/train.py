@@ -135,8 +135,6 @@ def main(config):
         )
     
     critic_val = hg.CriticVal(test, frequency=config.chi_frequency)
-
-    images_seen = hg.CountImagesSeen()
     
     compound = hg.CompoundMetric(frequency=config.chi_frequency)
 
@@ -167,7 +165,6 @@ def main(config):
             callbacks=[
                 # early_stopping,
                 # critic_val,
-                images_seen,
                 chi_score,
                 chi_squared,
                 compound,
