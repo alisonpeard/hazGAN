@@ -121,6 +121,10 @@ def main(config):
     print(f"Training data shape: {train_u.shape}")
     
     # define callbacks
+    critic_val = hg.CriticVal(test, frequency=config.chi_frequency)
+    compound = hg.CompoundMetric(frequency=config.chi_frequency)
+    image_count = hg.CountImagesSeen(ntrain=config.train_size)
+
     chi_score = hg.ChiScore({
             "train": next(iter(train)),
             "test": next(iter(test))
@@ -132,11 +136,7 @@ def main(config):
     chi_squared = hg.ChiSquared(
         batchsize=config.batch_size,
         frequency=config.chi_frequency
-        )
-    
-    critic_val = hg.CriticVal(test, frequency=config.chi_frequency)
-    
-    compound = hg.CompoundMetric(frequency=config.chi_frequency)
+        )    
 
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         os.path.join(rundir, "checkpoint.weights.h5"),
@@ -165,6 +165,7 @@ def main(config):
             callbacks=[
                 # early_stopping,
                 # critic_val,
+                image_count,
                 chi_score,
                 chi_squared,
                 compound,
