@@ -3,7 +3,7 @@ import os
 import tensorflow as tf
 import xarray as xr
 from .extreme_value_theory import gumbel
-
+from .utils import KNOWN_OUTLIERS
 
 def load_datasets(datadir, ntrain, padding_mode='reflect', image_shape=(18, 22), gumbel_marginals=False, batch_size=32):
     [train_u, test_u], *_ = load_training(datadir, ntrain, padding_mode, image_shape, gumbel_marginals=gumbel_marginals)
@@ -40,6 +40,8 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
         and Tawn  (2004).
     """
     data = xr.open_dataset(os.path.join(datadir, "data.nc"))
+    time_no_outlier = data.where(~data.time.isin(KNOWN_OUTLIERS), drop=True).time
+    data = data.sel(time=time_no_outlier)
     data = data.sel(channel=channels)
 
     print('Only taking footprints with max u10 anomaly greater than', u10_min)

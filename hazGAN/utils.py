@@ -3,6 +3,11 @@
 import numpy as np
 import tensorflow as tf
 
+KNOWN_OUTLIERS = np.array([
+    '1992-04-15T00:00:00.000000000',
+    '1952-05-09T00:00:00.000000000',
+    '1995-05-02T00:00:00.000000000'
+    ], dtype='datetime64[ns]')
 
 def diff(x, d=1):
     """Difference a (time series) array."""
