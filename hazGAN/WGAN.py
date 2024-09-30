@@ -148,10 +148,12 @@ class WGAN(keras.Model):
             self.inv = lambda x: x
 
         # trackers average over batches
-        self.critic_loss_tracker = keras.metrics.Mean(name="critic_loss")
-        self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
+        self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
+        self.critic_loss_tracker = keras.metrics.Mean(name="critic_loss")
         self.value_function_tracker = keras.metrics.Mean(name="value_function")
+        self.critic_real_tracker = keras.metrics.Mean(name="critic_real")
+        self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
         self.seed = config.seed
         
     
@@ -174,15 +176,8 @@ class WGAN(keras.Model):
         raw = self.generator(random_latent_vectors, training=False)
         return self.inv(raw)
 
-
-    def freeze(self):
-        # unfreeze highest resolution layers
-        for layer in self.generator.layers[:-6]:
-            layer.trainable = False
-        for layer in self.critic.layers[5:]:
-            layer.trainable = False
-
         
+    @tf.function
     def train_step(self, data):
         batch_size = tf.shape(data)[0]
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
@@ -232,7 +227,9 @@ class WGAN(keras.Model):
 
         return {
             "chi_rmse": self.chi_rmse_tracker.result(),
-            "critic_loss": self.critic_loss_tracker.result(),
             "generator_loss": self.generator_loss_tracker.result(),
-            "value_function": self.value_function_tracker.result()
+            "critic_loss": self.critic_loss_tracker.result(),
+            "value_function": self.value_function_tracker.result(),
+            'critic_real': tf.reduce_mean(score_real),
+            'critic_fake': tf.reduce_mean(score_fake),
         }

@@ -68,10 +68,10 @@ plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 def check_interactive(sys):
     """Check if running in interactive mode"""
     if hasattr(sys, 'ps1'):
-        print("Running interactively")
+        print("Running interactively.")
         return True
     else:
-        print("Not running interactively")
+        print("Not running interactively.")
         return False
     
 
@@ -134,6 +134,8 @@ def main(config):
         frequency=config.chi_frequency
         )
     
+    critic_val = hg.CriticVal(test, frequency=config.chi_frequency)
+    
     compound = hg.CompoundMetric(frequency=config.chi_frequency)
 
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
@@ -162,6 +164,7 @@ def main(config):
             epochs=config.nepochs,
             callbacks=[
                 # early_stopping,
+                critic_val,
                 chi_score,
                 chi_squared,
                 compound,
@@ -173,14 +176,14 @@ def main(config):
     final_chi_rmse = history.history['chi_rmse'][-1]
     print(f"Final chi_rmse: {final_chi_rmse}")
 
-    if True: #final_chi_rmse <= 20.0:
+    if True: #TODO: final_chi_rmse <= 20.0:
         save_config(rundir)
 
         # ----Figures----
         paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
         train_u = hg.inv_gumbel(hg.unpad(train_u, paddings)).numpy()
         test_u = hg.inv_gumbel(hg.unpad(test_u, paddings)).numpy()
-        fake_u = hg.unpad(gan(nsamples=1000), paddings).numpy()
+        fake_u = hg.unpad(gan(nsamples=config.train_size), paddings).numpy()
         
         cmap = plt.cm.coolwarm_r
         vmin = 1
@@ -247,6 +250,9 @@ def main(config):
         params = data['params']
         x = hg.POT.inv_probability_integral_transform(fake_u, X, U, params)
         x = x[..., 0]
+        if x.shape[0] < 64:
+            # repeat x until it has 64 samples
+            x = np.concatenate([x] * int(np.ceil(64 / x.shape[0])), axis=0)
         maxima = np.max(x, axis=(1, 2))
         idx = np.argsort(maxima)
         x = x[idx, ...]
@@ -267,7 +273,7 @@ def main(config):
         X = data['train_x'].numpy()[..., 0]
         if X.shape[0] < 64:
             # repeat X until it has 64 samples
-            X = np.concatenate([X] * (64 // X.shape[0]), axis=0)
+            X = np.concatenate([X] * int(np.ceil(64 / X.shape[0])), axis=0)
         maxima = np.max(X, axis=(1, 2))
         idx = np.argsort(maxima)
         X = X[idx, ...]
@@ -284,6 +290,8 @@ def main(config):
     else: # delete rundir and its contents
         print("Chi score too high, deleting run directory")
         os.system(f"rm -r {rundir}")
+    
+    return history.history
 
 # %% ----Train the model----
 if __name__ == "__main__":
@@ -321,9 +329,9 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 100,
-            'train_size': 128,
-            'batch_size': 64,
+            'nepochs': 1,
+            'train_size': 3,
+            'batch_size': 2,
             'chi_frequency': 1
             },
             allow_val_change=True)
@@ -338,6 +346,6 @@ if __name__ == "__main__":
     wandb.config["seed"] = np.random.randint(0, 500)
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
     tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations
-    main(wandb.config)
+    history = main(wandb.config)
 
 # %% 

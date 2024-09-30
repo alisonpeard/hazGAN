@@ -49,6 +49,25 @@ class Visualiser(Callback):
             plt.show()
 
 
+class CriticVal(Callback):
+    """Monitor critic's performance on the test set."""
+    def __init__(self, validation_data, frequency=1):
+        super().__init__()
+        self.frequency = frequency
+        self.validation_data = validation_data
+        self.critic_val = None
+
+    def on_epoch_end(self, epoch, logs={}):
+        if epoch % self.frequency == 0:
+            nbatch = 0
+            score = 0
+            for batch in self.validation_data:
+                score += self.model.critic(batch, training=False)
+                nbatch += 1
+            score = score / nbatch
+            logs["critic_val"] = tf.reduce_mean(score).numpy()
+
+
 class ChiScore(Callback):
     """
     Custom metric for evtGAN to compare extremal coefficients across space.
@@ -82,7 +101,7 @@ class ChiScore(Callback):
 
                 c = tf.shape(data)[-1]
                 chi_diffs = tf.map_fn(compute_chi_diff, tf.range(c), dtype=tf.float32)
-                rmse = tf.reduce_mean(chi_diffs)
+                rmse = tf.reduce_mean(chi_diffs).numpy()
                 setattr(self, f"chi_score_{name}", rmse)
                 logs[f"chi_score_{name}"] = rmse
 
@@ -98,7 +117,7 @@ class ChiSquared(Callback):
     def on_epoch_end(self, epoch, logs={}):
         if epoch % self.frequency == 0: # run after others
             generated_data = self.model(nsamples=self.batchsize)
-            chisq = chi2metric(generated_data, nbins=self.nbins)
+            chisq = chi2metric(generated_data, nbins=self.nbins).numpy()
 
             # updates
             self.chi_squared = chisq
@@ -125,7 +144,7 @@ class CompoundMetric(Callback):
                 return
             
             metric = tf.math.log(1 + chisq) + chirmse # compound_metric(chisq, chirmse)
-            logs["compound_metric"] = metric
+            logs["compound_metric"] = metric.numpy()
 
 
 @tf.function
