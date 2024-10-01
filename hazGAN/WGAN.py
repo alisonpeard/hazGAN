@@ -148,6 +148,7 @@ class WGAN(keras.Model):
         else:
             self.inv = lambda x: x
         self.augment = lambda x: DiffAugment(x, config.augment_policy)
+        self.penalty = config.penalty
 
         # trackers average over batches
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
@@ -200,8 +201,12 @@ class WGAN(keras.Model):
                     score = self.critic(interpolates)
                 gradients = tape_gp.gradient(score, [interpolates])[0]
                 slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1])) # NOTE: previously , axis=[1, 2, 3] but Gulrajani code has [1]
-                # gradient_penalty = tf.reduce_mean((slopes - 1.0) ** 2)
-                gradient_penalty = tf.reduce_mean(tf.clip_by_value(slopes - 1., 0., np.infty)**2) # https://openreview.net/forum?id=B1hYRMbCW
+                if self.penalty == 'lipschitz':
+                    gradient_penalty = tf.reduce_mean(tf.clip_by_value(slopes - 1., 0., np.infty)**2) # https://openreview.net/forum?id=B1hYRMbCW
+                elif self.penalty == 'gp':
+                    gradient_penalty = tf.reduce_mean((slopes - 1.0) ** 2)
+                else:
+                    raise ValueError("Penalty must be either 'lipschitz' or 'gp'.")
                 critic_loss += self.lambda_gp * gradient_penalty
 
             grads = tape.gradient(critic_loss, self.critic.trainable_weights)
@@ -215,7 +220,7 @@ class WGAN(keras.Model):
             generator_loss_raw = -tf.reduce_mean(score)
             chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # think this is safe inside GradientTape
             if self.lambda_chi > 0: # NOTE: this doesn't work with GPU
-                generator_loss = generator_loss_raw + self.lambda_chi * chi_rmse
+                generator_loss = generator_loss_raw + (self.lambda_chi * chi_rmse)
             else:
                 generator_loss = generator_loss_raw
         grads = tape.gradient(generator_loss, self.generator.trainable_weights)
