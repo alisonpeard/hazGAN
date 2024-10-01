@@ -16,37 +16,15 @@ class WandbMetricsLogger(Callback):
         wandb.log(logs)
 
 
-class Visualiser(Callback):
-    def __init__(self, frequency=1, runname='untitled'):
+class CountImagesSeen(Callback):
+    def __init__(self, ntrain):
         super().__init__()
-        self.frequency = frequency
-        self.generated_images = []
-        self.runname = runname
+        self.images_seen = 0
+        self.ntrain = ntrain
 
     def on_epoch_end(self, epoch, logs={}):
-        if (epoch % self.frequency == 0) & (epoch > 0):
-            clear_output(wait=True)
-            nchan = tf.shape(self.model(nsamples=3))[-1].numpy()
-            fig, axs = plt.subplots(nchan, 3, figsize=(10, 2 * nchan))
-            if nchan == 1:
-                axs = axs[tf.newaxis, :]
-            generated_data = self.model(nsamples=3)
-            vmin = tf.reduce_min(generated_data)
-            vmax = tf.reduce_max(generated_data)
-            for c in range(nchan):
-                for i, ax in enumerate(axs[c, :]):
-                    im = ax.imshow(
-                        generated_data[i, ..., c].numpy(),
-                        cmap="Spectral_r",
-                        vmin=vmin,
-                        vmax=vmax,
-                    )
-                ax.invert_yaxis()
-            fig.subplots_adjust(right=0.8)
-            cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-            fig.colorbar(im, cax=cbar_ax)
-            fig.suptitle(f"Generated images for {self.runname} for epoch: {epoch}")
-            plt.show()
+        # get training data
+        logs['images_seen'] = (epoch+1) * self.ntrain
 
 
 class CriticVal(Callback):
@@ -62,7 +40,9 @@ class CriticVal(Callback):
             nbatch = 0
             score = 0
             for batch in self.validation_data:
-                score += self.model.critic(batch, training=False)
+                augmented = self.model.augment(batch)
+                score_batch = self.model.critic(augmented, training=False)
+                score += tf.reduce_mean(score_batch)
                 nbatch += 1
             score = score / nbatch
             logs["critic_val"] = tf.reduce_mean(score).numpy()
@@ -184,3 +164,36 @@ class CrossEntropy(Callback):
         self.g_loss_test = g_loss_test
         logs["d_loss_test"] = d_loss_test
         logs["g_loss_test"] = g_loss_test
+
+
+class Visualiser(Callback):
+    def __init__(self, frequency=1, runname='untitled'):
+        super().__init__()
+        self.frequency = frequency
+        self.generated_images = []
+        self.runname = runname
+
+    def on_epoch_end(self, epoch, logs={}):
+        if (epoch % self.frequency == 0) & (epoch > 0):
+            clear_output(wait=True)
+            nchan = tf.shape(self.model(nsamples=3))[-1].numpy()
+            fig, axs = plt.subplots(nchan, 3, figsize=(10, 2 * nchan))
+            if nchan == 1:
+                axs = axs[tf.newaxis, :]
+            generated_data = self.model(nsamples=3)
+            vmin = tf.reduce_min(generated_data)
+            vmax = tf.reduce_max(generated_data)
+            for c in range(nchan):
+                for i, ax in enumerate(axs[c, :]):
+                    im = ax.imshow(
+                        generated_data[i, ..., c].numpy(),
+                        cmap="Spectral_r",
+                        vmin=vmin,
+                        vmax=vmax,
+                    )
+                ax.invert_yaxis()
+            fig.subplots_adjust(right=0.8)
+            cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+            fig.colorbar(im, cax=cbar_ax)
+            fig.suptitle(f"Generated images for {self.runname} for epoch: {epoch}")
+            plt.show()

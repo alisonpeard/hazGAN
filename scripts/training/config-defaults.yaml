@@ -4,17 +4,23 @@ model:
   value: wgan
 nepochs:
   desc: Gulrajani et al. 2017 use 200_000
-  value: 5000 # 3000 # or 1,500,000/train_size
+  value: 300 # 3000 # or 1,500,000/train_size
 train_size:
-  value: 128 # 840 # 50
+  value: 1000 # 840 # 50
 batch_size:
   value: 64
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
-  value: 1
+  value: 10
 u10_min:
   desc: Minimum value of u10 anomaly for training data
   value: -999 # you get two footprints if 40, 6 for 32.5 [15, 32.5, 40]
+augment_policy:
+  desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
+  value:
+penalty:
+  desc: Which penalty to use, ['gp', 'lipschitz']
+  value: gp
 
 # training features
 optimizer:
@@ -53,7 +59,7 @@ latent_dims:
   value: 64
 g_layers:
   desc: Number of channels in the hidden layers for the generator. [256, 128, 64]
-  value: [128, 64, 32]
+  value: [256, 128, 64]
 d_layers:
   desc: Number of channels in the hidden layers for the discriminator. [128, 256, 512]
   value: [64, 128, 256]
@@ -66,10 +72,10 @@ learning_rate:
   desc: Gulrajani et al. 2017 use 0.0001 (Appendix B)
   value: 0.0001
 beta_1:
-  desc: Gulrajani et al. 2017 use 0.5
+  desc: Gulrajani et al. 2017 use 0.5, [0, 0.5]
   value: 0.5
 beta_2:
-  desc: Gulrajani et al. 2017 use 0.9
+  desc: Gulrajani et al. 2017 use 0.9, [0.9, 0.99]
   value: 0.9
 weight_decay:
   desc: Gulrajani et al. 2017 use 10-3

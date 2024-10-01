@@ -12,6 +12,7 @@ from tensorflow.keras import optimizers
 from tensorflow.keras import layers
 from inspect import signature
 from .extreme_value_theory import chi_loss, inv_gumbel
+from .augment import DiffAugment
 
 
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
@@ -146,6 +147,8 @@ class WGAN(keras.Model):
             self.inv = inv_gumbel
         else:
             self.inv = lambda x: x
+        self.augment = lambda x: DiffAugment(x, config.augment_policy)
+        self.penalty = config.penalty
 
         # trackers average over batches
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
@@ -187,8 +190,8 @@ class WGAN(keras.Model):
         # https://github.com/igul222/improved_wgan_training/blob/master/gan_mnist.py:134
         for _ in range(self.config.training_balance):
             with tf.GradientTape() as tape:
-                score_real = self.critic(data)
-                score_fake = self.critic(fake_data)
+                score_real = self.critic(self.augment(data))
+                score_fake = self.critic(self.augment(fake_data))
                 critic_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality --Gulrajani 2017)
                 eps = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
                 differences = fake_data - data
@@ -198,8 +201,12 @@ class WGAN(keras.Model):
                     score = self.critic(interpolates)
                 gradients = tape_gp.gradient(score, [interpolates])[0]
                 slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1])) # NOTE: previously , axis=[1, 2, 3] but Gulrajani code has [1]
-                # gradient_penalty = tf.reduce_mean((slopes - 1.0) ** 2)
-                gradient_penalty = tf.reduce_mean(tf.clip_by_value(slopes - 1., 0., np.infty)**2) # https://openreview.net/forum?id=B1hYRMbCW
+                if self.penalty == 'lipschitz':
+                    gradient_penalty = tf.reduce_mean(tf.clip_by_value(slopes - 1., 0., np.infty)**2) # https://openreview.net/forum?id=B1hYRMbCW
+                elif self.penalty == 'gp':
+                    gradient_penalty = tf.reduce_mean((slopes - 1.0) ** 2)
+                else:
+                    raise ValueError("Penalty must be either 'lipschitz' or 'gp'.")
                 critic_loss += self.lambda_gp * gradient_penalty
 
             grads = tape.gradient(critic_loss, self.critic.trainable_weights)
@@ -209,11 +216,11 @@ class WGAN(keras.Model):
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
         with tf.GradientTape() as tape:
             generated_data = self.generator(random_latent_vectors)
-            score = self.critic(generated_data, training=False)
+            score = self.critic(self.augment(generated_data), training=False)
             generator_loss_raw = -tf.reduce_mean(score)
             chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # think this is safe inside GradientTape
             if self.lambda_chi > 0: # NOTE: this doesn't work with GPU
-                generator_loss = generator_loss_raw + self.lambda_chi * chi_rmse
+                generator_loss = generator_loss_raw + (self.lambda_chi * chi_rmse)
             else:
                 generator_loss = generator_loss_raw
         grads = tape.gradient(generator_loss, self.generator.trainable_weights)
