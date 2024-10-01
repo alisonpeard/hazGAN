@@ -164,7 +164,7 @@ def main(config):
             epochs=config.nepochs,
             callbacks=[
                 # early_stopping,
-                # critic_val,
+                critic_val,
                 image_count,
                 chi_score,
                 chi_squared,
@@ -173,7 +173,6 @@ def main(config):
                 checkpoint
                 ]
         )
-
     final_chi_rmse = history.history['chi_rmse'][-1]
     print(f"Final chi_rmse: {final_chi_rmse}")
 
