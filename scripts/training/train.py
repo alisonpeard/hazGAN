@@ -121,7 +121,7 @@ def main(config):
     print(f"Training data shape: {train_u.shape}")
     
     # define callbacks
-    critic_val = hg.CriticVal(test, frequency=config.chi_frequency)
+    critic_val = hg.CriticVal(test)
     compound = hg.CompoundMetric(frequency=config.chi_frequency)
     image_count = hg.CountImagesSeen(ntrain=config.train_size)
 

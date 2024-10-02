@@ -4,20 +4,20 @@ model:
   value: wgan
 nepochs:
   desc: Gulrajani et al. 2017 use 200_000
-  value: 300 # 3000 # or 1,500,000/train_size
+  value: 10_000 # 3000 # or 1,500,000/train_size
 train_size:
-  value: 1000 # 840 # 50
+  value: 100 # 840 # 50
 batch_size:
-  value: 64
+  value: 100
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
   value: 10
 u10_min:
   desc: Minimum value of u10 anomaly for training data
-  value: -999 # you get two footprints if 40, 6 for 32.5 [15, 32.5, 40]
+  value: 15 # you get two footprints if 40, 6 for 32.5 [15, 32.5, 40]
 augment_policy:
   desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
-  value:
+  value: 'color,translation,cutout'
 penalty:
   desc: Which penalty to use, ['gp', 'lipschitz']
   value: gp
@@ -53,10 +53,10 @@ lrelu:
   value: 0.2
 dropout:
   desc: Gulrajani et al. 2017 don't use dropout
-  value: 0
+  value: 0.4
 latent_dims:
   desc: Gulrajani et al. 2017 use 128
-  value: 64
+  value: 128
 g_layers:
   desc: Number of channels in the hidden layers for the generator. [256, 128, 64]
   value: [256, 128, 64]
@@ -65,12 +65,12 @@ d_layers:
   value: [64, 128, 256]
 interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
-  value: bilinear
+  value: nearest
 
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
 learning_rate:
   desc: Gulrajani et al. 2017 use 0.0001 (Appendix B)
-  value: 0.0001
+  value: 0.00001
 beta_1:
   desc: Gulrajani et al. 2017 use 0.5, [0, 0.5]
   value: 0.5
@@ -82,7 +82,7 @@ weight_decay:
   value: 0.001
 use_ema:
   desc: Use exponential moving average in training, causes issues when re-loading weights.
-  value: True # only set to true if not loading weights
+  value: False # only set to true if not loading weights
 ema_momentum:
   desc: Momentum of exponential moving average for tf.keras.optimizers.Adam
   value: 0.9
