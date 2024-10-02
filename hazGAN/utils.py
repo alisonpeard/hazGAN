@@ -50,7 +50,7 @@ def sliding_window_indices(size, n, step=1):
     windows = []
     i = 0
     for i in range(0, n - size, step):
-        windows.append(np.arange(i, i + size, 1))
+        windows.append(np.arange(i, i+size, 1))
     return np.array(windows)
 
 

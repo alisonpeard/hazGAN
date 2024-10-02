@@ -348,4 +348,4 @@ if __name__ == "__main__":
     tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations
     history = main(wandb.config)
 
-# %% 
+# %% ---------------------------------END---------------------------------
