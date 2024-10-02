@@ -1,3 +1,6 @@
+import os
+import warnings
+import numpy as np
 import wandb
 import tensorflow as tf
 from tensorflow.keras.callbacks import Callback
@@ -5,7 +8,8 @@ from tensorflow.nn import sigmoid_cross_entropy_with_logits as cross_entropy
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
 from .extreme_value_theory import chi_loss, inv_gumbel, pairwise_extremal_coeffs, chi2metric
-
+from .utils import unpad
+from .extreme_value_theory.peak_over_threshold import inv_probability_integral_transform
 
 class WandbMetricsLogger(Callback):
     """
@@ -166,34 +170,64 @@ class CrossEntropy(Callback):
         logs["g_loss_test"] = g_loss_test
 
 
-class Visualiser(Callback):
-    def __init__(self, frequency=1, runname='untitled'):
+class ChannelVisualiser(Callback):
+    def __init__(self, frequency=1, channel=0, runname='untitled-run',
+                 data: tuple = None):
         super().__init__()
         self.frequency = frequency
         self.generated_images = []
         self.runname = runname
+        self.data = data
+        self.channel = channel
+        warnings.warn("Resolution hard-coded as 18 x 22 for ChannelVisualiser callback.")
 
     def on_epoch_end(self, epoch, logs={}):
         if (epoch % self.frequency == 0) & (epoch > 0):
             clear_output(wait=True)
-            nchan = tf.shape(self.model(nsamples=3))[-1].numpy()
-            fig, axs = plt.subplots(nchan, 3, figsize=(10, 2 * nchan))
-            if nchan == 1:
-                axs = axs[tf.newaxis, :]
-            generated_data = self.model(nsamples=3)
+
+            generated_data = unpad(self.model(nsamples=3))
+            if self.data is not None:
+                X, U = self.data
+                X = X.numpy()
+                U = unpad(U).numpy()
+                generated_data = generated_data.numpy()
+                generated_data = inv_probability_integral_transform(generated_data, X, U)
+                dist = "original"
+            else:
+                dist = "Gumbel"
+                generated_data = generated_data.numpy()
+            
+            fig, axs = plt.subplots(1, 3, figsize=(10, 2.5),
+                                    gridspec_kw={"wspace": 0},
+                                    sharex=True, sharey=True)
             vmin = tf.reduce_min(generated_data)
             vmax = tf.reduce_max(generated_data)
-            for c in range(nchan):
-                for i, ax in enumerate(axs[c, :]):
-                    im = ax.imshow(
-                        generated_data[i, ..., c].numpy(),
-                        cmap="Spectral_r",
-                        vmin=vmin,
-                        vmax=vmax,
-                    )
+            lats = np.linspace(25, 10, 18)
+            lons = np.linspace(80, 95, 22)
+            X, Y = np.meshgrid(lons, lats)
+            for i, ax in enumerate(axs):
+                im = ax.contourf(
+                    X,
+                    Y,
+                    generated_data[i, ..., self.channel],
+                    cmap="Spectral_r",
+                    levels=20,
+                    vmin=vmin,
+                    vmax=vmax
+                )
                 ax.invert_yaxis()
+                ax.label_outer()
+                ax.set_xlabel('Longitude')
+            axs[0].set_ylabel('Latitude')
             fig.subplots_adjust(right=0.8)
             cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
             fig.colorbar(im, cax=cbar_ax)
-            fig.suptitle(f"Generated images for {self.runname} for epoch: {epoch}")
+            fig.suptitle(f"Generated images for {self.runname} for epoch: {epoch} ({dist} scale)")
+            log_image_to_wandb(fig, f"channel{self.channel}_{epoch}", dir="imgs")
             plt.show()
+
+
+def log_image_to_wandb(fig, name: str, dir: str):
+    impath = os.path.join(dir, f"{name}.png")
+    fig.savefig(impath)
+    wandb.log({name: wandb.Image(impath)})

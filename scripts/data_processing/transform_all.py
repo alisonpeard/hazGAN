@@ -54,20 +54,26 @@ for window in window_length:
 u10 = np.concatenate(u10s, axis=0)
 tp = np.concatenate(tps, axis=0)
 window_length = np.concatenate(windows, axis=0)
-u10.shape
+
+X = np.stack([u10, tp], axis=-1)
+X.shape
 
 # %% make a new xarray dataset
 ds_window = xr.Dataset(
     {
-        'u10': (('time', 'latitude', 'longitude'), u10),
-        'tp': (('time', 'latitude', 'longitude'), tp),
+        'anomaly': (('time', 'latitude', 'longitude', 'channel'), X),
         'window_length': (('time',), window_length)
     },
-    coords={'sample': range(u10.shape[0]), 'latitude': ds.latitude, 'longitude': ds.longitude}
+    coords={
+        'time': range(u10.shape[0]),
+        'latitude': ds.latitude,
+        'longitude': ds.longitude,
+        'channel': ['u10', 'tp']
+        }
 )
 ds = ds_window
 
-# %%
+# %% Transform to Gumbel(0, 1) using the empirical CDF
 def ecdf(ds, var, index_var='time'):
     rank = ds[var].rank(dim=index_var, keep_attrs=True)
     ecdf = rank / (len(ds[index_var]) + 1)
@@ -77,15 +83,14 @@ def gumbel(ds, var):
     uniform = ecdf(ds, var)
     return -np.log(-np.log(uniform))
 
-ds['u10_gumbel'] = gumbel(ds, 'u10')
-ds['tp_gumbel'] = gumbel(ds, 'tp')
+ds['uniform'] = ecdf(ds, 'anomaly')
 
 # %% Have a look
 fig, axs = plt.subplots(2, 2, figsize=(12, 8))
-ds.isel(longitude=0, latitude=0).u10_gumbel.plot.hist(ax=axs[0, 1])
-ds.isel(longitude=0, latitude=0).u10.plot.hist(ax=axs[0, 0])
-ds.isel(time=100).u10.plot(ax=axs[1, 0], cmap='Spectral_r')
-ds.isel(time=100).u10_gumbel.plot(ax=axs[1, 1], cmap='Spectral_r')
+ds.isel(longitude=0, latitude=0, channel=0).anomaly.plot.hist(ax=axs[0, 0])
+ds.isel(longitude=0, latitude=0, channel=0).uniform.plot.hist(ax=axs[0, 1])
+ds.isel(time=100, channel=0).anomaly.plot.contourf(ax=axs[1, 0], levels=20, cmap='Spectral_r')
+ds.isel(time=100, channel=0).uniform.plot.contourf(ax=axs[1, 1], levels=20, cmap='Spectral_r')
 
 # %% Save
 ds.to_netcdf(os.path.join(datadir, f"{res[1]}x{res[0]}", "data_pretrain.nc"))

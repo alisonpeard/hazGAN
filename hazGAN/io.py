@@ -1,5 +1,6 @@
 """Data handling methods for the hazGAN model."""
 import os
+import numpy as np
 import tensorflow as tf
 import xarray as xr
 from .extreme_value_theory import gumbel
@@ -14,7 +15,7 @@ def load_datasets(datadir, ntrain, padding_mode='reflect', image_shape=(18, 22),
 
 def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
                   numpy=False, gumbel_marginals=True, channels=['u10', 'tp'],
-                  uniform='uniform', u10_min=-999.):
+                  uniform='uniform', u10_min=None):
     """
     Load the hazGAN training data from the data.nc file.
 
@@ -44,13 +45,13 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
     data = data.sel(time=time_no_outlier)
     data = data.sel(channel=channels)
 
-    print('Only taking footprints with max u10 anomaly greater than', u10_min)
-    data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
-    time_subset = data.where(data.maxima >= u10_min, drop=True).time
-    data = data.sel(time=time_subset)
-    print('Number of remaining footprints:', len(data.time))
-    print('Number of training samples:', ntrain)
-
+    if u10_min is not None:
+        print('Only taking footprints with max u10 anomaly greater than', u10_min)
+        data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
+        time_subset = data.where(data.maxima >= u10_min, drop=True).time
+        data = data.sel(time=time_subset)
+        print('Number of remaining footprints:', len(data.time))
+        print('Number of training samples:', ntrain)
 
     X = tf.image.resize(data.anomaly, image_shape)
     U = tf.image.resize(data[uniform], image_shape)
@@ -97,3 +98,75 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
     
     return training
 
+
+def load_pretraining(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
+                  numpy=False, gumbel_marginals=True, channels=['u10', 'tp'],
+                  uniform='uniform', u10_min=None):
+    """
+    Load the hazGAN training data from the data.nc file.
+
+    Parameters:
+    ----------
+    datadir : str
+        Directory where the data.nc file is stored.
+    ntrain : int
+        Number of training samples.
+    padding_mode : {'constant', 'reflect', 'symmetric', None}, default 'constant'
+        Padding mode for the uniform-transformed marginals.
+    image_shape : tuple, default=(18, 22)
+        Shape of the image data.
+    numpy : bool, default False
+        Whether to return numpy arrays or tensors.
+    gumbel_marginals : bool, default False
+        Whether to use Gumbel-transformed marginals.
+    channels : list, default ['u10', 'tp']
+        List of channels to use.
+    uniform : {'uniform', 'uniform'}, default 'uniform'
+        What type of uniform-transformed marginals to use. 'uniform' comes from
+        the ECDF and 'uniform_semi' comes from the semiparametric CDF of Heffernan
+        and Tawn  (2004).
+    """
+    data = xr.open_dataset(os.path.join(datadir, "data_pretrain.nc"))
+    data = data.sel(channel=channels)
+    print(f"Data set has {len(data.time):,} footprints.")
+
+    if u10_min is not None:
+        print('Only taking footprints with max u10 anomaly greater than', u10_min)
+        data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
+        time_subset = data.where(data.maxima >= u10_min, drop=True).time
+        data = data.sel(time=time_subset)
+        print('Number of remaining footprints:', len(data.time))
+        print('Number of training samples:', ntrain)
+
+    X = tf.image.resize(data.anomaly, image_shape)
+    U = tf.image.resize(data[uniform], image_shape)
+    
+    if padding_mode is not None:
+        paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
+        U = tf.pad(U, paddings, mode=padding_mode)
+
+    # # training on random sample from dataset
+    train_idx = tf.random.shuffle(tf.range(tf.shape(data.time)[0]))[:ntrain]
+    train_mask = tf.scatter_nd(tf.expand_dims(train_idx, 1), 
+                            tf.ones(ntrain, dtype=bool), 
+                            tf.shape(data.time))
+    train_u = tf.boolean_mask(U, train_mask)
+    test_u = tf.boolean_mask(U, tf.logical_not(train_mask))
+    train_x = tf.boolean_mask(X, train_mask)
+    test_x = tf.boolean_mask(X, tf.logical_not(train_mask))
+
+    if gumbel_marginals:
+        train_u = gumbel(train_u)
+        test_u = gumbel(test_u)
+
+    # replace nans with zeros
+    train_u = tf.where(tf.math.is_nan(train_u), tf.zeros_like(train_u), train_u)
+    test_u = tf.where(tf.math.is_nan(test_u), tf.zeros_like(test_u), test_u)
+    train_mask = tf.where(tf.math.is_nan(train_u))
+    test_mask = tf.where(tf.math.is_nan(test_u))
+
+    # return a dictionary to keep it tidy
+    training = {'train_u': train_u, 'test_u': test_u, 'train_x': train_x, 'test_x': test_x,
+                'train_mask': train_mask, 'test_mask': test_mask}
+    
+    return training
