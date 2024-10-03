@@ -1,5 +1,6 @@
 """Data handling methods for the hazGAN model."""
 import os
+import warnings
 import numpy as np
 import tensorflow as tf
 import xarray as xr
@@ -155,6 +156,12 @@ def load_pretraining(datadir, ntrain, padding_mode='constant', image_shape=(18, 
     train_x = tf.boolean_mask(X, train_mask)
     test_x = tf.boolean_mask(X, tf.logical_not(train_mask))
 
+    # TEMP: temporarily make sure don't have way more test than train data
+    if tf.shape(test_u)[0] > tf.shape(train_u)[0]:
+        print("Warning: More test than train data, truncating test data.")
+        test_u = test_u[:tf.shape(train_u)[0], ...]
+        test_x = test_x[:tf.shape(train_u)[0], ...]
+
     if gumbel_marginals:
         train_u = gumbel(train_u)
         test_u = gumbel(test_u)
@@ -170,3 +177,4 @@ def load_pretraining(datadir, ntrain, padding_mode='constant', image_shape=(18, 
                 'train_mask': train_mask, 'test_mask': test_mask}
     
     return training
+# ----------------------------END-------------------------------------

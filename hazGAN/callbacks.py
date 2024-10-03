@@ -179,7 +179,7 @@ class ChannelVisualiser(Callback):
         self.runname = runname
         self.data = data
         self.channel = channel
-        warnings.warn("Resolution hard-coded as 18 x 22 for ChannelVisualiser callback.")
+        print("Warning: Resolution hard-coded as 18 x 22 for ChannelVisualiser callback.")
 
     def on_epoch_end(self, epoch, logs={}):
         if (epoch % self.frequency == 0) & (epoch > 0):
@@ -224,7 +224,7 @@ class ChannelVisualiser(Callback):
             fig.colorbar(im, cax=cbar_ax)
             fig.suptitle(f"Generated images for {self.runname} for epoch: {epoch} ({dist} scale)")
             log_image_to_wandb(fig, f"channel{self.channel}_{epoch}", dir="imgs")
-            plt.show()
+            # plt.show()
 
 
 def log_image_to_wandb(fig, name: str, dir: str):

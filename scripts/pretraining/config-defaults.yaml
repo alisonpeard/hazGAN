@@ -1,0 +1,95 @@
+# training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
+model:
+  desc: Which model to train, ['wgan' | 'dcgan'].
+  value: wgan
+nepochs:
+  desc: Gulrajani et al. 2017 use 200_000
+  value: 100 # 3000 # or 1,500,000/train_size
+train_size:
+  value: 10_000 # 840 # 50
+batch_size:
+  value: 128
+chi_frequency:
+  desc: How often to calculate chi-score for train and test.
+  value: 10
+u10_min:
+  desc: Minimum value of u10 anomaly for training data
+  value: None # you get two footprints if 40, 6 for 32.5 [15, 32.5, 40]
+augment_policy:
+  desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
+  value: 'color,translation,cutout'
+penalty:
+  desc: Which penalty to use, ['gp', 'lipschitz']
+  value: gp
+
+# training features
+optimizer:
+  desc: Optimizer to use, ['SGD', 'Adam']
+  value: Adam
+training_balance:
+  desc: Gulrajani et al. 2017 use 5
+  value: 5
+latent_space_distn:
+  desc: Distribution of latent space, ['normal', 'uniform', 'gumbel', 't']
+  value: gumbel
+gumbel:
+  desc: Train on Gumbel marginals instead of uniform marginals
+  value: True
+uniform:
+  desc: Train on uniform marginals from ECDF or semi-parametric model
+  value: uniform
+lambda_gp:
+  value: 10.
+lambda_chi:
+  desc: Weight of penalty on l2 error of extremal coefficient
+  value: 0
+true_label_smooth:
+  desc: Regularization -- multiply true labels by this to smooth discriminator's labels
+  value: 1.
+
+# architecture
+lrelu:
+  desc: Gulrajani et al. 2017 use 0.2
+  value: 0.2
+dropout:
+  desc: Gulrajani et al. 2017 don't use dropout
+  value: 0.4
+latent_dims:
+  desc: Gulrajani et al. 2017 use 128
+  value: 128
+g_layers:
+  desc: Number of channels in the hidden layers for the generator. [256, 128, 64]
+  value: [256, 128, 64]
+d_layers:
+  desc: Number of channels in the hidden layers for the discriminator. [128, 256, 512]
+  value: [64, 128, 256]
+interpolation:
+  desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
+  value: bilinear
+
+# Adam parameters https://doi.org/10.48550/arXiv.1704.00028
+learning_rate:
+  desc: Gulrajani et al. 2017 use 0.0001 (Appendix B)
+  value: 0.0001
+beta_1:
+  desc: Gulrajani et al. 2017 use 0.5, [0, 0.5]
+  value: 0.5
+beta_2:
+  desc: Gulrajani et al. 2017 use 0.9, [0.9, 0.99]
+  value: 0.9
+weight_decay:
+  desc: Gulrajani et al. 2017 use 10-3
+  value: 0.001
+use_ema:
+  desc: Use exponential moving average in training, causes issues when re-loading weights.
+  value: True # only set to true if not loading weights
+ema_momentum:
+  desc: Momentum of exponential moving average for tf.keras.optimizers.Adam
+  value: 0.9
+ema_overwrite_frequency:
+  desc: How often to overwrite weights with ema.
+  value: 1
+
+# for linux cluster
+# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/soge-home/users/spet5107/micromamba/envs/tensorflow/lib
+# Distributions: https://docs.wandb.ai/guides/sweeps/sweep-config-keys/#distribution-options-for-random-and-bayesian-search
