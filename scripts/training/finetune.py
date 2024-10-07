@@ -112,7 +112,7 @@ def main(config):
     # compile
     with tf.device(device):
         gan = hg.WGAN(config, nchannels=2)
-        gan.load_weights(os.path.join(wd, "hazGAN", "saved-models", BASE, "checkpoint.weights.h5"))
+        gan.load_weights(os.path.join(wd, "saved-models", BASE, "checkpoint.weights.h5"))
         gan.freeze()
 
         kwargs = hg.process_optimizer_kwargs(config)
@@ -125,10 +125,6 @@ def main(config):
             train,
             epochs=config.nepochs,
             callbacks=[
-                # chi_score,
-                # chi_squared,
-                # compound,
-                # checkpoint,
                 WandbMetricsLogger()
                 ]
         )
@@ -137,9 +133,7 @@ def main(config):
     final_chi_rmse = history.history['chi_rmse'][-1]
     print(f"Final chi_rmse: {final_chi_rmse}")
 
-    if True: #final_chi_rmse <= 0.3:
-        gan.generator.save_weights(os.path.join(rundir, f"generator.weights.h5"))
-        gan.critic.save_weights(os.path.join(rundir, f"critic.weights.h5"))
+    if final_chi_rmse <= 1.:
         save_config(rundir)
 
         # ----Figures----
@@ -270,7 +264,7 @@ if __name__ == "__main__":
     config = open_config(BASE, os.path.join(wd, "hazGAN", "saved-models"))
     wandb.init(config=config, name=f"{BASE}-transfer", project='test')
     wandb.config.update({
-        'nepochs': 1000,
+        'nepochs': 30000,
         'train_size': 50
         },
         allow_val_change=True
