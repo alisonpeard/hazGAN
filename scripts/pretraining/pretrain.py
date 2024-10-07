@@ -117,13 +117,14 @@ def main(config):
     test_u = data['test_u']
     train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
     test = tf.data.Dataset.from_tensor_slices(test_u).batch(config.batch_size)
-    print(f"Number of training samples: {train_u.shape[0]:,}.")
-    print(f"Training data shape: {train_u.shape[1:]}.")
+    print(f"\nNumber of training samples: {train_u.shape[0]:,}.")
+    print(f"Training data shape (H,W,C): {train_u.shape[1:]}.")
     
     # define callbacks
     critic_val = hg.CriticVal(test)
     compound = hg.CompoundMetric(frequency=config.chi_frequency)
     image_count = hg.CountImagesSeen(ntrain=config.train_size)
+    overfitting_detector = hg.OverfittingDetector(test)
 
     visualiser = hg.ChannelVisualiser(
         data=(data['train_x'], data['train_u']),
@@ -176,6 +177,7 @@ def main(config):
                 # chi_score,
                 # chi_squared,
                 # compound,
+                overfitting_detector,
                 WandbMetricsLogger(),
                 checkpoint
                 ]
@@ -257,42 +259,64 @@ def main(config):
             axs[0].set_ylabel('Extremal coeff.', fontsize=18);
             log_image_to_wandb(fig, f"spatial_dependence", imdir)
 
-        # Fig 3: 64 most extreme samples
+        # FIg 3 & 4: 64 most extreme samples (wind only)
         if True:
-            print("Plotting 64 most extreme generated samples...")
             X = data['train_x'].numpy()
             U = hg.unpad(data['train_u']).numpy()
+
+            def plot_64samples(x, channel=0, lon=np.linspace(80, 95, 22), lat=np.linspace(10, 25, 18)):
+                """Plot the 64 most extreme samples for a given channel."""
+                lon, lat = np.meshgrid(lon, lat)
+                x = x[..., channel]
+                maxima = np.max(x, axis=(1, 2))
+                idx = np.argsort(maxima)
+                x = x[idx, ...]
+
+                vmin = np.floor(np.min(x))
+                vmax = np.ceil(np.max(x))
+
+                fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
+                                        gridspec_kw={'hspace': 0, 'wspace': 0})
+                for i, ax in enumerate(axs.ravel()):
+                    im = ax.contourf(lon, lat, x[i, ...],
+                                     cmap='Spectral_r',
+                                     levels=20,
+                                     vmin=vmin,
+                                     vmax=vmax)
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    ax.invert_yaxis()
+                
+                # add colorbar on left
+                fig.subplots_adjust(right=0.8)
+                cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+                fig.colorbar(im, cax=cbar_ax)
+
+                return fig
+
+
+            # Fig 3a: 64 most extreme generated samples (Gumbel space)
+            print("\nPlotting 64 most extreme generated samples (Gumbel scale)...")
+            fig = plot_64samples(fake_u)
+            fig.suptitle('64 most extreme generator samples (Gumbel)', fontsize=16, y=0.95)
+            log_image_to_wandb(fig, f"max_samples_gumbel", imdir)
+
+            # Fig 3b: 64 most extreme training sampled (Gumbel space)
+            print("Plotting 64 most extreme training samples (Gumbel scale)...")
+            fig = plot_64samples(hg.unpad(data['train_u']).numpy())
+            fig.suptitle('64 most extreme training samples (Gumbel)', fontsize=16, y=0.95)
+            log_image_to_wandb(fig, f"max_train_samples_gumbel", imdir)
+            
+            # Fig 4a: 64 most extreme generated samples (inverse transform)
+            print("Plotting 64 most extreme generated samples (original scale)...")
             x = hg.POT.inv_probability_integral_transform(fake_u, X, U)
-            x = x[..., 0]
-            maxima = np.max(x, axis=(1, 2))
-            idx = np.argsort(maxima)
-            x = x[idx, ...]
-            lon = np.linspace(80, 95, 22)
-            lat = np.linspace(10, 25, 18)
-            lon, lat = np.meshgrid(lon, lat)
-            fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
-                                    gridspec_kw={'hspace': 0, 'wspace': 0})
-            for i, ax in enumerate(axs.ravel()):
-                ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r', levels=20)
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.invert_yaxis()
+            fig = plot_64samples(x)
             fig.suptitle('64 most extreme generator samples', fontsize=16, y=0.95)
             log_image_to_wandb(fig, f"max_samples", imdir)
 
-            # Fig 4: 63 most extreme training samples
-            print("Plotting 64 most extreme training samples...")
-            X = data['train_x'].numpy()[..., 0]
-            maxima = np.max(X, axis=(1, 2))
-            idx = np.argsort(maxima)
-            X = X[idx, ...]
-            fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
-                                    gridspec_kw={'hspace': 0, 'wspace': 0})
-            for i, ax in enumerate(axs.ravel()):
-                ax.contourf(lon, lat, X[i, ...], cmap='Spectral_r', levels=20)
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.invert_yaxis()
+            # Fig 4b: 63 most extreme training samples (original scale)
+            print("Plotting 64 most extreme training samples (original scale)...")
+            fig = plot_64samples(data['train_x'].numpy())
             fig.suptitle('64 most extreme training samples', fontsize=16, y=0.95)
             log_image_to_wandb(fig, f"max_train_samples", imdir)
     
@@ -335,10 +359,10 @@ if __name__ == "__main__":
 
     # initialise wandb
     if dry_run: # doesn't work with sweeps
-        print("Starting dry run")
+        print("Starting dry run...")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 3,
+            'nepochs': 1,
             'train_size': 64,
             'batch_size': 64,
             'chi_frequency': 1

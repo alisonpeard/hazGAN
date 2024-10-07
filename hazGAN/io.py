@@ -129,7 +129,7 @@ def load_pretraining(datadir, ntrain, padding_mode='constant', image_shape=(18, 
     """
     data = xr.open_dataset(os.path.join(datadir, "data_pretrain.nc"))
     data = data.sel(channel=channels)
-    print(f"Data set has {len(data.time):,} footprints.")
+    print(f"Dataset has {len(data.time):,} footprints.")
 
     if u10_min is not None:
         print('Only taking footprints with max u10 anomaly greater than', u10_min)

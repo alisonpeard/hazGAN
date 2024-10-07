@@ -6,18 +6,28 @@ metric:
   goal: minimize
   name: chi_rmse
 parameters:
+  n_epochs:
+    values: [100, 200, 500, 1000]
   ntrain:
-    values: [64, 128]
+    values: [64, 128, 246]
   training_balance:
     distribution: int_uniform
-    min: 1
-    max: 5
+    min: 3
+    max: 10
+  augment_policy:
+    values: ['color,translation,cutout', '']
+  penalty:
+    values: ['gp', 'lipschitz']
   latent_dims:
-    values: [64, 100, 128, 256]
+    values: [64, 128, 256]
+  lrelu:
+    values: [0.1, 0.2, 0.3, 0.4, 0.5]
+  normalize_generator:
+    values: [True, False]
   g_complexity:
     values: [1, 2]
   d_complexity:
-    values: [1, 2]
+    values: [1, 2, 3]
   learning_rate:
     values: [0.00005, 0.0001, 0.00015, 0.0002, 0.00025, 0.0003, 0.0004, 0.0005, 0.001]
   beta_1:

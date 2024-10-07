@@ -1,5 +1,5 @@
 import os
-import warnings
+from collections import deque
 import numpy as np
 import wandb
 import tensorflow as tf
@@ -19,6 +19,33 @@ class WandbMetricsLogger(Callback):
     def on_epoch_end(self, epoch, logs=None):
         wandb.log(logs)
 
+
+class OverfittingDetector(Callback):
+    """From arXiv:2006.06676v2 Equation (1a)."""
+    def __init__(self, valid, n=4):
+        super().__init__()
+        self.train = deque([], n)
+        self.validation = deque([], n)
+        self.generated = deque([], n)
+        self.valid = valid
+
+    def on_batch_end(self, batch, logs={}):
+        self.train.appendleft(logs.get("critic_real", np.nan))
+        self.generated.appendleft(logs.get("critic_fake", np.nan))
+
+        # get critic validation score
+        valid_batch = next(iter(self.valid))
+        valid_score = tf.reduce_mean(self.model.critic(valid_batch, training=False))
+        self.validation.appendleft(valid_score)
+
+        critic_train = np.nanmean(self.train)
+        critic_val = np.nanmean(self.validation)
+        critic_generated = np.nanmean(self.generated)
+        rv = (critic_train - critic_val) / (critic_train - critic_generated)
+        logs['rv'] = rv
+        if (rv > 0.999) & batch > 8:
+            print("\nEarly stopping due to overfitting.\n")
+            self.model.stop_training = True
 
 class CountImagesSeen(Callback):
     def __init__(self, ntrain):
@@ -123,7 +150,7 @@ class CompoundMetric(Callback):
 
             if chisq is None or chirmse is None:
                 tf.print(
-                    "\nWarning: One or more of the metrics is None. Skipping compound metric computation."
+                    "\nWarning: one or more of the metrics is None. Skipping compound metric computation."
                     )
                 return
             
@@ -179,7 +206,7 @@ class ChannelVisualiser(Callback):
         self.runname = runname
         self.data = data
         self.channel = channel
-        print("Warning: Resolution hard-coded as 18 x 22 for ChannelVisualiser callback.")
+        print("Warning: resolution hard-coded as 18x22 for ChannelVisualiser callback.")
 
     def on_epoch_end(self, epoch, logs={}):
         if (epoch % self.frequency == 0) & (epoch > 0):
