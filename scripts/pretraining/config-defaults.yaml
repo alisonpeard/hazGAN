@@ -92,6 +92,12 @@ ema_momentum:
 ema_overwrite_frequency:
   desc: How often to overwrite weights with ema.
   value: 1
+lr_decay:
+  desc: Whether to decay learning rate
+  value: True
+final_lr_factor:
+  desc: Factor to reduce learning rate by at end of training
+  value: 1000
 
 # for linux cluster
 # export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/soge-home/users/spet5107/micromamba/envs/tensorflow/lib

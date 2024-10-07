@@ -15,10 +15,10 @@ wandb agent alison-peard/hazGAN/$1
 # ------------------
 # $ micromamba activate hazGAN
 # $ wandb sweep sweep.yaml
-# $ sbatch train_sbatch.sh <sweep id>
+# $ sbatch pretrain_sbatch.sh <sweep id>
 
 # if not working with sbatch, run
 # srun -p GPU --gres=gpu:tesla:1 --time=04:00:00 --pty wandb agent alison-peard/hazGAN/bodaevqp
 # GPUs: tesla, 3080ti, 1080ti
 # latest sweep: s9k8wgnb
-# e.g., sbatch train_sbatch.sh dslczmgj
+# e.g., sbatch pretrain_sbatch.sh dslczmgj

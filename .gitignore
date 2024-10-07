@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# weird files popping up in linux
+._*
+
 # C extensions
 *.so
 

@@ -10,6 +10,7 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import optimizers
 from tensorflow.keras import layers
+from tensorflow.keras.optimizers.schedules import ExponentialDecay
 from inspect import signature
 from .extreme_value_theory import chi_loss, inv_gumbel
 from .augment import DiffAugment
@@ -30,35 +31,45 @@ def get_optimizer_kwargs(optimizer):
     return params
 
 
+def exponential_decay(config):
+    initial_lr = config['learning_rate']
+    final_lr = initial_lr / config['final_lr_factor']
+    decay_factor = (final_lr / initial_lr) ** (1 / config['epochs'])
+    steps_per_epoch = int(config['train_size'] / config['batch_size'])
+
+    schedule = ExponentialDecay(
+        initial_learning_rate=initial_lr,
+        decay_steps=steps_per_epoch,
+        decay_rate=decay_factor,
+        staircase=True
+    )
+    return schedule
+
 def process_optimizer_kwargs(config):
     kwargs = {
-        "learning_rate": config.learning_rate,
-        "beta_1": config.beta_1,
-        "beta_2": config.beta_2,
-        "weight_decay": config.weight_decay,
-        "use_ema": config.use_ema,
-        "ema_momentum": config.ema_momentum,
-        "ema_overwrite_frequency": config.ema_overwrite_frequency,
+        "learning_rate": config['learning_rate'],
+        "beta_1": config['beta_1'],
+        "beta_2": config['beta_2'],
+        "weight_decay": config['weight_decay'],
+        "use_ema": config['use_ema'],
+        "ema_momentum": config['ema_momentum'],
+        "ema_overwrite_frequency": config['ema_overwrite_frequency'],
     }
     params = get_optimizer_kwargs(config.optimizer)
     kwargs = {key: val for key, val in kwargs.items() if key in params}
 
-    lr_schedule = keras.optimizers.schedules.ExponentialDecay(
-        initial_learning_rate=config.learning_rate,
-        decay_steps=100_000,
-        decay_rate=0.96,
-        staircase=True
-    )
-    kwargs["learning_rate"] = lr_schedule
+    if config['lr_decay']:
+        lr_schedule = exponential_decay(config)
+        kwargs["learning_rate"] = lr_schedule
     return kwargs
 
 
 def compile_wgan(config, nchannels=2):
     kwargs = process_optimizer_kwargs(config)
-    optimizer = getattr(optimizers, config.optimizer)
+    optimizer = getattr(optimizers, config['optimizer'])
     d_optimizer = optimizer(**kwargs)
     g_optimizer = optimizer(**kwargs)
-    wgan = WGAN(config,nchannels=nchannels)
+    wgan = WGAN(config, nchannels=nchannels)
     wgan.compile(
         d_optimizer=d_optimizer,
         g_optimizer=g_optimizer
@@ -71,40 +82,40 @@ def define_generator(config, nchannels=2):
     """
     >>> generator = define_generator()
     """
-    z = tf.keras.Input(shape=(config.latent_dims,))
+    z = tf.keras.Input(shape=(config['latent_dims'],))
 
     # Fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
     fc = layers.Dense(config["g_layers"][0] * 5 * 5 * nchannels, use_bias=False)(z)
     fc = layers.Reshape((5, 5, int(nchannels * config["g_layers"][0])))(fc)
-    lrelu0 = layers.LeakyReLU(config.lrelu)(fc)
-    drop0 = layers.Dropout(config.dropout)(lrelu0)
-    if config.normalize_generator:
+    lrelu0 = layers.LeakyReLU(config['lrelu'])(fc)
+    drop0 = layers.Dropout(config['dropout'])(lrelu0)
+    if config['normalize_generator']:
         bn0 = layers.BatchNormalization(axis=-1)(drop0)  # normalise along features layer (1024)
     else:
         bn0 = drop0
     
     # 1st deconvolution block, 5 x 5 x 1024 -> 7 x 7 x 512
     conv1 = layers.Conv2DTranspose(config["g_layers"][1], 3, 1, use_bias=False)(bn0)
-    lrelu1 = layers.LeakyReLU(config.lrelu)(conv1)
-    drop1 = layers.Dropout(config.dropout)(lrelu1)
-    if config.normalize_generator:
+    lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
+    drop1 = layers.Dropout(config['dropout'])(lrelu1)
+    if config['normalize_generator']:
         bn1 = layers.BatchNormalization(axis=-1)(drop1)
     else:
         bn1 = drop1
 
     # 2nd deconvolution block, 6 x 8 x 512 -> 14 x 18 x 256
     conv2 = layers.Conv2DTranspose(config["g_layers"][2], (3, 4), 1, use_bias=False)(bn1)
-    lrelu2 = layers.LeakyReLU(config.lrelu)(conv2)
-    drop2 = layers.Dropout(config.dropout)(lrelu2)
-    if config.normalize_generator:
+    lrelu2 = layers.LeakyReLU(config['lrelu'])(conv2)
+    drop2 = layers.Dropout(config['dropout'])(lrelu2)
+    if config['normalize_generator']:
         bn2 = layers.BatchNormalization(axis=-1)(drop2)
     else:
         bn2 = drop2
 
     # Output layer, 17 x 21 x 128 -> 20 x 24 x nchannels
-    conv3 = layers.Resizing(20, 24, interpolation=config.interpolation)(bn2)
+    conv3 = layers.Resizing(20, 24, interpolation=config['interpolation'])(bn2)
     score = layers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same')(conv3)
-    o = score if config.gumbel else tf.keras.activations.sigmoid(score) # NOTE: check
+    o = score if config['gumbel'] else tf.keras.activations.sigmoid(score) # NOTE: check
     return tf.keras.Model(z, o, name="generator")
 
 
@@ -118,18 +129,18 @@ def define_critic(config, nchannels=2):
     # 1st hidden layer 9x10x64
     conv1 = layers.Conv2D(config["d_layers"][0], (4, 5), (2, 2), "valid",
                           kernel_initializer=tf.keras.initializers.GlorotUniform())(x)
-    lrelu1 = layers.LeakyReLU(config.lrelu)(conv1)
-    drop1 = layers.Dropout(config.dropout)(lrelu1)
+    lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
+    drop1 = layers.Dropout(config['dropout'])(lrelu1)
 
     # 2nd hidden layer 7x7x128
     conv1 = layers.Conv2D(config["d_layers"][1], (3, 4), (1, 1), "valid")(drop1)
-    lrelu2 = layers.LeakyReLU(config.lrelu)(conv1)
-    drop2 = layers.Dropout(config.dropout)(lrelu2)
+    lrelu2 = layers.LeakyReLU(config['lrelu'])(conv1)
+    drop2 = layers.Dropout(config['dropout'])(lrelu2)
 
     # 3rd hidden layer 5x5x256
     conv2 = layers.Conv2D(config["d_layers"][2], (3, 3), (1, 1), "valid")(drop2)
-    lrelu3 = layers.LeakyReLU(config.lrelu)(conv2)
-    drop3 = layers.Dropout(config.dropout)(lrelu3)
+    lrelu3 = layers.LeakyReLU(config['lrelu'])(conv2)
+    drop3 = layers.Dropout(config['dropout'])(lrelu3)
 
     # fully connected 1x1
     flat = layers.Reshape((-1, 5 * 5 * config["d_layers"][2]))(drop3)
@@ -143,21 +154,21 @@ class WGAN(keras.Model):
         super().__init__()
         self.critic = define_critic(config, nchannels)
         self.generator = define_generator(config, nchannels)
-        self.latent_dim = config.latent_dims
-        self.lambda_chi = config.lambda_chi
-        self.lambda_gp = config.lambda_gp
+        self.latent_dim = config['latent_dims']
+        self.lambda_chi = config['lambda_chi']
+        self.lambda_gp = config['lambda_gp']
         self.config = config
-        self.latent_space_distn = getattr(tf.random, config.latent_space_distn)
+        self.latent_space_distn = getattr(tf.random, config['latent_space_distn'])
         self.trainable_vars = [
             *self.generator.trainable_variables,
             *self.critic.trainable_variables,
         ]
-        if config.gumbel:
+        if config['gumbel']:
             self.inv = inv_gumbel
         else:
             self.inv = lambda x: x
-        self.augment = lambda x: DiffAugment(x, config.augment_policy)
-        self.penalty = config.penalty
+        self.augment = lambda x: DiffAugment(x, config['augment_policy'])
+        self.penalty = config['penalty']
 
         # trackers average over batches
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
@@ -166,7 +177,7 @@ class WGAN(keras.Model):
         self.value_function_tracker = keras.metrics.Mean(name="value_function")
         self.critic_real_tracker = keras.metrics.Mean(name="critic_real")
         self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
-        self.seed = config.seed
+        self.seed = config['seed']
         
     
     def compile(self, d_optimizer, g_optimizer, *args, **kwargs):
@@ -197,7 +208,7 @@ class WGAN(keras.Model):
 
         # train critic
         # https://github.com/igul222/improved_wgan_training/blob/master/gan_mnist.py:134
-        for _ in range(self.config.training_balance):
+        for _ in range(self.config['training_balance']):
             with tf.GradientTape() as tape:
                 score_real = self.critic(self.augment(data))
                 score_fake = self.critic(self.augment(fake_data))
