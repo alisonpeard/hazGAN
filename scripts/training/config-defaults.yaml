@@ -66,6 +66,9 @@ d_layers:
 interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
   value: nearest
+normalize_generator:
+  desc: Whether to batch normalize generator blocks.
+  value: False
 
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
 learning_rate:

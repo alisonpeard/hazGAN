@@ -86,6 +86,7 @@ gdf["latitude"] = gdf["geometry"].apply(lambda x: x.y)
 gdf["longitude"] = gdf["geometry"].apply(lambda x: x.x)
 gdf = gdf.sort_values(["latitude", "longitude", "storm"], ascending=[True, True, True])
 gdf.head()
+
 # %% make netcdf file
 nchannels = len(channels)
 T = gdf["storm"].nunique()

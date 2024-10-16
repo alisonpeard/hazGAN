@@ -58,9 +58,9 @@ def process_optimizer_kwargs(config):
     params = get_optimizer_kwargs(config.optimizer)
     kwargs = {key: val for key, val in kwargs.items() if key in params}
 
-    if config['lr_decay']:
-        lr_schedule = exponential_decay(config)
-        kwargs["learning_rate"] = lr_schedule
+    # if config['lr_decay']:
+    #     lr_schedule = exponential_decay(config)
+    #     kwargs["learning_rate"] = lr_schedule
     return kwargs
 
 
@@ -112,7 +112,7 @@ def define_generator(config, nchannels=2):
     else:
         bn2 = drop2
 
-    # Output layer, 17 x 21 x 128 -> 20 x 24 x nchannels
+    # Output layer, 17 x 21 x 128 -> 20 x 24 x nchannels, resizing not inverse conv
     conv3 = layers.Resizing(20, 24, interpolation=config['interpolation'])(bn2)
     score = layers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same')(conv3)
     o = score if config['gumbel'] else tf.keras.activations.sigmoid(score) # NOTE: check

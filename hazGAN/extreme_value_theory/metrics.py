@@ -92,15 +92,17 @@ def pairwise_extremal_coeffs(uniform):
 def minner_product(a, b):
     "Use broadcasting to get sum of pairwise minima."
     x = tf.reduce_sum(
-        tf.minimum(tf.expand_dims(a, axis=-1), tf.expand_dims(b, axis=0)), axis=1
+        tf.minimum(
+            tf.expand_dims(a, axis=-1),
+            tf.expand_dims(b, axis=0)),
+        axis=1
     )
     return x
 
 
 def test_minner_product():
     x = np.array([[1, 2], [1, 1]])
-    assert np.array_equal(minner_product(x.T, x), np.array([[2, 2], [2, 3]]))
-test_minner_product()
+    assert np.array_equal(minner_product(x.T, x), np.array([[2, 2], [2, 3]])), f"{minner_product(x.T, x)}"
 
 
 # Other metrics

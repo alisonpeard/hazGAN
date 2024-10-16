@@ -9,10 +9,14 @@ import xarray as xr
 import hazGAN as hg
 import matplotlib.pyplot as plt
 from itertools import combinations
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
 plt.rcParams['font.family'] = 'serif'
-hist_kws = {'bins': 25, 'color': 'lightgrey', 'edgecolor': 'k', 'alpha': 0.5, 'density': True}
+hist_kws = {'bins': 25, 'color': 'lightgrey',
+            'edgecolor': 'k', 'alpha': 0.5,
+            'density': False}
 
 def open_config(runname, dir):
     configfile = open(os.path.join(dir, runname, "config-defaults.yaml"), "r")
@@ -38,17 +42,62 @@ test_ds = data.isel(time=slice(0, -ntrain))
 samples_ds = samples_ds.rename({'sample': 'time'})
 print(train_ds.time.size, test_ds.time.size, samples_ds.time.size)
 
-# %% ----Plot test set footprints with different return periods----
+# %% 
 CHANNEL = 0
 TIME = 0
 RANDOM_TIME = lambda x: np.random.randint(0, x.time.size, 1)[0]
 DATASET = train_ds
 DATASET['variable'] = DATASET['anomaly'] + DATASET['medians']
+DATASET['maximum'] = DATASET['variable'].sel(channel='u10').max(dim=['lon', 'lat'])
 
-fig, ax = plt.subplots(figsize=(5, 5))
+# %% ----Plot a sample image----
+
+maxima = DATASET['maximum'].values
+times = DATASET['time'].values
+order = np.argsort(maxima)
+times = times[order]
+
+fig, axs = plt.subplots(1, 2, figsize=(8, 3),
+                       subplot_kw={'projection': ccrs.PlateCarree()}
+                       )
+
+DATASET['variable'].sel(time=times[-2],
+                        channel='u10').plot.contourf(
+                            cmap='Spectral_r',
+                            levels=20,
+                            ax=axs[0]
+                            )
+
+DATASET['variable'].sel(time=times[-2],
+                        channel='tp').plot.contourf(
+                            cmap='PuBu',
+                            levels=20,
+                            ax=axs[1]
+                        )
+
+axs[0].set_title('Wind speed')
+axs[1].set_title('Precipitation')
+fig.suptitle('Storm footprint sample', y=1.05)
+
+for ax in axs:
+    ax.add_feature(cfeature.COASTLINE, linewidth=0.2)
+
+
+# %%----Plot histograms----
+fig, axs = plt.subplots(1, 2, figsize=(10, 3))
+
+ax = axs[0]
+ax.hist(DATASET['maximum'].values, **hist_kws) 
+ax.set_title("Training maximum winds")
+ax.set_ylabel('Count')
+
+ax = axs[1]
 ax.hist(DATASET['storm_rp'].values, **hist_kws)
-ax.set_yscale('log')    
+ax.set_yscale('log')
+ax.set_ylabel('Count (log)')
+ax.set_title("Training set (empirical) return periods")
 
+# %% ----Plot test set footprints with different return periods----
 return_periods = [0, 1, 5, 10, 40]
 fig, ax = plt.subplots(1, len(return_periods)-1, figsize=(20, 3))
 for i in np.arange(1, len(return_periods)):
@@ -61,6 +110,7 @@ for i in np.arange(1, len(return_periods)):
     samples.variable.plot.contourf(ax=ax[i-1], cmap='Spectral_r', add_colorbar=True, levels=20)
     ax[i-1].set_title(f"1-in-{upper} year [{t}]")
     ax[i-1].set_xlabel(f"Number of samples: {n}")
+fig.suptitle('Test set', y=1.05)
 
 fig, ax = plt.subplots(1, len(return_periods)-1, figsize=(20, 3))
 for i in np.arange(1, len(return_periods)):
@@ -86,7 +136,7 @@ for i in np.arange(1, len(return_periods)):
 bounds = [(1, 5), (5, 10), (10, 40)]
 for lower, upper in bounds:
     samples = DATASET.where((DATASET.storm_rp > lower) & (DATASET.storm_rp <= upper), drop=True)
-    n = min(samples.time.size, 5)
+    n = min(samples.time.size, 4)
 
     fig, axs = plt.subplots(1, n, figsize=(20, 3))
     for i, ax in enumerate(axs):
