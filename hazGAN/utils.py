@@ -1,8 +1,15 @@
 """Helper functions for running evtGAN in TensorFlow."""
-
+import os
 import numpy as np
 import tensorflow as tf
 
+def notify(title, subtitle, message):
+    """Display OSX system notification with title and subtitle."""
+    os.system("""
+              osascript -e 'display notification "{}" with title "{}" subtitle "{}" beep'
+              """.format(message, title, subtitle))
+
+    
 KNOWN_OUTLIERS = np.array([
     '1992-04-15T00:00:00.000000000',
     '1952-05-09T00:00:00.000000000',

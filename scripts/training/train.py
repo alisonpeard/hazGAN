@@ -107,7 +107,6 @@ def config_tf_devices():
 # %% ----Main function----
 def main(config):
     # load data
-    print(help(hg.load_training))
     data = hg.load_training(datadir,
                             config.train_size,
                             padding_mode='reflect',

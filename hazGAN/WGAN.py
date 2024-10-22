@@ -11,9 +11,11 @@ from tensorflow import keras
 from tensorflow.keras import optimizers
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers.schedules import ExponentialDecay
+from tensorflow.keras.layers import AveragePooling2D as Downsampling
 from inspect import signature
+
 from .extreme_value_theory import chi_loss, inv_gumbel
-from .augment import DiffAugment
+from .tensorflow import DiffAugment
 
 
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
@@ -77,6 +79,34 @@ def compile_wgan(config, nchannels=2):
     return wgan
 
 
+def ResidualUpBlock(input, filters, kernel_size, config):
+    residual = input
+    residual = Upsampling(filters, kernel_size)(residual)
+    output = layers.Conv2DTranspose(filters, kernel_size, 1, use_bias=False)(input)
+    output = layers.LeakyReLU(config['lrelu'])(output)
+    output = layers.Dropout(config['dropout'])(output)
+    if config['normalize_generator']:
+        output = layers.BatchNormalization(axis=-1)(output)  # normalise along features layer (1024)
+    else:
+        output = output
+    print(f"\n\ninput shape:", input.shape)
+    print(f"residual shape:", residual.shape)
+    print(f"output shape:", output.shape)
+    print('filters:', filters)
+    print(f"kernel size:",  kernel_size, "\n\n")
+    return output + residual
+
+
+def ResidualDownBlock(input, filters, kernel_size:tuple, strides:tuple, config):
+    residual = input
+    residual = Downsampling(kernel_size, strides)(residual)
+    output = layers.Conv2D(filters, kernel_size, strides,
+                          kernel_initializer=tf.keras.initializers.GlorotUniform())(input)
+    output = layers.LeakyReLU(config['lrelu'])(output)
+    output = layers.Dropout(config['dropout'])(output)
+    return output + residual
+
+
 # G(z)
 def define_generator(config, nchannels=2):
     """
@@ -95,22 +125,24 @@ def define_generator(config, nchannels=2):
         bn0 = drop0
     
     # 1st deconvolution block, 5 x 5 x 1024 -> 7 x 7 x 512
-    conv1 = layers.Conv2DTranspose(config["g_layers"][1], 3, 1, use_bias=False)(bn0)
-    lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
-    drop1 = layers.Dropout(config['dropout'])(lrelu1)
-    if config['normalize_generator']:
-        bn1 = layers.BatchNormalization(axis=-1)(drop1)
-    else:
-        bn1 = drop1
+    bn1 = ResidualUpBlock(bn0, config["g_layers"][1], (3,3), config)
+    # conv1 = layers.Conv2DTranspose(config["g_layers"][1], 3, 1, use_bias=False)(bn0)
+    # lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
+    # drop1 = layers.Dropout(config['dropout'])(lrelu1)
+    # if config['normalize_generator']:
+    #     bn1 = layers.BatchNormalization(axis=-1)(drop1)
+    # else:
+    #     bn1 = drop1
 
     # 2nd deconvolution block, 6 x 8 x 512 -> 14 x 18 x 256
-    conv2 = layers.Conv2DTranspose(config["g_layers"][2], (3, 4), 1, use_bias=False)(bn1)
-    lrelu2 = layers.LeakyReLU(config['lrelu'])(conv2)
-    drop2 = layers.Dropout(config['dropout'])(lrelu2)
-    if config['normalize_generator']:
-        bn2 = layers.BatchNormalization(axis=-1)(drop2)
-    else:
-        bn2 = drop2
+    bn2 = ResidualUpBlock(bn0, config["g_layers"][2], (3,4), config)
+    # conv2 = layers.Conv2DTranspose(config["g_layers"][2], (3, 4), 1, use_bias=False)(bn1)
+    # lrelu2 = layers.LeakyReLU(config['lrelu'])(conv2)
+    # drop2 = layers.Dropout(config['dropout'])(lrelu2)
+    # if config['normalize_generator']:
+    #     bn2 = layers.BatchNormalization(axis=-1)(drop2)
+    # else:
+    #     bn2 = drop2
 
     # Output layer, 17 x 21 x 128 -> 20 x 24 x nchannels, resizing not inverse conv
     conv3 = layers.Resizing(20, 24, interpolation=config['interpolation'])(bn2)
