@@ -36,6 +36,7 @@ dependencies:
         - tf-keras
         - wandb==0.16.6 # stable May 2024
         - cdsapi # copernicus climate data store API
+        - pytest
         - -e /Users/alison/Documents/DPhil/paper1.nosync/hazGAN
         - -e /Users/alison/Documents/DPhil/geospatial_utils
 

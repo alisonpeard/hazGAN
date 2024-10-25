@@ -4,17 +4,17 @@ model:
   value: wgan
 nepochs:
   desc: Gulrajani et al. 2017 use 200_000
-  value: 10_000 # 3000 # or 1,500,000/train_size
+  value: 100 # 3000 # or 1,500,000/train_size
 train_size:
-  value: 100 # 840 # 50
+  value: 10_000 # 840 # 50
 batch_size:
-  value: 100
+  value: 64
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
   value: 10
 u10_min:
   desc: Minimum value of u10 anomaly for training data
-  value: 15 # you get two footprints if 40, 6 for 32.5 [15, 32.5, 40]
+  value: None # you get two footprints if 40, 6 for 32.5 [15, 32.5, 40]
 augment_policy:
   desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
   value: 'color,translation,cutout'
@@ -65,15 +65,15 @@ d_layers:
   value: [64, 128, 256]
 interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
-  value: nearest
+  value: bilinear
 normalize_generator:
-  desc: Whether to batch normalize generator blocks.
-  value: False
+  desc: Whether to use batch normalization in the generator
+  value: True
 
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
 learning_rate:
   desc: Gulrajani et al. 2017 use 0.0001 (Appendix B)
-  value: 0.00001
+  value: 0.0001
 beta_1:
   desc: Gulrajani et al. 2017 use 0.5, [0, 0.5]
   value: 0.5
@@ -85,13 +85,19 @@ weight_decay:
   value: 0.001
 use_ema:
   desc: Use exponential moving average in training, causes issues when re-loading weights.
-  value: False # only set to true if not loading weights
+  value: True # only set to true if not loading weights
 ema_momentum:
   desc: Momentum of exponential moving average for tf.keras.optimizers.Adam
   value: 0.9
 ema_overwrite_frequency:
   desc: How often to overwrite weights with ema.
   value: 1
+lr_decay:
+  desc: Whether to decay learning rate
+  value: True
+final_lr_factor:
+  desc: Factor to reduce learning rate by at end of training
+  value: 1000
 
 # for linux cluster
 # export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/soge-home/users/spet5107/micromamba/envs/tensorflow/lib

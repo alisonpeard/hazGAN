@@ -10,7 +10,7 @@ package for data loading, metrics, and plotting.
 Requirements:
 -------------
     - env: hazGAN
-    - GAN configuratino: config-defaults.yaml
+    - GAN configuration: config-defaults.yaml
     - data: training/18x22/data.nc
 
 Output:
@@ -63,7 +63,7 @@ data_source = "era5"
 res = (18, 22)
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
-
+os.environ['WANDB_NOTEBOOK_NAME'] = 'Pre-training script'
 
 def check_interactive(sys):
     """Check if running in interactive mode"""
@@ -107,22 +107,29 @@ def config_tf_devices():
 # %% ----Main function----
 def main(config):
     # load data
-    data = hg.load_training(datadir,
+    data = hg.load_pretraining(datadir,
                             config.train_size,
-                            padding_mode='reflect',
-                            gumbel_marginals=config.gumbel,
-                            u10_min=config.u10_min
+                            'reflect',
+                            gumbel_marginals=config.gumbel
                             )
+    
     train_u = data['train_u']
     test_u = data['test_u']
     train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
     test = tf.data.Dataset.from_tensor_slices(test_u).batch(config.batch_size)
-    print(f"Training data shape: {train_u.shape}")
+    print(f"\nNumber of training samples: {train_u.shape[0]:,}.")
+    print(f"Training data shape (H,W,C): {train_u.shape[1:]}.")
     
     # define callbacks
     critic_val = hg.CriticVal(test)
     compound = hg.CompoundMetric(frequency=config.chi_frequency)
     image_count = hg.CountImagesSeen(ntrain=config.train_size)
+    overfitting_detector = hg.OverfittingDetector(test)
+
+    visualiser = hg.ChannelVisualiser(
+        data=(data['train_x'], data['train_u']),
+        frequency=config.chi_frequency,
+        )
 
     chi_score = hg.ChiScore({
             "train": next(iter(train)),
@@ -154,8 +161,9 @@ def main(config):
         restore_best_weights=True,
         start_from_epoch=10
         )
-
+    
     # compile
+    print('Starting training...')
     with tf.device(device):
         gan = getattr(hg, f"compile_{config.model}")(config, nchannels=2)
         history = gan.fit(
@@ -165,24 +173,28 @@ def main(config):
                 # early_stopping,
                 critic_val,
                 image_count,
-                chi_score,
-                chi_squared,
-                compound,
+                # visualiser,
+                # chi_score,
+                # chi_squared,
+                # compound,
+                overfitting_detector,
                 WandbMetricsLogger(),
                 checkpoint
                 ]
         )
     final_chi_rmse = history.history['chi_rmse'][-1]
-    print(f"Final chi_rmse: {final_chi_rmse}")
+    print(f"Success! Final chi_rmse: {final_chi_rmse}")
 
     if True: #TODO: final_chi_rmse <= 20.0:
+        print("Saving models...")
         save_config(rundir)
 
         # ----Figures----
         paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
         train_u = hg.inv_gumbel(hg.unpad(train_u, paddings)).numpy()
         test_u = hg.inv_gumbel(hg.unpad(test_u, paddings)).numpy()
-        fake_u = hg.unpad(gan(nsamples=config.train_size), paddings).numpy()
+        nsamples = max(config.train_size, 64)
+        fake_u = hg.unpad(gan(nsamples=nsamples), paddings).numpy()
         
         cmap = plt.cm.coolwarm_r
         vmin = 1
@@ -191,100 +203,122 @@ def main(config):
         cmap.set_over(cmap(.99))
 
         # Fig 1: channel extremal coefficients
-        def get_channel_ext_coefs(x):
-            n, h, w, c = x.shape
-            excoefs = hg.get_extremal_coeffs_nd(x, [*range(h * w)])
-            excoefs = np.array([*excoefs.values()]).reshape(h, w)
-            return excoefs
-        
-        excoefs_train = get_channel_ext_coefs(train_u)
-        excoefs_test = get_channel_ext_coefs(test_u)
-        excoefs_gan = get_channel_ext_coefs(fake_u)
-        fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
-                        gridspec_kw={
-                            'wspace': .02,
-                            'width_ratios': [1, 1, 1, .05]}
-                            )
-        im = ax[0].imshow(excoefs_train, vmin=vmin, vmax=vmax, cmap=cmap)
-        im = ax[1].imshow(excoefs_test, vmin=vmin, vmax=vmax, cmap=cmap)
-        im = ax[2].imshow(excoefs_gan, vmin=vmin, vmax=vmax, cmap=cmap)
-        for a in ax:
-            a.set_yticks([])
-            a.set_xticks([])
-            a.invert_yaxis()
-        ax[0].set_title('Train', fontsize=16)
-        ax[1].set_title('Test', fontsize=16)
-        ax[2].set_title('hazGAN', fontsize=16);
-        fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
-        ax[0].set_ylabel('Extremal coeff', fontsize=18);
-        log_image_to_wandb(fig, f"extremal_dependence", imdir)
-
-        # Fig 2: spatial extremal coefficients
-        i = 0 # only look at wind speed
-        ecs_train = hg.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., i]).numpy()
-        ecs_test = hg.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., i]).numpy()
-        ecs_gen = hg.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., i]).numpy()
-        fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
+        if False:
+            print("Plotting extremal coefficients...")
+            def get_channel_ext_coefs(x):
+                n, h, w, c = x.shape
+                excoefs = hg.get_extremal_coeffs_nd(x, [*range(h * w)])
+                excoefs = np.array([*excoefs.values()]).reshape(h, w)
+                return excoefs
+            
+            excoefs_train = get_channel_ext_coefs(train_u)
+            excoefs_test = get_channel_ext_coefs(test_u)
+            excoefs_gan = get_channel_ext_coefs(fake_u)
+            fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
                             gridspec_kw={
                                 'wspace': .02,
                                 'width_ratios': [1, 1, 1, .05]}
                                 )
-        
-        im = axs[0].imshow(ecs_train, vmin=vmin, vmax=vmax, cmap=cmap)
-        im = axs[1].imshow(ecs_test, vmin=vmin, vmax=vmax, cmap=cmap)
-        im = axs[2].imshow(ecs_gen, vmin=vmin, vmax=vmax, cmap=cmap)
-        for ax in axs:
-            ax.set_xticks([])
-            ax.set_yticks([])
-        fig.colorbar(im, cax=axs[3], extend='both', orientation='vertical');
-        axs[0].set_title("Train", fontsize=16)
-        axs[1].set_title("Test", fontsize=16)
-        axs[2].set_title("hazGAN", fontsize=16)
-        axs[0].set_ylabel('Extremal coeff.', fontsize=18);
-        log_image_to_wandb(fig, f"spatial_dependence", imdir)
+            im = ax[0].imshow(excoefs_train, vmin=vmin, vmax=vmax, cmap=cmap)
+            im = ax[1].imshow(excoefs_test, vmin=vmin, vmax=vmax, cmap=cmap)
+            im = ax[2].imshow(excoefs_gan, vmin=vmin, vmax=vmax, cmap=cmap)
+            for a in ax:
+                a.set_yticks([])
+                a.set_xticks([])
+                a.invert_yaxis()
+            ax[0].set_title('Train', fontsize=16)
+            ax[1].set_title('Test', fontsize=16)
+            ax[2].set_title('hazGAN', fontsize=16);
+            fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
+            ax[0].set_ylabel('Extremal coeff', fontsize=18);
+            log_image_to_wandb(fig, f"extremal_dependence", imdir)
 
-        # Fig 3: 64 most extreme samples
-        X = data['train_x'].numpy()
-        U = hg.unpad(data['train_u']).numpy()
-        params = data['params']
-        x = hg.POT.inv_probability_integral_transform(fake_u, X, U, params)
-        x = x[..., 0]
-        if x.shape[0] < 64:
-            # repeat x until it has 64 samples
-            x = np.concatenate([x] * int(np.ceil(64 / x.shape[0])), axis=0)
-        maxima = np.max(x, axis=(1, 2))
-        idx = np.argsort(maxima)
-        x = x[idx, ...]
-        lon = np.linspace(80, 95, 22)
-        lat = np.linspace(10, 25, 18)
-        lon, lat = np.meshgrid(lon, lat)
-        fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
-                                gridspec_kw={'hspace': 0, 'wspace': 0})
-        for i, ax in enumerate(axs.ravel()):
-            ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r', levels=20)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.invert_yaxis()
-        fig.suptitle('64 most extreme samples', fontsize=18)
-        log_image_to_wandb(fig, f"max_samples", imdir)
+        # Fig 2: spatial extremal coefficients
+        if False:
+            print("Plotting spatial extremal coefficients...")
+            i = 0 # only look at wind speed
+            ecs_train = hg.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., i]).numpy()
+            ecs_test = hg.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., i]).numpy()
+            ecs_gen = hg.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., i]).numpy()
+            fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
+                                gridspec_kw={
+                                    'wspace': .02,
+                                    'width_ratios': [1, 1, 1, .05]}
+                                    )
+            
+            im = axs[0].imshow(ecs_train, vmin=vmin, vmax=vmax, cmap=cmap)
+            im = axs[1].imshow(ecs_test, vmin=vmin, vmax=vmax, cmap=cmap)
+            im = axs[2].imshow(ecs_gen, vmin=vmin, vmax=vmax, cmap=cmap)
+            for ax in axs:
+                ax.set_xticks([])
+                ax.set_yticks([])
+            fig.colorbar(im, cax=axs[3], extend='both', orientation='vertical');
+            axs[0].set_title("Train", fontsize=16)
+            axs[1].set_title("Test", fontsize=16)
+            axs[2].set_title("hazGAN", fontsize=16)
+            axs[0].set_ylabel('Extremal coeff.', fontsize=18);
+            log_image_to_wandb(fig, f"spatial_dependence", imdir)
 
-        # Fig 4: 63 most extreme training samples
-        X = data['train_x'].numpy()[..., 0]
-        if X.shape[0] < 64:
-            # repeat X until it has 64 samples
-            X = np.concatenate([X] * int(np.ceil(64 / X.shape[0])), axis=0)
-        maxima = np.max(X, axis=(1, 2))
-        idx = np.argsort(maxima)
-        X = X[idx, ...]
-        fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
-                                gridspec_kw={'hspace': 0, 'wspace': 0})
-        for i, ax in enumerate(axs.ravel()):
-            ax.contourf(lon, lat, X[i, ...], cmap='Spectral_r', levels=20)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.invert_yaxis()
-        fig.suptitle('64 most extreme training samples', fontsize=18)
-        log_image_to_wandb(fig, f"max_train_samples", imdir)
+        # FIg 3 & 4: 64 most extreme samples (wind only)
+        if True:
+            X = data['train_x'].numpy()
+            U = hg.unpad(data['train_u']).numpy()
+
+            def plot_64samples(x, channel=0, lon=np.linspace(80, 95, 22), lat=np.linspace(10, 25, 18)):
+                """Plot the 64 most extreme samples for a given channel."""
+                lon, lat = np.meshgrid(lon, lat)
+                x = x[..., channel]
+                maxima = np.max(x, axis=(1, 2))
+                idx = np.argsort(maxima)
+                x = x[idx, ...]
+
+                vmin = np.floor(np.min(x))
+                vmax = np.ceil(np.max(x))
+
+                fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
+                                        gridspec_kw={'hspace': 0, 'wspace': 0})
+                for i, ax in enumerate(axs.ravel()):
+                    im = ax.contourf(lon, lat, x[i, ...],
+                                     cmap='Spectral_r',
+                                     levels=20,
+                                     vmin=vmin,
+                                     vmax=vmax)
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                    ax.invert_yaxis()
+                
+                # add colorbar on left
+                fig.subplots_adjust(right=0.8)
+                cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+                fig.colorbar(im, cax=cbar_ax)
+
+                return fig
+
+
+            # Fig 3a: 64 most extreme generated samples (Gumbel space)
+            print("\nPlotting 64 most extreme generated samples (Gumbel scale)...")
+            fig = plot_64samples(fake_u)
+            fig.suptitle('64 most extreme generator samples (Gumbel)', fontsize=16, y=0.95)
+            log_image_to_wandb(fig, f"max_samples_gumbel", imdir)
+
+            # Fig 3b: 64 most extreme training sampled (Gumbel space)
+            print("Plotting 64 most extreme training samples (Gumbel scale)...")
+            fig = plot_64samples(hg.unpad(data['train_u']).numpy())
+            fig.suptitle('64 most extreme training samples (Gumbel)', fontsize=16, y=0.95)
+            log_image_to_wandb(fig, f"max_train_samples_gumbel", imdir)
+            
+            # Fig 4a: 64 most extreme generated samples (inverse transform)
+            print("Plotting 64 most extreme generated samples (original scale)...")
+            x = hg.POT.inv_probability_integral_transform(fake_u, X, U)
+            fig = plot_64samples(x)
+            fig.suptitle('64 most extreme generator samples', fontsize=16, y=0.95)
+            log_image_to_wandb(fig, f"max_samples", imdir)
+
+            # Fig 4b: 63 most extreme training samples (original scale)
+            print("Plotting 64 most extreme training samples (original scale)...")
+            fig = plot_64samples(data['train_x'].numpy())
+            fig.suptitle('64 most extreme training samples', fontsize=16, y=0.95)
+            log_image_to_wandb(fig, f"max_train_samples", imdir)
     
     else: # delete rundir and its contents
         print("Chi score too high, deleting run directory")
@@ -325,12 +359,12 @@ if __name__ == "__main__":
 
     # initialise wandb
     if dry_run: # doesn't work with sweeps
-        print("Starting dry run")
+        print("Starting dry run...")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
             'nepochs': 1,
-            'train_size': 128,
-            'batch_size': 128,
+            'train_size': 64,
+            'batch_size': 64,
             'chi_frequency': 1
             },
             allow_val_change=True)

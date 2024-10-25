@@ -1,8 +1,15 @@
 """Helper functions for running evtGAN in TensorFlow."""
-
+import os
 import numpy as np
 import tensorflow as tf
 
+def notify(title, subtitle, message):
+    """Display OSX system notification with title and subtitle."""
+    os.system("""
+              osascript -e 'display notification "{}" with title "{}" subtitle "{}" beep'
+              """.format(message, title, subtitle))
+
+    
 KNOWN_OUTLIERS = np.array([
     '1992-04-15T00:00:00.000000000',
     '1952-05-09T00:00:00.000000000',
@@ -50,7 +57,7 @@ def sliding_window_indices(size, n, step=1):
     windows = []
     i = 0
     for i in range(0, n - size, step):
-        windows.append(np.arange(i, i + size, 1))
+        windows.append(np.arange(i, i+size, 1))
     return np.array(windows)
 
 
