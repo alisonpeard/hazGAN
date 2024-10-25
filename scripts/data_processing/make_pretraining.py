@@ -92,6 +92,15 @@ ds.isel(longitude=0, latitude=0, channel=0).uniform.plot.hist(ax=axs[0, 1])
 ds.isel(time=100, channel=0).anomaly.plot.contourf(ax=axs[1, 0], levels=20, cmap='Spectral_r')
 ds.isel(time=100, channel=0).uniform.plot.contourf(ax=axs[1, 1], levels=20, cmap='Spectral_r')
 
-# %% Save
+# %% Save to netCDF and NumPy
 ds.to_netcdf(os.path.join(datadir, f"{res[1]}x{res[0]}", "data_pretrain.nc"))
+np.savez(os.path.join(datadir, f"{res[1]}x{res[0]}", "data_pretrain.npz"), data=X)
+
+# %%
+def notify(title, subtitle, message):
+    os.system("""
+              osascript -e 'display notification "{}" with title "{}" subtitle "{}" beep'
+              """.format(message, title, subtitle))
+notify("Process finished", "Python script", "Finished making pretraining data")
+
 # %%

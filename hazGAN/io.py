@@ -14,6 +14,7 @@ def load_datasets(datadir, ntrain, padding_mode='reflect', image_shape=(18, 22),
     return train, test
 
 
+# @tf.py_function(Tout=tf.float32)
 def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
                   numpy=False, gumbel_marginals=True, channels=['u10', 'tp'],
                   uniform='uniform', u10_min=None):

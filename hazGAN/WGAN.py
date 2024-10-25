@@ -12,8 +12,9 @@ from tensorflow.keras import optimizers
 from tensorflow.keras import layers
 from tensorflow.keras.optimizers.schedules import ExponentialDecay
 from inspect import signature
+
 from .extreme_value_theory import chi_loss, inv_gumbel
-from .augment import DiffAugment
+from .tensorflow import DiffAugment
 
 
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
@@ -112,7 +113,7 @@ def define_generator(config, nchannels=2):
     else:
         bn2 = drop2
 
-    # Output layer, 17 x 21 x 128 -> 20 x 24 x nchannels
+    # Output layer, 17 x 21 x 128 -> 20 x 24 x nchannels, resizing not inverse conv
     conv3 = layers.Resizing(20, 24, interpolation=config['interpolation'])(bn2)
     score = layers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same')(conv3)
     o = score if config['gumbel'] else tf.keras.activations.sigmoid(score) # NOTE: check

@@ -109,11 +109,10 @@ def main(config):
     # load data
     data = hg.load_training(datadir,
                             config.train_size,
-                            'reflect',
+                            padding_mode='reflect',
                             gumbel_marginals=config.gumbel,
                             u10_min=config.u10_min
                             )
-    
     train_u = data['train_u']
     test_u = data['test_u']
     train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
@@ -329,7 +328,7 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 128,
+            'nepochs': 1,
             'train_size': 128,
             'batch_size': 128,
             'chi_frequency': 1
