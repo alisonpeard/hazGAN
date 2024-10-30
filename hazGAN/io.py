@@ -17,7 +17,7 @@ def load_datasets(datadir, ntrain, padding_mode='reflect', image_shape=(18, 22),
 # @tf.py_function(Tout=tf.float32)
 def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
                   numpy=False, gumbel_marginals=True, channels=['u10', 'tp'],
-                  uniform='uniform', u10_min=None):
+                  uniform='uniform', u10_min=None, u10_max=None):
     """
     Load the hazGAN training data from the data.nc file.
 
@@ -51,6 +51,14 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
         print('Only taking footprints with max u10 anomaly greater than', u10_min)
         data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
         time_subset = data.where(data.maxima >= u10_min, drop=True).time
+        data = data.sel(time=time_subset)
+        print('Number of remaining footprints:', len(data.time))
+        print('Number of training samples:', ntrain)
+
+    if u10_max is not None:
+        print('Only taking footprints with max u10 anomaly less than', u10_max)
+        data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
+        time_subset = data.where(data.maxima < u10_max, drop=True).time
         data = data.sel(time=time_subset)
         print('Number of remaining footprints:', len(data.time))
         print('Number of training samples:', ntrain)

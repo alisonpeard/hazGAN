@@ -39,7 +39,6 @@ To run sweep:
 >>> wandb sweep sweep.yaml
 >>> wandb agent alison/hazGAN/<sweep_id>
 """
-
 # %%
 import os
 import sys
@@ -48,7 +47,6 @@ import yaml
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
-
 import wandb
 import hazGAN as hg
 from hazGAN import WandbMetricsLogger
@@ -104,39 +102,45 @@ def config_tf_devices():
         return gpu_names[0]
 
 
+
 # %% ----Main function----
 def main(config):
     # load data
-    data = hg.load_training(datadir,
+    minority = hg.load_training(datadir,
                             config.train_size,
                             padding_mode='reflect',
                             gumbel_marginals=config.gumbel,
-                            u10_min=config.u10_min
+                            u10_min=15
                             )
-    train_u = data['train_u']
-    test_u = data['test_u']
-    train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
-    test = tf.data.Dataset.from_tensor_slices(test_u).batch(config.batch_size)
-    print(f"Training data shape: {train_u.shape}")
-    
+    train_minority = minority['train_u']
+    test_minority = minority['test_u']
+    majority = hg.load_training(datadir,
+                            config.train_size,
+                            padding_mode='reflect',
+                            gumbel_marginals=config.gumbel,
+                            u10_max=15
+                            )
+    train_majority = majority['train_u']
+    test_majority = majority['test_u']
+    train = hg.BalancedBatch(train_majority, train_minority, 64)
+    test = hg.BalancedBatch(test_majority, test_minority, 64, name='validation')
+    print(len(train))
+    print(len(test))
     # define callbacks
     critic_val = hg.CriticVal(test)
-    compound = hg.CompoundMetric(frequency=config.chi_frequency)
     image_count = hg.CountImagesSeen(ntrain=config.train_size)
-
-    chi_score = hg.ChiScore({
-            "train": next(iter(train)),
-            "test": next(iter(test))
-            },
-        frequency=config.chi_frequency,
-        gumbel_margins=config.gumbel
-        )
-    
-    chi_squared = hg.ChiSquared(
-        batchsize=config.batch_size,
-        frequency=config.chi_frequency
-        )    
-
+    # compound = hg.CompoundMetric(frequency=config.chi_frequency)
+    # chi_score = hg.ChiScore({
+    #         "train": next(iter(train)),
+    #         "test": next(iter(test))
+    #         },
+    #     frequency=config.chi_frequency,
+    #     gumbel_margins=config.gumbel
+    #     )
+    # chi_squared = hg.ChiSquared(
+    #     batchsize=config.batch_size,
+    #     frequency=config.chi_frequency
+    #     )    
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         os.path.join(rundir, "checkpoint.weights.h5"),
         monitor="compound_metric",
@@ -146,37 +150,36 @@ def main(config):
         verbose=1
         )
     
-    early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor="chi_rmse", # or value_function
-        patience=50,
-        mode="min",
-        verbose=True,
-        restore_best_weights=True,
-        start_from_epoch=10
-        )
-
     # compile
+    print("\nStarting training...")
     with tf.device(device):
         gan = getattr(hg, f"compile_{config.model}")(config, nchannels=2)
         history = gan.fit(
             train,
             epochs=config.nepochs,
             callbacks=[
-                # early_stopping,
-                critic_val,
+                # critic_val, # infinite loop
                 image_count,
-                chi_score,
-                chi_squared,
-                compound,
+                # chi_score,
+                # chi_squared,
+                # compound,
                 WandbMetricsLogger(),
                 checkpoint
                 ]
         )
+    print('Finished training!')
     final_chi_rmse = history.history['chi_rmse'][-1]
     print(f"Final chi_rmse: {final_chi_rmse}")
 
     if True: #TODO: final_chi_rmse <= 20.0:
         save_config(rundir)
+        all_data = minority = hg.load_training(datadir,
+                            config.train_size,
+                            padding_mode='reflect',
+                            gumbel_marginals=config.gumbel
+                            )
+        train_u = all_data['train_u']
+        test_u = all_data['test_u']
 
         # ----Figures----
         paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
@@ -244,9 +247,9 @@ def main(config):
         log_image_to_wandb(fig, f"spatial_dependence", imdir)
 
         # Fig 3: 64 most extreme samples
-        X = data['train_x'].numpy()
-        U = hg.unpad(data['train_u']).numpy()
-        params = data['params']
+        X = all_data['train_x'].numpy()
+        U = hg.unpad(all_data['train_u']).numpy()
+        params = all_data['params']
         x = hg.POT.inv_probability_integral_transform(fake_u, X, U, params)
         x = x[..., 0]
         if x.shape[0] < 64:
@@ -269,7 +272,7 @@ def main(config):
         log_image_to_wandb(fig, f"max_samples", imdir)
 
         # Fig 4: 63 most extreme training samples
-        X = data['train_x'].numpy()[..., 0]
+        X = all_data['train_x'].numpy()[..., 0]
         if X.shape[0] < 64:
             # repeat X until it has 64 samples
             X = np.concatenate([X] * int(np.ceil(64 / X.shape[0])), axis=0)
@@ -316,9 +319,8 @@ if __name__ == "__main__":
     # set up directories
     if cluster:
         wd = os.path.join('/soge-home', 'projects', 'mistral', 'alison', 'hazGAN')
-    else:
-        wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')  # hazGAN directory
-
+    else: # local hazGAN parent directory
+        wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync') 
     datadir = os.path.join(wd, 'training', f"{res[0]}x{res[1]}")  # keep data folder in parent directory
     print(f"Loading data from {datadir}")
     imdir = os.path.join(wd, "figures", "temp")
@@ -328,7 +330,7 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 1,
+            'nepochs': 100,
             'train_size': 128,
             'batch_size': 128,
             'chi_frequency': 1
@@ -345,6 +347,8 @@ if __name__ == "__main__":
     wandb.config["seed"] = np.random.randint(0, 500)
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
     tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations
-    history = main(wandb.config)
+    config = wandb.config
+    history = main(config)
 
 # %% ---------------------------------END---------------------------------
+

@@ -204,6 +204,7 @@ class WGANGP(keras.Model):
         
     @tf.function
     def train_step(self, data):
+        data = data[0]
         batch_size = tf.shape(data)[0]
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
         fake_data = self.generator(random_latent_vectors, training=False)
