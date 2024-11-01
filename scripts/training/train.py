@@ -110,7 +110,7 @@ def main(config):
                             config.train_size,
                             padding_mode='reflect',
                             gumbel_marginals=config.gumbel,
-                            u10_min=15
+                            u10_min=20
                             )
     train_minority = minority['train_u']
     test_minority = minority['test_u']
@@ -118,14 +118,15 @@ def main(config):
                             config.train_size,
                             padding_mode='reflect',
                             gumbel_marginals=config.gumbel,
-                            u10_max=15
+                            u10_max=20
                             )
     train_majority = majority['train_u']
     test_majority = majority['test_u']
-    train = hg.BalancedBatch(train_majority, train_minority, 64)
-    test = hg.BalancedBatch(test_majority, test_minority, 64, name='validation')
+    train = hg.BalancedBatch(train_majority, train_minority, 64, ratio=0.8)
+    test = hg.BalancedBatch(test_majority, test_minority, 64, name='validation', ratio=0.8)
     print(len(train))
     print(len(test))
+
     # define callbacks
     critic_val = hg.CriticVal(test)
     image_count = hg.CountImagesSeen(ntrain=config.train_size)
@@ -158,7 +159,7 @@ def main(config):
             train,
             epochs=config.nepochs,
             callbacks=[
-                # critic_val, # infinite loop
+                critic_val, # infinite loop
                 image_count,
                 # chi_score,
                 # chi_squared,
@@ -330,9 +331,9 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 100,
+            'nepochs': 1,
             'train_size': 128,
-            'batch_size': 128,
+            'batch_size': 64,
             'chi_frequency': 1
             },
             allow_val_change=True)
