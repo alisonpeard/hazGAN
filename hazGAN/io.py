@@ -53,7 +53,6 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
         time_subset = data.where(data.maxima >= u10_min, drop=True).time
         data = data.sel(time=time_subset)
         print('Number of remaining footprints:', len(data.time))
-        print('Number of training samples:', ntrain)
 
     if u10_max is not None:
         print('Only taking footprints with max u10 anomaly less than', u10_max)
@@ -61,6 +60,9 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
         time_subset = data.where(data.maxima < u10_max, drop=True).time
         data = data.sel(time=time_subset)
         print('Number of remaining footprints:', len(data.time))
+
+    if ntrain < 1:
+        ntrain = int(ntrain * data.time.size)
         print('Number of training samples:', ntrain)
 
     X = tf.image.resize(data.anomaly, image_shape)

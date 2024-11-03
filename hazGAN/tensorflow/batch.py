@@ -8,7 +8,8 @@ def sample(data, size:int, replace=False)->list:
 
 class BalancedBatch(tf.keras.utils.Sequence):
     """Data loader that returns balanced batches."""
-    def __init__(self, majority, minority, batch_size, ratio=0.5, name='training'):
+    def __init__(self, majority, minority, batch_size, ratio=0.5, name='training', **kwargs):
+        super().__init__(**kwargs)
         self.name = name
         self.majority = majority
         self.minority = minority
@@ -25,6 +26,7 @@ class BalancedBatch(tf.keras.utils.Sequence):
         """Return one batch of data."""
         if index >= self.__len__():
             raise StopIteration
+        
         min_batch = sample(self.minority, size=self.min_batch_size, replace=True)
         maj_batch = sample(self.majority, size=self.maj_batch_size)
         batch = tf.concat([maj_batch, min_batch], axis=0)

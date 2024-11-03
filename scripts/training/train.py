@@ -110,7 +110,7 @@ def main(config):
                             config.train_size,
                             padding_mode='reflect',
                             gumbel_marginals=config.gumbel,
-                            u10_min=20
+                            u10_min=15
                             )
     train_minority = minority['train_u']
     test_minority = minority['test_u']
@@ -118,14 +118,14 @@ def main(config):
                             config.train_size,
                             padding_mode='reflect',
                             gumbel_marginals=config.gumbel,
-                            u10_max=20
+                            u10_max=15
                             )
     train_majority = majority['train_u']
     test_majority = majority['test_u']
-    train = hg.BalancedBatch(train_majority, train_minority, 64, ratio=0.8)
-    test = hg.BalancedBatch(test_majority, test_minority, 64, name='validation', ratio=0.8)
-    print(len(train))
-    print(len(test))
+    train = hg.BalancedBatch(train_majority, train_minority, config.batch_size, ratio=0.5)
+    test = hg.BalancedBatch(test_majority, test_minority, config.batch_size, name='validation', ratio=0.5)
+    print("Train size:", len(train))
+    print("Test size:", len(test))
 
     # define callbacks
     critic_val = hg.CriticVal(test)

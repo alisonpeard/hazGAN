@@ -6,7 +6,7 @@ nepochs:
   desc: Gulrajani et al. 2017 use 200_000
   value: 20_000 # 3000 # or 1,500,000/train_size
 train_size:
-  value: 1000 # 840 # 50
+  value: 0.6 # 840 # 50
 batch_size:
   value: 64
 chi_frequency:
@@ -17,7 +17,7 @@ u10_min:
   value: 15 # you get two footprints if 40, 6 for 32.5 [15, 32.5, 40]
 augment_policy:
   desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
-  value: 'color,translation,cutout'
+  value: ''
 penalty:
   desc: Which penalty to use, ['gp', 'lipschitz']
   value: gp
