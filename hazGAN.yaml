@@ -29,6 +29,7 @@ dependencies:
     - dask
     - pip:
         # - tensorflow-macos #==2.12
+        - environs
         - bottleneck
         - tensorflow>=2.16 # for python 3.10
         - tensorflow-metal
