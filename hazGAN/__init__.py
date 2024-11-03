@@ -2,7 +2,6 @@ from .utils import *
 from .plotting import *
 from .io import *
 from .defaults import *
-from .callbacks import *
 from .extreme_value_theory import *
 from .tensorflow import *
 from .WGANGP import *

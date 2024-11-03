@@ -17,7 +17,7 @@ u10_min:
   value: 15 # you get two footprints if 40, 6 for 32.5 [15, 32.5, 40]
 augment_policy:
   desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
-  value: ''
+  value: 'color,translation,cutout'
 penalty:
   desc: Which penalty to use, ['gp', 'lipschitz']
   value: gp
