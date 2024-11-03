@@ -114,6 +114,7 @@ def main(config):
                             )
     train_minority = minority['train_u']
     test_minority = minority['test_u']
+
     majority = hg.load_training(datadir,
                             config.train_size,
                             padding_mode='reflect',
@@ -122,8 +123,24 @@ def main(config):
                             )
     train_majority = majority['train_u']
     test_majority = majority['test_u']
-    train = hg.BalancedBatch(train_majority, train_minority, config.batch_size, ratio=0.5)
-    test = hg.BalancedBatch(test_majority, test_minority, config.batch_size, name='validation', ratio=0.5)
+
+    pretrain = hg.load_pretraining(datadir,
+                                         config.train_size,
+                                         padding_mode='reflect',
+                                         gumbel_marginals=config.gumbel
+                                         )
+    train_pre = pretrain['train_u']
+    test_pre = pretrain['test_u']
+
+    train = hg.BalancedBatchNd([train_pre, train_majority, train_minority],
+                               ratios=[1/3, 1/3, 1/3])
+    test = hg.BalancedBatchNd([test_pre, test_majority, test_minority],
+                               ratios=[1/3, 1/3, 1/3])
+
+
+    # train = hg.BalancedBatch(train_majority, train_minority, config.batch_size, ratio=0.5)
+    # test = hg.BalancedBatch(test_majority, test_minority, config.batch_size, name='validation', ratio=0.5)
+    
     print("Train size:", len(train))
     print("Test size:", len(test))
 

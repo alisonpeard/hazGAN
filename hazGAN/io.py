@@ -158,6 +158,10 @@ def load_pretraining(datadir, ntrain, padding_mode='constant', image_shape=(18, 
         U = tf.pad(U, paddings, mode=padding_mode)
 
     # # training on random sample from dataset
+    if ntrain < 1:
+        ntrain = int(ntrain * data.time.size)
+        print('Number of training samples:', ntrain)
+    
     train_idx = tf.random.shuffle(tf.range(tf.shape(data.time)[0]))[:ntrain]
     train_mask = tf.scatter_nd(tf.expand_dims(train_idx, 1), 
                             tf.ones(ntrain, dtype=bool), 
