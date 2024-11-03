@@ -1,14 +1,16 @@
 """
 Create a pre-training dataset for the GAN as follows:
-1. Create sliding windows of u10 and tp for 2 to 20 day windows, covering all the 
+-----------------------------------------------------
+    1. Create sliding windows of u10 and tp for 2 to 20 day windows, covering all the 
     lengths of storms in the storm footprint data.
-2. Transform to Gumbel(0, 1) using the empirical CDF.
-3. Save as a new xarray dataset.
+    2. Deseasonalise using monthly medians
+    3. Transform to Gumbel(0, 1) using the empirical CDF.
+    4. Save as a new xarray dataset.
 
 Not implemented:
-* Deseasonalisation
-* Removing outliers
-* Accounting for autocorrelations 
+----------------
+    - Removing outliers / wind and precip bombs
+    - Accounting for autocorrelations 
 """
 # %%
 import os
@@ -27,6 +29,10 @@ plt.yscale('log')
 ds_train = xr.open_dataset('/Users/alison/Documents/DPhil/paper1.nosync/training/18x22/data.nc')
 ds_train['duration'].plot.hist()
 window_length = [2, 5, 8, 10, 12, 15, 20]
+
+# %% deseasonalise (with medians)
+monthly = ds.groupby('time.month').median()
+ds = ds.groupby('time.month') - monthly
 
 # %%
 from hazGAN import sliding_windows
