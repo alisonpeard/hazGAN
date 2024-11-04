@@ -42,26 +42,31 @@ window_length = [2, 5, 8, 10, 12, 15, 20]
                  
 u10s = []
 tps = []
+msls = []
 windows = []
 for window in window_length:
     u10 = sliding_windows(ds['u10'].values, window)
     tp = sliding_windows(ds['tp'].values, window)
+    msl = sliding_windows(ds['msl'].values, window)
     window_length = [window] * u10.shape[0]
 
     # reduce arrays along window dimensions
     u10 = u10.max(axis=1)
     tp = tp.sum(axis=1)
+    msl = msl.sum(axis=1)
 
     # append to list
     u10s.append(u10)
     tps.append(tp)
+    msls.append(msl)
     windows.append(window_length)
 
 u10 = np.concatenate(u10s, axis=0)
 tp = np.concatenate(tps, axis=0)
+msl = np.concatenate(msls, axis=0)
 window_length = np.concatenate(windows, axis=0)
 
-X = np.stack([u10, tp], axis=-1)
+X = np.stack([u10, tp, msl], axis=-1)
 X.shape
 
 # %% make a new xarray dataset
@@ -74,7 +79,7 @@ ds_window = xr.Dataset(
         'time': range(u10.shape[0]),
         'latitude': ds.latitude,
         'longitude': ds.longitude,
-        'channel': ['u10', 'tp']
+        'channel': ['u10', 'tp', 'mslp']
         }
 )
 ds = ds_window

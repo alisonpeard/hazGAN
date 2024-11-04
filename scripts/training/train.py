@@ -16,7 +16,7 @@ Requirements:
 Output:
 -------
     - best checkpoint: checkpoint.weights.h5
-    - saved_models: generator.weights.h5, critic.weights.h5
+    - final checkpoint: generator.weights.h5, critic.weights.h5
 
 To use pretrained weights:
 --------------------------
@@ -31,8 +31,8 @@ To run locally:
 
 To run on linux cluster:
 ------------------------
->>> srun -p Short --pty python train.py --dry-run --cluster
->>> srun -p GPU --gres=gpu:tesla:1 --pty python train.py --dry-run --cluster
+>>> srun -p Short --pty python train.py --dry-run
+>>> srun -p GPU --gres=gpu:tesla:1 --pty python train.py --dry-run
 
 To run sweep:
 -------------
@@ -48,6 +48,7 @@ import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import wandb
+from environs import Env
 import hazGAN as hg
 from hazGAN import WandbMetricsLogger
 tf.keras.backend.clear_session()
@@ -61,7 +62,7 @@ data_source = "era5"
 res = (18, 22)
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
-
+channels = ['u10', 'mslp']
 
 def check_interactive(sys):
     """Check if running in interactive mode"""
@@ -110,55 +111,38 @@ def main(config):
                             config.train_size,
                             padding_mode='reflect',
                             gumbel_marginals=config.gumbel,
-                            u10_min=15
+                            u10_min=15,
+                            channels=channels
                             )
-    train_minority = minority['train_u']
-    test_minority = minority['test_u']
-
     majority = hg.load_training(datadir,
                             config.train_size,
                             padding_mode='reflect',
                             gumbel_marginals=config.gumbel,
-                            u10_max=15
+                            u10_max=15,
+                            channels=channels
                             )
-    train_majority = majority['train_u']
-    test_majority = majority['test_u']
-
     pretrain = hg.load_pretraining(datadir,
                                          config.train_size,
                                          padding_mode='reflect',
-                                         gumbel_marginals=config.gumbel
+                                         gumbel_marginals=config.gumbel,
+                                         channels=channels
                                          )
+    train_minority = minority['train_u']
+    test_minority = minority['test_u']
+    train_majority = majority['train_u']
+    test_majority = majority['test_u']
     train_pre = pretrain['train_u']
     test_pre = pretrain['test_u']
-
     train = hg.BalancedBatchNd([train_pre, train_majority, train_minority],
                                ratios=[1/3, 1/3, 1/3])
     test = hg.BalancedBatchNd([test_pre, test_majority, test_minority],
                                ratios=[1/3, 1/3, 1/3])
-
-
-    # train = hg.BalancedBatch(train_majority, train_minority, config.batch_size, ratio=0.5)
-    # test = hg.BalancedBatch(test_majority, test_minority, config.batch_size, name='validation', ratio=0.5)
-    
     print("Train size:", len(train))
     print("Test size:", len(test))
 
     # define callbacks
     critic_val = hg.CriticVal(test)
     image_count = hg.CountImagesSeen(ntrain=config.train_size)
-    # compound = hg.CompoundMetric(frequency=config.chi_frequency)
-    # chi_score = hg.ChiScore({
-    #         "train": next(iter(train)),
-    #         "test": next(iter(test))
-    #         },
-    #     frequency=config.chi_frequency,
-    #     gumbel_margins=config.gumbel
-    #     )
-    # chi_squared = hg.ChiSquared(
-    #     batchsize=config.batch_size,
-    #     frequency=config.chi_frequency
-    #     )    
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         os.path.join(rundir, "checkpoint.weights.h5"),
         monitor="compound_metric",
@@ -178,9 +162,6 @@ def main(config):
             callbacks=[
                 critic_val, # infinite loop
                 image_count,
-                # chi_score,
-                # chi_squared,
-                # compound,
                 WandbMetricsLogger(),
                 checkpoint
                 ]
@@ -289,7 +270,7 @@ def main(config):
         fig.suptitle('64 most extreme samples', fontsize=18)
         log_image_to_wandb(fig, f"max_samples", imdir)
 
-        # Fig 4: 63 most extreme training samples
+        # Fig 4: 64 most extreme training samples
         X = all_data['train_x'].numpy()[..., 0]
         if X.shape[0] < 64:
             # repeat X until it has 64 samples
@@ -319,26 +300,22 @@ if __name__ == "__main__":
         # parse arguments (if running from command line)
         parser = argparse.ArgumentParser()
         parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
-        parser.add_argument('--cluster', '-c', dest="cluster", action='store_true', default=False, help='Running on cluster')
         parser.add_argument('--force-cpu', '-f', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
         args = parser.parse_args()
         dry_run = args.dry_run
-        cluster = args.cluster
         force_cpu = args.force_cpu
     else:
         # set defaults for interactive mode
         dry_run = True
-        cluster = False
         force_cpu = False
 
     # setup device
     device = config_tf_devices()
 
     # set up directories
-    if cluster:
-        wd = os.path.join('/soge-home', 'projects', 'mistral', 'alison', 'hazGAN')
-    else: # local hazGAN parent directory
-        wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync') 
+    env = Env()
+    env.read_env(recurse=True)  # read .env file, if it exists
+    wd = env.str("WORKINGDIR")
     datadir = os.path.join(wd, 'training', f"{res[0]}x{res[1]}")  # keep data folder in parent directory
     print(f"Loading data from {datadir}")
     imdir = os.path.join(wd, "figures", "temp")
@@ -348,8 +325,8 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 1,
-            'train_size': 128,
+            'nepochs': 10,
+            'train_size': 0.6,
             'batch_size': 64,
             'chi_frequency': 1
             },

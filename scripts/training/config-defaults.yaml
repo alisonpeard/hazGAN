@@ -4,7 +4,7 @@ model:
   value: wgan
 nepochs:
   desc: Gulrajani et al. 2017 use 200_000
-  value: 20_000 # 3000 # or 1,500,000/train_size
+  value: 200 # 3000 # or 1,500,000/train_size
 train_size:
   value: 0.6 # 840 # 50
 batch_size:
@@ -52,8 +52,8 @@ lrelu:
   desc: Gulrajani et al. 2017 use 0.2
   value: 0.2
 dropout:
-  desc: Gulrajani et al. 2017 don't use dropout
-  value: 0.4
+  desc: Gulrajani et al. 2017 don't use dropout, neither does Shruti
+  value: 0.
 latent_dims:
   desc: Gulrajani et al. 2017 use 128
   value: 128
