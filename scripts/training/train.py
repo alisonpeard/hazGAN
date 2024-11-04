@@ -49,6 +49,7 @@ import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import wandb
+from watermark import watermark
 from environs import Env
 import hazGAN as hg
 from hazGAN import WandbMetricsLogger
@@ -101,7 +102,6 @@ def config_tf_devices():
     else:
         print(f"Using GPU: {gpu_names[0]}")
         return gpu_names[0]
-
 
 
 # %% ----Main function----
@@ -356,6 +356,8 @@ if __name__ == "__main__":
     config = wandb.config
     # %%
     history = main(config)
+
+    print(watermark(iversions=True, globals_=globals()))
 
 # %% ---------------------------------END---------------------------------
 
