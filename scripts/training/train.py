@@ -336,7 +336,7 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 1,
+            'nepochs': 2,
             'train_size': 0.6,
             'batch_size': 64,
             'chi_frequency': 1

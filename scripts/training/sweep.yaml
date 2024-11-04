@@ -1,7 +1,7 @@
 project: hazGAN
 program: train.py
 method: bayes
-name: greater-than-15
+name: balanced-batching
 metric:
   goal: minimize
   name: chi_rmse

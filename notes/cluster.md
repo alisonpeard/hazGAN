@@ -1,9 +1,10 @@
-# For hazGAN (Tensorflow)
+# For hazGAN [Tensorflow]
 ## Check cluster nodes status
 ```bash
 sinfo
 srun -w ouce-cn19 --pty /bin/bash
 ```
+
 ## Set up hazGAN environment from YAML
 ```bash
 cd hazGAN/environments
@@ -36,7 +37,9 @@ ln -s py libnvinfer_plugin.so.8.6.1
 export LD_LIBRARY_PATH=/soge-home/users/spet5107/micromamba/envs/hazGAN-GPU/lib:${LD_LIBRARY_PATH}
 export LD_LIBRARY_PATH=/soge-home/users/spet5107/micromamba/envs/hazGAN-GPU/lib/python3.12/site-packages/tensorrt_libs:${LD_LIBRARY_PATH}
 ```
+
 I still see the following warnings whenever I initialize a tensorflow script. When working on a shared server with multiple CUDA versions, these warnings are common and usually not critical.
+
 ```bash
 2024-11-04 20:14:45.534997: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:477] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
 WARNING: All log messages before absl::InitializeLog() is called are written to STDERR

@@ -68,7 +68,7 @@ d_layers:
   value: [64, 128, 256]
 interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
-  value: nearest
+  value: bilinear
 normalize_generator:
   desc: Whether to batch normalize generator blocks.
   value: False
