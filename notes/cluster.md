@@ -1,3 +1,60 @@
+# For hazGAN (Tensorflow)
+## Check cluster nodes status
+```bash
+sinfo
+srun -w ouce-cn19 --pty /bin/bash
+```
+## Set up hazGAN environment from YAML
+```bash
+cd hazGAN/environments
+micromamba create -f linux-gpu.yaml
+micromamba activate hazGAN
+```
+If you are using GPU with CUDA. First, basic test that the GPU is working:
+
+```bash
+srun -w ouce-cn19 --pty /bin/bash
+micromamba activate hazGAN
+cd ../scripts/cluster
+
+bash verify-gpu.sh
+
+python helloworld_tensorflow.py --device CPU
+python helloworld_tensorflow.py --device GPU
+```
+
+Sometimes you need to set up your environment to make sure your script can find `cudnn` (go over all this to make sure not out of date):
+
+```bash
+pip install --no-cache-dir --extra-index-url https://pypi.nvidia.com tensorrt-libs # nofix
+
+cd ~/micromamba/envs/hazGAN-GPU/lib/python3.12/site-packages/tensorrt_libs
+
+ln -s libnvinfer.so.10 libnvinfer.so.8.6.1l
+ln -s py libnvinfer_plugin.so.8.6.1
+
+export LD_LIBRARY_PATH=/soge-home/users/spet5107/micromamba/envs/hazGAN-GPU/lib:${LD_LIBRARY_PATH}
+export LD_LIBRARY_PATH=/soge-home/users/spet5107/micromamba/envs/hazGAN-GPU/lib/python3.12/site-packages/tensorrt_libs:${LD_LIBRARY_PATH}
+```
+I still see the following warnings whenever I initialize a tensorflow script. When working on a shared server with multiple CUDA versions, these warnings are common and usually not critical.
+```bash
+2024-11-04 20:14:45.534997: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:477] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1730751285.555829  295528 cuda_dnn.cc:8310] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+E0000 00:00:1730751285.562363  295528 cuda_blas.cc:1418] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2024-11-04 20:14:45.586065: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+```
+Claude-suggested workarounds:
+```bash
+# Set CUDA 12.4 as it matches your nvcc version
+export CUDA_HOME=/usr/local/cuda-12.4
+export PATH=$CUDA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+```
+This is just because there are multiple versions of CUDA installed on the server.
+
+# For StylGAN2+DiffAugment
 ## Check CUDA version
 ```
 (DiffAug) spet5107@ouce-cn24 /soge-home/projects/mistral/alison/data-efficient-gans/DiffAugment-stylegan2-pytorch (ecdf-only)

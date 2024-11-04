@@ -20,13 +20,12 @@ dependencies:
     - notebook
     - matplotlib
     - cartopy # for basemaps
-    - seaborn
     - pyyaml
     - h5py
     - pyarrow>=10.0.1
     - dask
     - pip:
-        #- tensorflow-macos #==2.12
+        - environs
         - tensorflow>=2.16 
         - tensorflow-probability
         - tf-keras
