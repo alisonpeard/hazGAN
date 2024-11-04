@@ -14,7 +14,7 @@ from tensorflow.keras.optimizers.schedules import ExponentialDecay
 from inspect import signature
 
 from .extreme_value_theory import chi_loss, inv_gumbel
-from .tensorflow import DiffAugment
+from .tf_utils import DiffAugment
 
 
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):

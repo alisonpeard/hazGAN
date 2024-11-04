@@ -1,23 +1,32 @@
 """Data handling methods for the hazGAN model."""
 import os
-import warnings
-import numpy as np
+import pandas as pd
 import tensorflow as tf
 import xarray as xr
 from .extreme_value_theory import gumbel
-from .utils import KNOWN_OUTLIERS
 
-def load_datasets(datadir, ntrain, padding_mode='reflect', image_shape=(18, 22), gumbel_marginals=False, batch_size=32):
-    [train_u, test_u], *_ = load_training(datadir, ntrain, padding_mode, image_shape, gumbel_marginals=gumbel_marginals)
-    train = tf.data.Dataset.from_tensor_slices(train_u).batch(batch_size)
-    test = tf.data.Dataset.from_tensor_slices(test_u).batch(batch_size)
-    return train, test
 
+def print_if_verbose(string:str, verbose=True):
+    if verbose:
+        print(string)
+
+
+def process_outliers(datadir, verbose):
+    outlier_file = os.path.join(datadir, 'outliers.csv')
+    if os.path.isfile(outlier_file):
+        print_if_verbose("Loading file containing outliers.", verbose)
+        outliers = pd.read_csv(outlier_file, index_col=[0])
+        outliers = pd.to_datetime(outliers['time']).to_list()
+        return outliers
+    else:
+        print_if_verbose("No outlier file found.", verbose)
+        return None
+    
 
 # @tf.py_function(Tout=tf.float32)
 def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
                   numpy=False, gumbel_marginals=True, channels=['u10', 'tp'],
-                  uniform='uniform', u10_min=None, u10_max=None):
+                  uniform='uniform', u10_min=None, u10_max=None, verbose=True):
     """
     Load the hazGAN training data from the data.nc file.
 
@@ -43,27 +52,29 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
         and Tawn  (2004).
     """
     data = xr.open_dataset(os.path.join(datadir, "data.nc"))
-    time_no_outlier = data.where(~data.time.isin(KNOWN_OUTLIERS), drop=True).time
-    data = data.sel(time=time_no_outlier)
+    outliers = process_outliers(datadir, verbose)
+    if outliers is not None:
+        time_no_outlier = data.where(~data.time.isin(outliers), drop=True).time
+        data = data.sel(time=time_no_outlier)
     data = data.sel(channel=channels)
 
     if u10_min is not None:
-        print('Only taking footprints with max u10 anomaly greater than', u10_min)
+        print_if_verbose(f'Only taking footprints with max u10 anomaly greater than {u10_min}', verbose)
         data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
         time_subset = data.where(data.maxima >= u10_min, drop=True).time
         data = data.sel(time=time_subset)
-        print('Number of remaining footprints:', len(data.time))
+        print_if_verbose(f'Number of usable footprints: {len(data.time)}', verbose)
 
     if u10_max is not None:
-        print('Only taking footprints with max u10 anomaly less than', u10_max)
+        print_if_verbose(f'Only taking footprints with max u10 anomaly less than {u10_max}', verbose)
         data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
         time_subset = data.where(data.maxima < u10_max, drop=True).time
         data = data.sel(time=time_subset)
-        print('Number of remaining footprints:', len(data.time))
+        print_if_verbose(f'Number of usable footprints: {len(data.time)}', verbose)
 
     if ntrain < 1:
         ntrain = int(ntrain * data.time.size)
-        print('Number of training samples:', ntrain)
+        print_if_verbose(f'Number of training samples: {ntrain}', verbose)
 
     X = tf.image.resize(data.anomaly, image_shape)
     U = tf.image.resize(data[uniform], image_shape)
@@ -107,13 +118,12 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
     training = {'train_u': train_u, 'test_u': test_u, 'train_x': train_x, 'test_x': test_x,
                 'train_m': train_m, 'test_m': test_m, 'train_z': train_z, 'test_z': test_z,
                 'params': params, 'train_mask': train_mask, 'test_mask': test_mask}
-    
     return training
 
 
 def load_pretraining(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
                   numpy=False, gumbel_marginals=True, channels=['u10', 'tp'],
-                  uniform='uniform', u10_min=None):
+                  uniform='uniform', u10_min=None, verbose=True):
     """
     Load the hazGAN training data from the data.nc file.
 
@@ -139,18 +149,22 @@ def load_pretraining(datadir, ntrain, padding_mode='constant', image_shape=(18, 
         and Tawn  (2004).
     """
     data = xr.open_dataset(os.path.join(datadir, "data_pretrain.nc"))
+    outliers = process_outliers(datadir, verbose)
+    if outliers is not None:
+        time_no_outlier = data.where(~data.time.isin(outliers), drop=True).time
+        data = data.sel(time=time_no_outlier)
     data = data.sel(channel=channels)
-    print(f"Dataset has {len(data.time):,} footprints.")
+    print_if_verbose(f"Dataset has {len(data.time):,} footprints.", verbose)
 
     if u10_min is not None:
         print('Only taking footprints with max u10 anomaly greater than', u10_min)
         data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
         time_subset = data.where(data.maxima >= u10_min, drop=True).time
         data = data.sel(time=time_subset)
-        print('Number of remaining footprints:', len(data.time))
-        print('Number of training samples:', ntrain)
+        print_if_verbose(f'Number of usable footprints: {len(data.time)}', verbose)
+        print_if_verbose(f'Number of training samples: {ntrain}', verbose)
 
-    X = tf.image.resize(data.anomaly, image_shape)
+    X = tf.image.resize(data['anomaly'], image_shape)
     U = tf.image.resize(data[uniform], image_shape)
     
     if padding_mode is not None:
@@ -160,7 +174,7 @@ def load_pretraining(datadir, ntrain, padding_mode='constant', image_shape=(18, 
     # # training on random sample from dataset
     if ntrain < 1:
         ntrain = int(ntrain * data.time.size)
-        print('Number of training samples:', ntrain)
+        # print('Number of training samples:', ntrain)
     
     train_idx = tf.random.shuffle(tf.range(tf.shape(data.time)[0]))[:ntrain]
     train_mask = tf.scatter_nd(tf.expand_dims(train_idx, 1), 
@@ -190,6 +204,6 @@ def load_pretraining(datadir, ntrain, padding_mode='constant', image_shape=(18, 
     # return a dictionary to keep it tidy
     training = {'train_u': train_u, 'test_u': test_u, 'train_x': train_x, 'test_x': test_x,
                 'train_mask': train_mask, 'test_mask': test_mask}
-    
     return training
+
 # ----------------------------END-------------------------------------

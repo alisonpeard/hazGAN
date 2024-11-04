@@ -3,7 +3,7 @@ from .plotting import *
 from .io import *
 from .defaults import *
 from .extreme_value_theory import *
-from .tensorflow import *
+from .tf_utils import *
 from .WGANGP import *
 
 __version__ = "2.01"

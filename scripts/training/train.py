@@ -10,7 +10,8 @@ package for data loading, metrics, and plotting.
 Requirements:
 -------------
     - env: hazGAN
-    - GAN configuratino: config-defaults.yaml
+    - local paths: .env file
+    - GAN configuration: config-defaults.yaml
     - data: training/18x22/data.nc
 
 Output:
@@ -62,7 +63,6 @@ data_source = "era5"
 res = (18, 22)
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
-channels = ['u10', 'mslp']
 
 def check_interactive(sys):
     """Check if running in interactive mode"""
@@ -108,24 +108,24 @@ def config_tf_devices():
 def main(config):
     # load data
     minority = hg.load_training(datadir,
-                            config.train_size,
+                            config['train_size'],
                             padding_mode='reflect',
-                            gumbel_marginals=config.gumbel,
+                            gumbel_marginals=config['gumbel'],
                             u10_min=15,
-                            channels=channels
+                            channels=config['channels']
                             )
     majority = hg.load_training(datadir,
-                            config.train_size,
+                            config['train_size'],
                             padding_mode='reflect',
-                            gumbel_marginals=config.gumbel,
+                            gumbel_marginals=config['gumbel'],
                             u10_max=15,
-                            channels=channels
+                            channels=config['channels']
                             )
     pretrain = hg.load_pretraining(datadir,
-                                         config.train_size,
+                                         config['train_size'],
                                          padding_mode='reflect',
-                                         gumbel_marginals=config.gumbel,
-                                         channels=channels
+                                         gumbel_marginals=config['gumbel'],
+                                         channels=config['channels']
                                          )
     train_minority = minority['train_u']
     test_minority = minority['test_u']
@@ -134,15 +134,15 @@ def main(config):
     train_pre = pretrain['train_u']
     test_pre = pretrain['test_u']
     train = hg.BalancedBatchNd([train_pre, train_majority, train_minority],
-                               ratios=[1/3, 1/3, 1/3])
+                               ratios=config['ratios'])
     test = hg.BalancedBatchNd([test_pre, test_majority, test_minority],
-                               ratios=[1/3, 1/3, 1/3])
-    print("Train size:", len(train))
-    print("Test size:", len(test))
+                               ratios=config['ratios'])
+    print("Number of training batches:", len(train))
+    print("Number of validation batches:", len(test))
 
     # define callbacks
     critic_val = hg.CriticVal(test)
-    image_count = hg.CountImagesSeen(ntrain=config.train_size)
+    image_count = hg.CountImagesSeen(ntrain=train.size)
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         os.path.join(rundir, "checkpoint.weights.h5"),
         monitor="compound_metric",
@@ -155,12 +155,12 @@ def main(config):
     # compile
     print("\nStarting training...")
     with tf.device(device):
-        gan = getattr(hg, f"compile_{config.model}")(config, nchannels=2)
+        gan = getattr(hg, f"compile_{config['model']}")(config, nchannels=len(config['channels']))
         history = gan.fit(
             train,
             epochs=config.nepochs,
             callbacks=[
-                critic_val, # infinite loop
+                critic_val,
                 image_count,
                 WandbMetricsLogger(),
                 checkpoint
@@ -175,16 +175,18 @@ def main(config):
         all_data = minority = hg.load_training(datadir,
                             config.train_size,
                             padding_mode='reflect',
-                            gumbel_marginals=config.gumbel
+                            gumbel_marginals=config['gumbel'],
+                            channels=config['channels']
                             )
         train_u = all_data['train_u']
         test_u = all_data['test_u']
 
         # ----Figures----
+        channel = 0
         paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
         train_u = hg.inv_gumbel(hg.unpad(train_u, paddings)).numpy()
         test_u = hg.inv_gumbel(hg.unpad(test_u, paddings)).numpy()
-        fake_u = hg.unpad(gan(nsamples=config.train_size), paddings).numpy()
+        fake_u = hg.unpad(gan(nsamples=64), paddings).numpy()
         
         cmap = plt.cm.coolwarm_r
         vmin = 1
@@ -222,10 +224,9 @@ def main(config):
         log_image_to_wandb(fig, f"extremal_dependence", imdir)
 
         # Fig 2: spatial extremal coefficients
-        i = 0 # only look at wind speed
-        ecs_train = hg.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., i]).numpy()
-        ecs_test = hg.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., i]).numpy()
-        ecs_gen = hg.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., i]).numpy()
+        ecs_train = hg.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., channel]).numpy()
+        ecs_test = hg.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., channel]).numpy()
+        ecs_gen = hg.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., channel]).numpy()
         fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
                             gridspec_kw={
                                 'wspace': .02,
@@ -245,12 +246,15 @@ def main(config):
         axs[0].set_ylabel('Extremal coeff.', fontsize=18);
         log_image_to_wandb(fig, f"spatial_dependence", imdir)
 
-        # Fig 3: 64 most extreme samples
+        # ----Fig 3: 64 most extreme generated samples----
         X = all_data['train_x'].numpy()
         U = hg.unpad(all_data['train_u']).numpy()
         params = all_data['params']
         x = hg.POT.inv_probability_integral_transform(fake_u, X, U, params)
-        x = x[..., 0]
+
+        x = fake_u[:64, ..., channel] # x[..., channel]
+        vmin = x.min()
+        vmax = x.max()
         if x.shape[0] < 64:
             # repeat x until it has 64 samples
             x = np.concatenate([x] * int(np.ceil(64 / x.shape[0])), axis=0)
@@ -263,15 +267,20 @@ def main(config):
         fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
                                 gridspec_kw={'hspace': 0, 'wspace': 0})
         for i, ax in enumerate(axs.ravel()):
-            ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r', levels=20)
+            im = ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r',
+                        vmin=vmin, vmax=vmin, levels=20)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.invert_yaxis()
-        fig.suptitle('64 most extreme samples', fontsize=18)
+        fig.suptitle(f'64 most extreme {config.channels[channel]} generated samples', fontsize=18)
+        fig.colorbar(im, ax=axs.ravel().tolist())
         log_image_to_wandb(fig, f"max_samples", imdir)
 
-        # Fig 4: 64 most extreme training samples
-        X = all_data['train_x'].numpy()[..., 0]
+        # ----Fig 4: 64 most extreme training samples----
+        # X = all_data['train_x'].numpy()[..., channel]
+        X = hg.unpad(all_data['train_u']).numpy()[:64, ..., channel]
+        vmin = X.min()
+        vmax = X.max()
         if X.shape[0] < 64:
             # repeat X until it has 64 samples
             X = np.concatenate([X] * int(np.ceil(64 / X.shape[0])), axis=0)
@@ -281,11 +290,13 @@ def main(config):
         fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
                                 gridspec_kw={'hspace': 0, 'wspace': 0})
         for i, ax in enumerate(axs.ravel()):
-            ax.contourf(lon, lat, X[i, ...], cmap='Spectral_r', levels=20)
+            im = ax.contourf(lon, lat, X[i, ...], cmap='Spectral_r',
+                        vmin=vmin, vmax=vmax, levels=20)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.invert_yaxis()
-        fig.suptitle('64 most extreme training samples', fontsize=18)
+        fig.colorbar(im, ax=axs.ravel().tolist())
+        fig.suptitle(f'64 most extreme {config.channels[channel]} training samples', fontsize=18)
         log_image_to_wandb(fig, f"max_train_samples", imdir)
     
     else: # delete rundir and its contents
@@ -325,7 +336,7 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 10,
+            'nepochs': 1,
             'train_size': 0.6,
             'batch_size': 64,
             'chi_frequency': 1
@@ -343,6 +354,7 @@ if __name__ == "__main__":
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
     tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations
     config = wandb.config
+    # %%
     history = main(config)
 
 # %% ---------------------------------END---------------------------------

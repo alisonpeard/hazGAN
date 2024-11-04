@@ -86,8 +86,9 @@ ds = ds_window
 
 # %% Transform to Gumbel(0, 1) using the empirical CDF
 def ecdf(ds, var, index_var='time'):
-    rank = ds[var].rank(dim=index_var, keep_attrs=True)
+    rank = ds[var].rank(dim=index_var)
     ecdf = rank / (len(ds[index_var]) + 1)
+    assert ecdf.max() < 1
     return ecdf
 
 def gumbel(ds, var):

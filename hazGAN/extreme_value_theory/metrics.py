@@ -45,17 +45,10 @@ def chi_loss(real, fake):
     
     def compute_chi_diff(i):
         return channel_chi_diff(real, fake, i)
-    
-    # TODO: vectorise this instead of using tf.vectorized_map
-    # c = tf.shape(real)[-1]
-    # chi_diffs = tf.vectorized_map(compute_chi_diff, tf.range(c)) # , fn_output_signature=tf.float32
 
-    # hardcoded for 2 channels -- TODO
-    chi_diff_0 = compute_chi_diff(0)
-    chi_diff_1 = compute_chi_diff(1)
-    chi_diffs = 0.5 * (chi_diff_0 + chi_diff_1)
-
-    return tf.reduce_mean(chi_diffs)
+    c = tf.shape(real)[-1]
+    chi_diff = tf.vectorized_map(compute_chi_diff, tf.range(c))
+    return tf.reduce_mean(chi_diff)
 
 
 @tf.function

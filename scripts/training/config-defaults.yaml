@@ -4,17 +4,20 @@ model:
   value: wgan
 nepochs:
   desc: Gulrajani et al. 2017 use 200_000
-  value: 200 # 3000 # or 1,500,000/train_size
+  value: 20 # 3000 # or 1,500,000/train_size
 train_size:
   value: 0.6 # 840 # 50
 batch_size:
-  value: 64
+  value: 128
+channels:
+  desc: Which channels to model, subsets of ['u10', 'tp', 'mslp']
+  value: ['u10']
+ratios:
+  desc: Dataset representation per-batch
+  value: [0.333334, 0.333333, 0.333333]
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
   value: 10
-u10_min:
-  desc: Minimum value of u10 anomaly for training data
-  value: 15 # you get two footprints if 40, 6 for 32.5 [15, 32.5, 40]
 augment_policy:
   desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
   value: 'color,translation,cutout'
@@ -30,7 +33,7 @@ training_balance:
   desc: Gulrajani et al. 2017 use 5
   value: 5
 latent_space_distn:
-  desc: Distribution of latent space, ['normal', 'uniform', 'gumbel', 't']
+  desc: Distribution of latent space, ['normal', 'uniform', 'gumbel']
   value: gumbel
 gumbel:
   desc: Train on Gumbel marginals instead of uniform marginals
