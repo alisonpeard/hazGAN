@@ -350,7 +350,7 @@ if __name__ == "__main__":
     os.makedirs(rundir, exist_ok=True)
 
     # set seed for reproductibility
-    wandb.config["seed"] = np.random.randint(0, 500)
+    wandb.config["seed"] = np.random.randint(0, 100)
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
     tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations
     config = wandb.config
