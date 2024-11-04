@@ -1,19 +1,24 @@
 project: hazGAN
 program: train.py
 method: bayes
-name: greater-than-15
+name: balanced-batching
 metric:
   goal: minimize
   name: chi_rmse
 parameters:
   ntrain:
-    values: [64, 128]
+    values: [0.6, 0.7, 0.8, 0.9]
+  channels:
+    values:
+      - ['u10']
+      - ['u10', 'tp']
+      - ['u10', 'mslp']
   training_balance:
     distribution: int_uniform
     min: 1
     max: 5
   latent_dims:
-    values: [64, 100, 128, 256]
+    values: [64, 100, 128]
   g_complexity:
     values: [1, 2]
   d_complexity:
@@ -37,4 +42,3 @@ command:
   - ${env}
   - ${interpreter}
   - ${program}
-  - "--cluster"

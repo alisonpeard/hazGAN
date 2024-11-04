@@ -5,6 +5,7 @@ channels:
 dependencies:
     - python
     - pip
+    - apple::tensorflow-deps
     - numpy
     - pandas
     - geopandas
@@ -14,6 +15,7 @@ dependencies:
     - rioxarray
     - hdf5
     - netcdf4
+    - shapely>=2.0
     - scipy
     - scikit-learn
     - ipykernel
@@ -26,20 +28,23 @@ dependencies:
     - pyarrow>=10.0.1
     - dask
     - pip:
-        #- tensorflow-macos #==2.12
-        - tensorflow>=2.16 
+        # - tensorflow-macos #==2.12
+        - environs
+        - bottleneck
+        - tensorflow>=2.16 # for python 3.10
+        - tensorflow-metal
         - tensorflow-probability
         - tf-keras
         - wandb==0.16.6 # stable May 2024
         - cdsapi # copernicus climate data store API
-        - -e ..
+        - pytest
+        - -e /Users/alison/Documents/DPhil/paper1.nosync/hazGAN
+        - -e /Users/alison/Documents/DPhil/geospatial_utils
 
 # ---------Notes----------
 # mamba env create -n hazGAN -f hazGAN.yaml
 # cd hazGAN
 # conda activate hazGAN
-# python -m ipykernel install --user --n hazGAN
-# python -m pip install -e .
 
 # ---------Uninstall----------
 # conda env remove -n hazGAN

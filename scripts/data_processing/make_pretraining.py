@@ -1,14 +1,16 @@
 """
 Create a pre-training dataset for the GAN as follows:
-1. Create sliding windows of u10 and tp for 2 to 20 day windows, covering all the 
+-----------------------------------------------------
+    1. Create sliding windows of u10 and tp for 2 to 20 day windows, covering all the 
     lengths of storms in the storm footprint data.
-2. Transform to Gumbel(0, 1) using the empirical CDF.
-3. Save as a new xarray dataset.
+    2. Deseasonalise using monthly medians
+    3. Transform to Gumbel(0, 1) using the empirical CDF.
+    4. Save as a new xarray dataset.
 
 Not implemented:
-* Deseasonalisation
-* Removing outliers
-* Accounting for autocorrelations 
+----------------
+    - Removing outliers / wind and precip bombs
+    - Accounting for autocorrelations 
 """
 # %%
 import os
@@ -28,6 +30,10 @@ ds_train = xr.open_dataset('/Users/alison/Documents/DPhil/paper1.nosync/training
 ds_train['duration'].plot.hist()
 window_length = [2, 5, 8, 10, 12, 15, 20]
 
+# %% deseasonalise (with medians)
+monthly = ds.groupby('time.month').median()
+ds = ds.groupby('time.month') - monthly
+
 # %%
 from hazGAN import sliding_windows
 
@@ -36,26 +42,31 @@ window_length = [2, 5, 8, 10, 12, 15, 20]
                  
 u10s = []
 tps = []
+msls = []
 windows = []
 for window in window_length:
     u10 = sliding_windows(ds['u10'].values, window)
     tp = sliding_windows(ds['tp'].values, window)
+    msl = sliding_windows(ds['msl'].values, window)
     window_length = [window] * u10.shape[0]
 
     # reduce arrays along window dimensions
     u10 = u10.max(axis=1)
     tp = tp.sum(axis=1)
+    msl = msl.sum(axis=1)
 
     # append to list
     u10s.append(u10)
     tps.append(tp)
+    msls.append(msl)
     windows.append(window_length)
 
 u10 = np.concatenate(u10s, axis=0)
 tp = np.concatenate(tps, axis=0)
+msl = np.concatenate(msls, axis=0)
 window_length = np.concatenate(windows, axis=0)
 
-X = np.stack([u10, tp], axis=-1)
+X = np.stack([u10, tp, msl], axis=-1)
 X.shape
 
 # %% make a new xarray dataset
@@ -68,15 +79,16 @@ ds_window = xr.Dataset(
         'time': range(u10.shape[0]),
         'latitude': ds.latitude,
         'longitude': ds.longitude,
-        'channel': ['u10', 'tp']
+        'channel': ['u10', 'tp', 'mslp']
         }
 )
 ds = ds_window
 
 # %% Transform to Gumbel(0, 1) using the empirical CDF
 def ecdf(ds, var, index_var='time'):
-    rank = ds[var].rank(dim=index_var, keep_attrs=True)
+    rank = ds[var].rank(dim=index_var)
     ecdf = rank / (len(ds[index_var]) + 1)
+    assert ecdf.max() < 1
     return ecdf
 
 def gumbel(ds, var):

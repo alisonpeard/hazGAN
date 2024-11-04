@@ -4,17 +4,20 @@ model:
   value: wgan
 nepochs:
   desc: Gulrajani et al. 2017 use 200_000
-  value: 10_000 # 3000 # or 1,500,000/train_size
+  value: 20 # 3000 # or 1,500,000/train_size
 train_size:
-  value: 100 # 840 # 50
+  value: 0.6 # 840 # 50
 batch_size:
-  value: 100
+  value: 128
+channels:
+  desc: Which channels to model, subsets of ['u10', 'tp', 'mslp']
+  value: ['u10']
+ratios:
+  desc: Dataset representation per-batch
+  value: [0.333334, 0.333333, 0.333333]
 chi_frequency:
   desc: How often to calculate chi-score for train and test.
   value: 10
-u10_min:
-  desc: Minimum value of u10 anomaly for training data
-  value: 15 # you get two footprints if 40, 6 for 32.5 [15, 32.5, 40]
 augment_policy:
   desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
   value: 'color,translation,cutout'
@@ -30,7 +33,7 @@ training_balance:
   desc: Gulrajani et al. 2017 use 5
   value: 5
 latent_space_distn:
-  desc: Distribution of latent space, ['normal', 'uniform', 'gumbel', 't']
+  desc: Distribution of latent space, ['normal', 'uniform', 'gumbel']
   value: gumbel
 gumbel:
   desc: Train on Gumbel marginals instead of uniform marginals
@@ -52,8 +55,8 @@ lrelu:
   desc: Gulrajani et al. 2017 use 0.2
   value: 0.2
 dropout:
-  desc: Gulrajani et al. 2017 don't use dropout
-  value: 0.4
+  desc: Gulrajani et al. 2017 don't use dropout, neither does Shruti
+  value: 0.
 latent_dims:
   desc: Gulrajani et al. 2017 use 128
   value: 128
@@ -65,7 +68,7 @@ d_layers:
   value: [64, 128, 256]
 interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
-  value: nearest
+  value: bilinear
 normalize_generator:
   desc: Whether to batch normalize generator blocks.
   value: False

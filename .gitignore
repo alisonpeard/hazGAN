@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# my envirnoment files
+.env
+
 # weird files popping up in linux
 ._*
 

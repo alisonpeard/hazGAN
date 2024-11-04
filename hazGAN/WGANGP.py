@@ -14,7 +14,7 @@ from tensorflow.keras.optimizers.schedules import ExponentialDecay
 from inspect import signature
 
 from .extreme_value_theory import chi_loss, inv_gumbel
-from .tensorflow import DiffAugment
+from .tf_utils import DiffAugment
 
 
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
@@ -59,9 +59,10 @@ def process_optimizer_kwargs(config):
     params = get_optimizer_kwargs(config.optimizer)
     kwargs = {key: val for key, val in kwargs.items() if key in params}
 
-    if config['lr_decay']:
+    if config.get('lr_decay', False):
         lr_schedule = exponential_decay(config)
         kwargs["learning_rate"] = lr_schedule
+    
     return kwargs
 
 
@@ -70,7 +71,7 @@ def compile_wgan(config, nchannels=2):
     optimizer = getattr(optimizers, config['optimizer'])
     d_optimizer = optimizer(**kwargs)
     g_optimizer = optimizer(**kwargs)
-    wgan = WGAN(config, nchannels=nchannels)
+    wgan = WGANGP(config, nchannels=nchannels)
     wgan.compile(
         d_optimizer=d_optimizer,
         g_optimizer=g_optimizer
@@ -150,7 +151,7 @@ def define_critic(config, nchannels=2):
     return tf.keras.Model(x, out, name="critic")
 
 
-class WGAN(keras.Model):
+class WGANGP(keras.Model):
     def __init__(self, config, nchannels=2):
         super().__init__()
         self.critic = define_critic(config, nchannels)
@@ -203,6 +204,7 @@ class WGAN(keras.Model):
         
     @tf.function
     def train_step(self, data):
+        data = data[0]
         batch_size = tf.shape(data)[0]
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
         fake_data = self.generator(random_latent_vectors, training=False)
@@ -225,7 +227,7 @@ class WGAN(keras.Model):
                 if self.penalty == 'lipschitz':
                     gradient_penalty = tf.reduce_mean(tf.clip_by_value(slopes - 1., 0., np.infty)**2) # https://openreview.net/forum?id=B1hYRMbCW
                 elif self.penalty == 'gp':
-                    gradient_penalty = tf.reduce_mean((slopes - 1.0) ** 2)
+                    gradient_penalty = tf.reduce_mean((slopes - 1.) ** 2)
                 else:
                     raise ValueError("Penalty must be either 'lipschitz' or 'gp'.")
                 critic_loss += self.lambda_gp * gradient_penalty

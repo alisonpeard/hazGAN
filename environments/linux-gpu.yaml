@@ -1,4 +1,4 @@
-name: hazGAN-GPU
+name: hazGAN
 channels:
     - conda-forge
 dependencies:
@@ -20,18 +20,19 @@ dependencies:
     - cudatoolkit
     - nvidia::cuda-nvcc # https://discuss.tensorflow.org/t/installation-instruction-on-website-are-incomplete/16146
     - pip:
+        - environs
         - tensorflow[and-cuda]
         - tensorflow-probability
         - tf-keras
-        - tensorrt           # for NVIDIA GPU -- gives error on cluster unless on GPU
+        - tensorrt           # for NVIDIA GPU -- gives error installing on cluster unless on GPU
         - wandb==0.16.6      # stable May 2024
-        #- -e ..
+        - -e ..
 
 
 # ---------Notes----------
-# This actually ran just fine with my usual hazGAN environment so maybe not so vital
+# This actually ran just fine with my usual hazGAN environment
 # srun -p GPU --gres=gpu:tesla:1 --pty /bin/bash
-# micromamba create -f hazGAN-GPU.yaml
+# micromamba create -f linux-gpu.yaml
 # micromamba activate hazGAN
 # export LD_LIBRARY_PATH=/soge-home/users/spet5107/micromamba/envs/hazGAN-GPU/lib:$LD_LIBRARY_PATH
 # cd scripts

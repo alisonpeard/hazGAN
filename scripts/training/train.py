@@ -10,13 +10,14 @@ package for data loading, metrics, and plotting.
 Requirements:
 -------------
     - env: hazGAN
-    - GAN configuratino: config-defaults.yaml
+    - local paths: .env file
+    - GAN configuration: config-defaults.yaml
     - data: training/18x22/data.nc
 
 Output:
 -------
     - best checkpoint: checkpoint.weights.h5
-    - saved_models: generator.weights.h5, critic.weights.h5
+    - final checkpoint: generator.weights.h5, critic.weights.h5
 
 To use pretrained weights:
 --------------------------
@@ -31,15 +32,14 @@ To run locally:
 
 To run on linux cluster:
 ------------------------
->>> srun -p Short --pty python train.py --dry-run --cluster
->>> srun -p GPU --gres=gpu:tesla:1 --pty python train.py --dry-run --cluster
+>>> srun -p Short --pty python train.py --dry-run
+>>> srun -p GPU --gres=gpu:tesla:1 --pty python train.py --dry-run
 
 To run sweep:
 -------------
 >>> wandb sweep sweep.yaml
 >>> wandb agent alison/hazGAN/<sweep_id>
 """
-
 # %%
 import os
 import sys
@@ -48,8 +48,9 @@ import yaml
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
-
 import wandb
+from watermark import watermark
+from environs import Env
 import hazGAN as hg
 from hazGAN import WandbMetricsLogger
 tf.keras.backend.clear_session()
@@ -63,7 +64,6 @@ data_source = "era5"
 res = (18, 22)
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
-
 
 def check_interactive(sys):
     """Check if running in interactive mode"""
@@ -107,36 +107,42 @@ def config_tf_devices():
 # %% ----Main function----
 def main(config):
     # load data
-    data = hg.load_training(datadir,
-                            config.train_size,
+    minority = hg.load_training(datadir,
+                            config['train_size'],
                             padding_mode='reflect',
-                            gumbel_marginals=config.gumbel,
-                            u10_min=config.u10_min
+                            gumbel_marginals=config['gumbel'],
+                            u10_min=15,
+                            channels=config['channels']
                             )
-    train_u = data['train_u']
-    test_u = data['test_u']
-    train = tf.data.Dataset.from_tensor_slices(train_u).batch(config.batch_size)
-    test = tf.data.Dataset.from_tensor_slices(test_u).batch(config.batch_size)
-    print(f"Training data shape: {train_u.shape}")
-    
+    majority = hg.load_training(datadir,
+                            config['train_size'],
+                            padding_mode='reflect',
+                            gumbel_marginals=config['gumbel'],
+                            u10_max=15,
+                            channels=config['channels']
+                            )
+    pretrain = hg.load_pretraining(datadir,
+                                         config['train_size'],
+                                         padding_mode='reflect',
+                                         gumbel_marginals=config['gumbel'],
+                                         channels=config['channels']
+                                         )
+    train_minority = minority['train_u']
+    test_minority = minority['test_u']
+    train_majority = majority['train_u']
+    test_majority = majority['test_u']
+    train_pre = pretrain['train_u']
+    test_pre = pretrain['test_u']
+    train = hg.BalancedBatchNd([train_pre, train_majority, train_minority],
+                               ratios=config['ratios'])
+    test = hg.BalancedBatchNd([test_pre, test_majority, test_minority],
+                               ratios=config['ratios'])
+    print("Number of training batches:", len(train))
+    print("Number of validation batches:", len(test))
+
     # define callbacks
     critic_val = hg.CriticVal(test)
-    compound = hg.CompoundMetric(frequency=config.chi_frequency)
-    image_count = hg.CountImagesSeen(ntrain=config.train_size)
-
-    chi_score = hg.ChiScore({
-            "train": next(iter(train)),
-            "test": next(iter(test))
-            },
-        frequency=config.chi_frequency,
-        gumbel_margins=config.gumbel
-        )
-    
-    chi_squared = hg.ChiSquared(
-        batchsize=config.batch_size,
-        frequency=config.chi_frequency
-        )    
-
+    image_count = hg.CountImagesSeen(ntrain=train.size)
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         os.path.join(rundir, "checkpoint.weights.h5"),
         monitor="compound_metric",
@@ -146,43 +152,41 @@ def main(config):
         verbose=1
         )
     
-    early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor="chi_rmse", # or value_function
-        patience=50,
-        mode="min",
-        verbose=True,
-        restore_best_weights=True,
-        start_from_epoch=10
-        )
-
     # compile
+    print("\nStarting training...")
     with tf.device(device):
-        gan = getattr(hg, f"compile_{config.model}")(config, nchannels=2)
+        gan = getattr(hg, f"compile_{config['model']}")(config, nchannels=len(config['channels']))
         history = gan.fit(
             train,
             epochs=config.nepochs,
             callbacks=[
-                # early_stopping,
                 critic_val,
                 image_count,
-                chi_score,
-                chi_squared,
-                compound,
                 WandbMetricsLogger(),
                 checkpoint
                 ]
         )
+    print('Finished training!')
     final_chi_rmse = history.history['chi_rmse'][-1]
     print(f"Final chi_rmse: {final_chi_rmse}")
 
     if True: #TODO: final_chi_rmse <= 20.0:
         save_config(rundir)
+        all_data = minority = hg.load_training(datadir,
+                            config.train_size,
+                            padding_mode='reflect',
+                            gumbel_marginals=config['gumbel'],
+                            channels=config['channels']
+                            )
+        train_u = all_data['train_u']
+        test_u = all_data['test_u']
 
         # ----Figures----
+        channel = 0
         paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
         train_u = hg.inv_gumbel(hg.unpad(train_u, paddings)).numpy()
         test_u = hg.inv_gumbel(hg.unpad(test_u, paddings)).numpy()
-        fake_u = hg.unpad(gan(nsamples=config.train_size), paddings).numpy()
+        fake_u = hg.unpad(gan(nsamples=64), paddings).numpy()
         
         cmap = plt.cm.coolwarm_r
         vmin = 1
@@ -220,10 +224,9 @@ def main(config):
         log_image_to_wandb(fig, f"extremal_dependence", imdir)
 
         # Fig 2: spatial extremal coefficients
-        i = 0 # only look at wind speed
-        ecs_train = hg.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., i]).numpy()
-        ecs_test = hg.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., i]).numpy()
-        ecs_gen = hg.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., i]).numpy()
+        ecs_train = hg.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., channel]).numpy()
+        ecs_test = hg.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., channel]).numpy()
+        ecs_gen = hg.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., channel]).numpy()
         fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
                             gridspec_kw={
                                 'wspace': .02,
@@ -243,12 +246,15 @@ def main(config):
         axs[0].set_ylabel('Extremal coeff.', fontsize=18);
         log_image_to_wandb(fig, f"spatial_dependence", imdir)
 
-        # Fig 3: 64 most extreme samples
-        X = data['train_x'].numpy()
-        U = hg.unpad(data['train_u']).numpy()
-        params = data['params']
+        # ----Fig 3: 64 most extreme generated samples----
+        X = all_data['train_x'].numpy()
+        U = hg.unpad(all_data['train_u']).numpy()
+        params = all_data['params']
         x = hg.POT.inv_probability_integral_transform(fake_u, X, U, params)
-        x = x[..., 0]
+
+        x = fake_u[:64, ..., channel] # x[..., channel]
+        vmin = x.min()
+        vmax = x.max()
         if x.shape[0] < 64:
             # repeat x until it has 64 samples
             x = np.concatenate([x] * int(np.ceil(64 / x.shape[0])), axis=0)
@@ -261,15 +267,20 @@ def main(config):
         fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
                                 gridspec_kw={'hspace': 0, 'wspace': 0})
         for i, ax in enumerate(axs.ravel()):
-            ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r', levels=20)
+            im = ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r',
+                        vmin=vmin, vmax=vmin, levels=20)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.invert_yaxis()
-        fig.suptitle('64 most extreme samples', fontsize=18)
+        fig.suptitle(f'64 most extreme {config.channels[channel]} generated samples', fontsize=18)
+        fig.colorbar(im, ax=axs.ravel().tolist())
         log_image_to_wandb(fig, f"max_samples", imdir)
 
-        # Fig 4: 63 most extreme training samples
-        X = data['train_x'].numpy()[..., 0]
+        # ----Fig 4: 64 most extreme training samples----
+        # X = all_data['train_x'].numpy()[..., channel]
+        X = hg.unpad(all_data['train_u']).numpy()[:64, ..., channel]
+        vmin = X.min()
+        vmax = X.max()
         if X.shape[0] < 64:
             # repeat X until it has 64 samples
             X = np.concatenate([X] * int(np.ceil(64 / X.shape[0])), axis=0)
@@ -279,11 +290,13 @@ def main(config):
         fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
                                 gridspec_kw={'hspace': 0, 'wspace': 0})
         for i, ax in enumerate(axs.ravel()):
-            ax.contourf(lon, lat, X[i, ...], cmap='Spectral_r', levels=20)
+            im = ax.contourf(lon, lat, X[i, ...], cmap='Spectral_r',
+                        vmin=vmin, vmax=vmax, levels=20)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.invert_yaxis()
-        fig.suptitle('64 most extreme training samples', fontsize=18)
+        fig.colorbar(im, ax=axs.ravel().tolist())
+        fig.suptitle(f'64 most extreme {config.channels[channel]} training samples', fontsize=18)
         log_image_to_wandb(fig, f"max_train_samples", imdir)
     
     else: # delete rundir and its contents
@@ -298,27 +311,22 @@ if __name__ == "__main__":
         # parse arguments (if running from command line)
         parser = argparse.ArgumentParser()
         parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
-        parser.add_argument('--cluster', '-c', dest="cluster", action='store_true', default=False, help='Running on cluster')
         parser.add_argument('--force-cpu', '-f', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
         args = parser.parse_args()
         dry_run = args.dry_run
-        cluster = args.cluster
         force_cpu = args.force_cpu
     else:
         # set defaults for interactive mode
         dry_run = True
-        cluster = False
         force_cpu = False
 
     # setup device
     device = config_tf_devices()
 
     # set up directories
-    if cluster:
-        wd = os.path.join('/soge-home', 'projects', 'mistral', 'alison', 'hazGAN')
-    else:
-        wd = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync')  # hazGAN directory
-
+    env = Env()
+    env.read_env(recurse=True)  # read .env file, if it exists
+    wd = env.str("WORKINGDIR")
     datadir = os.path.join(wd, 'training', f"{res[0]}x{res[1]}")  # keep data folder in parent directory
     print(f"Loading data from {datadir}")
     imdir = os.path.join(wd, "figures", "temp")
@@ -328,9 +336,9 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 1,
-            'train_size': 128,
-            'batch_size': 128,
+            'nepochs': 2,
+            'train_size': 0.6,
+            'batch_size': 64,
             'chi_frequency': 1
             },
             allow_val_change=True)
@@ -345,6 +353,11 @@ if __name__ == "__main__":
     wandb.config["seed"] = np.random.randint(0, 500)
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
     tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations
-    history = main(wandb.config)
+    config = wandb.config
+    # %%
+    history = main(config)
+
+    print(watermark(iversions=True, globals_=globals()))
 
 # %% ---------------------------------END---------------------------------
+

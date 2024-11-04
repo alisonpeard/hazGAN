@@ -7,9 +7,9 @@ from tensorflow.keras.callbacks import Callback
 from tensorflow.nn import sigmoid_cross_entropy_with_logits as cross_entropy
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
-from .extreme_value_theory import chi_loss, inv_gumbel, pairwise_extremal_coeffs, chi2metric
-from .utils import unpad
-from .extreme_value_theory.peak_over_threshold import inv_probability_integral_transform
+from ..extreme_value_theory import chi_loss, inv_gumbel, pairwise_extremal_coeffs, chi2metric
+from ..utils import unpad
+from ..extreme_value_theory.peak_over_threshold import inv_probability_integral_transform
 
 class WandbMetricsLogger(Callback):
     """
@@ -71,6 +71,7 @@ class CriticVal(Callback):
             nbatch = 0
             score = 0
             for batch in self.validation_data:
+                batch = batch[0] # when using custom batch function
                 augmented = self.model.augment(batch)
                 score_batch = self.model.critic(augmented, training=False)
                 score += tf.reduce_mean(score_batch)
