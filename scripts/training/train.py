@@ -299,6 +299,10 @@ def main(config):
         fig.suptitle(f'64 most extreme {config.channels[channel]} training samples', fontsize=18)
         log_image_to_wandb(fig, f"max_train_samples", imdir)
     
+        # ---Save a sample for further testing---
+        fake_u = hg.unpad(gan(nsamples=1000), paddings).numpy()
+        np.savez(os.path.join(rundir, 'samples.npz'), uniform=fake_u)
+
     else: # delete rundir and its contents
         print("Chi score too high, deleting run directory")
         os.system(f"rm -r {rundir}")
