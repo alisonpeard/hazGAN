@@ -1,0 +1,62 @@
+[project]
+name = "hazGAN"
+version = "2.0.2"
+# license = { file = "LICENSE" }
+description = "Deep generative modelling for compound hazard sampling."
+readme = "README.md"
+license = { "text" = "MIT License" }
+authors = [
+    { name = "Alison Peard", email = "alison.peard@ouce.ox.ac.uk" },
+]
+maintainers = [{ name = "Alison Peard", email = "alison.peard@ouce.ox.ac.uk" }]
+classifiers = [
+    "Private :: Do Not Upload",
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    # "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+keywords = []
+requires-python = ">=3.7, <3.11"
+dependencies = [
+    # "numpy",
+    # "pandas",
+    # "geopandas",
+    # "xarray",
+    # "xagg",
+    # "rioxarray",
+    # "netcdf4",
+    # "pyyaml",
+    # "shapely>=2.0",
+    # "scikit-learn",
+    # "matplotlib",
+    # "cartopy",
+    # "pyyaml",
+    # "environs",
+    # "tensorflow-probability",
+    # "wandb==0.16.6",
+    # "tf-keras",
+    # "tensorflow>=2.16; sys_platform == 'darwin'",
+    # "tensorflow-metal; sys_platform == 'darwin'",
+    # "cudnn; sys_platform == 'linux'",
+    # "cudatoolkit; sys_platform == 'linux",
+    # "cuda-nvcc; sys_platform == 'linux",
+    # "tensorflow[and-cuda]; sys_platform == 'linux",
+
+]
+
+[project.urls]
+Homepage = "https://github.com/alisonpeard/hazGAN"
+Issues = "https://github.com/alisonpeard/hazGAN/issues"
+
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ['hazGAN']
+
+
+

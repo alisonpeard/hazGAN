@@ -3,7 +3,7 @@ channels:
     #- apple # apple::<package>
     - conda-forge
 dependencies:
-    - python
+    - python>=3.8,<3.11
     - pip
     - apple::tensorflow-deps
     - numpy
@@ -38,7 +38,7 @@ dependencies:
         - wandb==0.16.6 # stable May 2024
         - cdsapi # copernicus climate data store API
         - pytest
-        - -e /Users/alison/Documents/DPhil/paper1.nosync/hazGAN
+        # - -e /Users/alison/Documents/DPhil/paper1.nosync/hazGAN
         - -e /Users/alison/Documents/DPhil/geospatial_utils
 
 # ---------Notes----------
