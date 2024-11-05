@@ -268,7 +268,7 @@ def main(config):
                                 gridspec_kw={'hspace': 0, 'wspace': 0})
         for i, ax in enumerate(axs.ravel()):
             im = ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r',
-                        vmin=vmin, vmax=vmin, levels=20)
+                        vmin=vmin, vmax=vmax, levels=20)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.invert_yaxis()
