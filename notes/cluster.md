@@ -34,7 +34,7 @@ cd ~/micromamba/envs/hazGAN-GPU/lib/python3.12/site-packages/tensorrt_libs
 ln -s libnvinfer.so.10 libnvinfer.so.8.6.1l
 ln -s py libnvinfer_plugin.so.8.6.1
 
-export LD_LIBRARY_PATH=/soge-home/users/spet5107/micromamba/envs/hazGAN-GPU/lib:${LD_LIBRARY_PATH}
+export LD_LIBRARY_PATH=/soge-home/users/spet5107/micromamba/envs/hazGAN-GPU/lib:${LD_LIBRARY_PATH} # only needed up to this step 09-11-2024
 export LD_LIBRARY_PATH=/soge-home/users/spet5107/micromamba/envs/hazGAN-GPU/lib/python3.12/site-packages/tensorrt_libs:${LD_LIBRARY_PATH}
 ```
 
