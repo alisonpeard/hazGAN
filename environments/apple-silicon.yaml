@@ -1,12 +1,12 @@
 name: hazGAN
 channels:
-    #- apple # apple::<package>
+    - apple
     - conda-forge
 dependencies:
-    - python>=3.8,<3.11
+    - python=3.9 # >=3.8,<3.11
     - pip
-    - apple::tensorflow-deps
-    - numpy
+    - tensorflow-deps
+    - numpy#>=2.0
     - pandas
     - geopandas
     - fiona
@@ -28,21 +28,18 @@ dependencies:
     - pyarrow>=10.0.1
     - dask
     - pip:
-        # - tensorflow-macos #==2.12
+        - tensorflow-macos
+        - tensorflow-metal
         - environs
         - bottleneck
-        - tensorflow>=2.16 # for python 3.10
-        - tensorflow-metal
-        - tensorflow-probability
-        - tf-keras
         - wandb==0.16.6 # stable May 2024
         - cdsapi # copernicus climate data store API
         - pytest
-        # - -e /Users/alison/Documents/DPhil/paper1.nosync/hazGAN
-        - -e /Users/alison/Documents/DPhil/geospatial_utils
+        - -e ..
+        - -e /Users/alison/Documents/DPhil/utilities
 
 # ---------Notes----------
-# mamba env create -n hazGAN -f hazGAN.yaml
+# mamba create -f apple-silicon.yaml
 # cd hazGAN
 # conda activate hazGAN
 
