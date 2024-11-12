@@ -1,7 +1,6 @@
 [project]
 name = "hazGAN"
 version = "2.0.2"
-# license = { file = "LICENSE" }
 description = "Deep generative modelling for compound hazard sampling."
 readme = "README.md"
 license = { "text" = "MIT License" }
@@ -19,33 +18,8 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence"
 ]
 keywords = []
-requires-python = ">=3.7, <3.11"
-dependencies = [
-    # "numpy",
-    # "pandas",
-    # "geopandas",
-    # "xarray",
-    # "xagg",
-    # "rioxarray",
-    # "netcdf4",
-    # "pyyaml",
-    # "shapely>=2.0",
-    # "scikit-learn",
-    # "matplotlib",
-    # "cartopy",
-    # "pyyaml",
-    # "environs",
-    # "tensorflow-probability",
-    # "wandb==0.16.6",
-    # "tf-keras",
-    # "tensorflow>=2.16; sys_platform == 'darwin'",
-    # "tensorflow-metal; sys_platform == 'darwin'",
-    # "cudnn; sys_platform == 'linux'",
-    # "cudatoolkit; sys_platform == 'linux",
-    # "cuda-nvcc; sys_platform == 'linux",
-    # "tensorflow[and-cuda]; sys_platform == 'linux",
-
-]
+requires-python = ">=3.7,<3.11"
+dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/alisonpeard/hazGAN"
