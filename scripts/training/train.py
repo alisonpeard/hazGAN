@@ -268,7 +268,7 @@ def main(config):
                                 gridspec_kw={'hspace': 0, 'wspace': 0})
         for i, ax in enumerate(axs.ravel()):
             im = ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r',
-                        vmin=vmin, vmax=vmin, levels=20)
+                        vmin=vmin, vmax=vmax, levels=20)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.invert_yaxis()
@@ -299,6 +299,10 @@ def main(config):
         fig.suptitle(f'64 most extreme {config.channels[channel]} training samples', fontsize=18)
         log_image_to_wandb(fig, f"max_train_samples", imdir)
     
+        # ---Save a sample for further testing---
+        fake_u = hg.unpad(gan(nsamples=1000), paddings).numpy()
+        np.savez(os.path.join(rundir, 'samples.npz'), uniform=fake_u)
+
     else: # delete rundir and its contents
         print("Chi score too high, deleting run directory")
         os.system(f"rm -r {rundir}")
@@ -350,7 +354,7 @@ if __name__ == "__main__":
     os.makedirs(rundir, exist_ok=True)
 
     # set seed for reproductibility
-    wandb.config["seed"] = np.random.randint(0, 500)
+    wandb.config["seed"] = np.random.randint(0, 100)
     tf.keras.utils.set_random_seed(wandb.config["seed"])  # sets seeds for base-python, numpy and tf
     tf.config.experimental.enable_op_determinism()        # removes stochasticity from individual operations
     config = wandb.config

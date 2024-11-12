@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow_probability import distributions
+# from tensorflow_probability import distributions
 from .base import *
 
 
@@ -25,7 +25,7 @@ def chi2metric(samples, nbins=20):
     one_hot_bins = tf.one_hot(bins, depth=nbins)
     counts = tf.reduce_sum(one_hot_bins, axis=0)
     teststat = tf.reduce_sum((counts - expected) ** 2 / expected)
-    chi2dist = distributions.Chi2(df=nbins-1)
+    # chi2dist = distributions.Chi2(df=nbins-1)
     # prob = chi2dist.cdf(teststat)
     return teststat # of chisq(nbins) values being smaller than observed
 

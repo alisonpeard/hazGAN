@@ -1,0 +1,54 @@
+# ---------Install----------
+# mamba create -f apple-silicon.yaml
+# cd hazGAN
+# mamba activate hazGAN;python -c "import hazGAN as haz;print(haz.__version__)"
+
+# ---------Uninstall----------
+# conda env remove -n hazGAN
+# conda info --envs
+
+# ---------References----------
+# 1. Source: https://github.com/tcapelle/apple_m1_pro_python/tree/main
+# 2. Metal compatibility: https://pypi.org/project/tensorflow-metal/
+# 3. https://developer.apple.com/metal/tensorflow-plugin/
+
+name: hazGAN
+channels:
+    - apple
+    - conda-forge
+dependencies:
+    - python=3.9 # >=3.8,<3.11
+    - pip
+    - dask
+    - tqdm
+    - ipykernel
+    - notebook
+    - pyyaml
+    - h5py
+    - tensorflow-deps
+    - numpy
+    - pandas
+    - geopandas
+    - fiona
+    - xarray
+    - xagg
+    - rioxarray
+    - hdf5
+    - netcdf4
+    - shapely>=2.0
+    - scipy
+    - scikit-learn
+    - matplotlib
+    - cartopy # for basemaps
+    - seaborn
+    - pyarrow>=10.0.1
+    - pip:
+        - tensorflow-macos
+        - tensorflow-metal
+        - environs
+        - bottleneck
+        - wandb==0.16.6 # stable May 2024
+        # - cdsapi        # copernicus climate data store API
+        - pytest
+        - -e ..
+        - -e /Users/alison/Documents/DPhil/utilities # optional

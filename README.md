@@ -1,5 +1,14 @@
-# hazardGAN
-DCGAN to generate compound coastal hazard snapshots over the Bay of Bengal.
-![fig1](https://github.com/alisonpeard/hazardGAN/assets/41169293/2d6213b8-53c6-4329-ae0e-9da6aefb09f0)
+# Hazard GAN
+Wasserstein GAN to generate multivariate windstorm footprints over the Bay of Bengal.
+![fig2](figures/training_footprints.png)
+**In development**
 
-**Note:** this code is still in development.
+## Installation
+```bash
+git clone git@github.com:alisonpeard/hazGAN.git
+cd environments
+mamba create -f mac-m1.yaml
+mamba activate hazGAN
+cd ..
+python -m pip install -e .
+```

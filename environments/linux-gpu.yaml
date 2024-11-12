@@ -2,7 +2,7 @@ name: hazGAN
 channels:
     - conda-forge
 dependencies:
-    - python
+    - python>=3.8,<3.11
     - pip
     - numpy==1.26.4
     - pandas
