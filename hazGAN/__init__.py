@@ -1,5 +1,5 @@
 from .utils import *
-from .plotting import *
+from .plots import *
 from .io import *
 from .defaults import *
 from .extreme_value_theory import *
