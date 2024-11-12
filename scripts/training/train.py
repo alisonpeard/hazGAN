@@ -49,9 +49,8 @@ import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import wandb
-from watermark import watermark
 from environs import Env
-import hazGAN as hg
+import hazGAN as hazzy
 from hazGAN import WandbMetricsLogger
 tf.keras.backend.clear_session()
 
@@ -107,21 +106,21 @@ def config_tf_devices():
 # %% ----Main function----
 def main(config):
     # load data
-    minority = hg.load_training(datadir,
+    minority = hazzy.load_training(datadir,
                             config['train_size'],
                             padding_mode='reflect',
                             gumbel_marginals=config['gumbel'],
                             u10_min=15,
                             channels=config['channels']
                             )
-    majority = hg.load_training(datadir,
+    majority = hazzy.load_training(datadir,
                             config['train_size'],
                             padding_mode='reflect',
                             gumbel_marginals=config['gumbel'],
                             u10_max=15,
                             channels=config['channels']
                             )
-    pretrain = hg.load_pretraining(datadir,
+    pretrain = hazzy.load_pretraining(datadir,
                                          config['train_size'],
                                          padding_mode='reflect',
                                          gumbel_marginals=config['gumbel'],
@@ -129,20 +128,20 @@ def main(config):
                                          )
     train_minority = minority['train_u']
     test_minority = minority['test_u']
-    train_majority = majority['train_u']
-    test_majority = majority['test_u']
-    train_pre = pretrain['train_u']
-    test_pre = pretrain['test_u']
-    train = hg.BalancedBatchNd([train_pre, train_majority, train_minority],
-                               ratios=config['ratios'])
-    test = hg.BalancedBatchNd([test_pre, test_majority, test_minority],
+    train_majority = majority['train_u'][:100, ...]
+    test_majority = majority['test_u'][:100, ...]
+    train_pre = pretrain['train_u'][:100, ...]
+    test_pre = pretrain['test_u'][:100, ...]
+    train = hazzy.BalancedBatchNd([train_pre, train_majority, train_minority],
+                               ratios=config['ratios'], infinite=True)
+    test = hazzy.BalancedBatchNd([test_pre, test_majority, test_minority],
                                ratios=config['ratios'])
     print("Number of training batches:", len(train))
     print("Number of validation batches:", len(test))
 
     # define callbacks
-    critic_val = hg.CriticVal(test)
-    image_count = hg.CountImagesSeen(ntrain=train.size)
+    critic_val = hazzy.CriticVal(test)
+    image_count = hazzy.CountImagesSeen(ntrain=train.size)
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         os.path.join(rundir, "checkpoint.weights.h5"),
         monitor="compound_metric",
@@ -155,7 +154,12 @@ def main(config):
     # compile
     print("\nStarting training...")
     with tf.device(device):
-        gan = getattr(hg, f"compile_{config['model']}")(config, nchannels=len(config['channels']))
+        gan = getattr(hazzy,
+                      f"compile_{config['model']}")(
+                          config,
+                          nchannels=len(config['channels']),
+                          train=train
+                          )
         history = gan.fit(
             train,
             epochs=config.nepochs,
@@ -166,13 +170,14 @@ def main(config):
                 checkpoint
                 ]
         )
+        gan.cleanup()
     print('Finished training!')
     final_chi_rmse = history.history['chi_rmse'][-1]
     print(f"Final chi_rmse: {final_chi_rmse}")
 
     if True: #TODO: final_chi_rmse <= 20.0:
         save_config(rundir)
-        all_data = minority = hg.load_training(datadir,
+        all_data = minority = hazzy.load_training(datadir,
                             config.train_size,
                             padding_mode='reflect',
                             gumbel_marginals=config['gumbel'],
@@ -184,9 +189,9 @@ def main(config):
         # ----Figures----
         channel = 0
         paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
-        train_u = hg.inv_gumbel(hg.unpad(train_u, paddings)).numpy()
-        test_u = hg.inv_gumbel(hg.unpad(test_u, paddings)).numpy()
-        fake_u = hg.unpad(gan(nsamples=64), paddings).numpy()
+        train_u = hazzy.inv_gumbel(hazzy.unpad(train_u, paddings)).numpy()
+        test_u = hazzy.inv_gumbel(hazzy.unpad(test_u, paddings)).numpy()
+        fake_u = hazzy.unpad(gan(nsamples=64), paddings).numpy()
         
         cmap = plt.cm.coolwarm_r
         vmin = 1
@@ -197,7 +202,7 @@ def main(config):
         # Fig 1: channel extremal coefficients
         def get_channel_ext_coefs(x):
             n, h, w, c = x.shape
-            excoefs = hg.get_extremal_coeffs_nd(x, [*range(h * w)])
+            excoefs = hazzy.get_extremal_coeffs_nd(x, [*range(h * w)])
             excoefs = np.array([*excoefs.values()]).reshape(h, w)
             return excoefs
         
@@ -224,9 +229,9 @@ def main(config):
         log_image_to_wandb(fig, f"extremal_dependence", imdir)
 
         # Fig 2: spatial extremal coefficients
-        ecs_train = hg.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., channel]).numpy()
-        ecs_test = hg.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., channel]).numpy()
-        ecs_gen = hg.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., channel]).numpy()
+        ecs_train = hazzy.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., channel]).numpy()
+        ecs_test = hazzy.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., channel]).numpy()
+        ecs_gen = hazzy.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., channel]).numpy()
         fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
                             gridspec_kw={
                                 'wspace': .02,
@@ -248,9 +253,9 @@ def main(config):
 
         # ----Fig 3: 64 most extreme generated samples----
         X = all_data['train_x'].numpy()
-        U = hg.unpad(all_data['train_u']).numpy()
+        U = hazzy.unpad(all_data['train_u']).numpy()
         params = all_data['params']
-        x = hg.POT.inv_probability_integral_transform(fake_u, X, U, params)
+        x = hazzy.POT.inv_probability_integral_transform(fake_u, X, U, params)
 
         x = fake_u[:64, ..., channel] # x[..., channel]
         vmin = x.min()
@@ -278,7 +283,7 @@ def main(config):
 
         # ----Fig 4: 64 most extreme training samples----
         # X = all_data['train_x'].numpy()[..., channel]
-        X = hg.unpad(all_data['train_u']).numpy()[:64, ..., channel]
+        X = hazzy.unpad(all_data['train_u']).numpy()[:64, ..., channel]
         vmin = X.min()
         vmax = X.max()
         if X.shape[0] < 64:
@@ -300,7 +305,7 @@ def main(config):
         log_image_to_wandb(fig, f"max_train_samples", imdir)
     
         # ---Save a sample for further testing---
-        fake_u = hg.unpad(gan(nsamples=1000), paddings).numpy()
+        fake_u = hazzy.unpad(gan(nsamples=1000), paddings).numpy()
         np.savez(os.path.join(rundir, 'samples.npz'), uniform=fake_u)
 
     else: # delete rundir and its contents
@@ -340,7 +345,7 @@ if __name__ == "__main__":
         print("Starting dry run")
         wandb.init(project="test", mode="disabled")
         wandb.config.update({
-            'nepochs': 2,
+            'nepochs': 10,
             'train_size': 0.6,
             'batch_size': 64,
             'chi_frequency': 1
@@ -360,8 +365,6 @@ if __name__ == "__main__":
     config = wandb.config
     # %%
     history = main(config)
-
-    print(watermark(iversions=True, globals_=globals()))
 
 # %% ---------------------------------END---------------------------------
 

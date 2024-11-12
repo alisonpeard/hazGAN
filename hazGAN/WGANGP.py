@@ -66,12 +66,12 @@ def process_optimizer_kwargs(config):
     return kwargs
 
 
-def compile_wgan(config, nchannels=2):
+def compile_wgan(config, nchannels=2, train=None):
     kwargs = process_optimizer_kwargs(config)
     optimizer = getattr(optimizers, config['optimizer'])
     d_optimizer = optimizer(**kwargs)
     g_optimizer = optimizer(**kwargs)
-    wgan = WGANGP(config, nchannels=nchannels)
+    wgan = WGANGP(config, nchannels=nchannels, train=train)
     wgan.compile(
         d_optimizer=d_optimizer,
         g_optimizer=g_optimizer
@@ -152,7 +152,7 @@ def define_critic(config, nchannels=2):
 
 
 class WGANGP(keras.Model):
-    def __init__(self, config, nchannels=2):
+    def __init__(self, config, nchannels=2, train=None):
         super().__init__()
         self.critic = define_critic(config, nchannels)
         self.generator = define_generator(config, nchannels)
@@ -180,6 +180,7 @@ class WGANGP(keras.Model):
         self.critic_real_tracker = keras.metrics.Mean(name="critic_real")
         self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
         self.seed = config['seed']
+        self.train = train
         
     
     def compile(self, d_optimizer, g_optimizer, *args, **kwargs):
@@ -201,17 +202,28 @@ class WGANGP(keras.Model):
         raw = self.generator(random_latent_vectors, training=False)
         return self.inv(raw)
 
+
+    def cleanup(self):
+        self.train = None
         
     @tf.function
     def train_step(self, data):
-        data = data[0]
-        batch_size = tf.shape(data)[0]
-        random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
-        fake_data = self.generator(random_latent_vectors, training=False)
+        # removing this to sample multiple times from train_generator
+        if self.train is None: # single sample per iter
+            data = data[0]
+            batch_size = tf.shape(data)[0]
+            random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
+            fake_data = self.generator(random_latent_vectors, training=False)
 
         # train critic
         # https://github.com/igul222/improved_wgan_training/blob/master/gan_mnist.py:134
         for _ in range(self.config['training_balance']):
+            if self.train is not None: # infinite generation per iter
+                data = next(iter(self.train))[0]
+                batch_size = tf.shape(data)[0]
+                random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
+                fake_data = self.generator(random_latent_vectors, training=False)
+
             with tf.GradientTape() as tape:
                 score_real = self.critic(self.augment(data))
                 score_fake = self.critic(self.augment(fake_data))
