@@ -1,7 +1,7 @@
 # Hazard GAN
 Wasserstein GAN to generate multivariate windstorm footprints over the Bay of Bengal.
 ![fig2](figures/training_footprints.png)
-**In development**
+*In development*
 
 ## Installation
 ```bash
