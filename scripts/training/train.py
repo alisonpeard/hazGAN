@@ -132,15 +132,17 @@ def main(config):
     test_majority = majority['test_u'][:100, ...]
     train_pre = pretrain['train_u'][:100, ...]
     test_pre = pretrain['test_u'][:100, ...]
-    train = hazzy.BalancedBatchNd([train_pre, train_majority, train_minority],
-                               ratios=config['ratios'], infinite=True)
-    test = hazzy.BalancedBatchNd([test_pre, test_majority, test_minority],
-                               ratios=config['ratios'])
+    
+    train = hazzy.BalancedBatch([train_pre, train_majority, train_minority],
+                               ratios=config['ratios'], labels=[0, 1, 2], infinite=True)
+    test = hazzy.BalancedBatch([test_pre, test_majority, test_minority],
+                               ratios=config['ratios'], labels=[0, 1, 2])
+    
     print("Number of training batches:", len(train))
     print("Number of validation batches:", len(test))
 
     # define callbacks
-    critic_val = hazzy.CriticVal(test)
+    # critic_val = hazzy.CriticVal(test)
     image_count = hazzy.CountImagesSeen(ntrain=train.size)
     checkpoint = tf.keras.callbacks.ModelCheckpoint(
         os.path.join(rundir, "checkpoint.weights.h5"),
@@ -164,7 +166,7 @@ def main(config):
             train,
             epochs=config.nepochs,
             callbacks=[
-                critic_val,
+                # critic_val,
                 image_count,
                 WandbMetricsLogger(),
                 checkpoint
