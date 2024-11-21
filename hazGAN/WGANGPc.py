@@ -5,6 +5,7 @@ References:
 ..[1] Gulrajani (2017) https://github.com/igul222/improved_wgan_training/blob/master/gan_mnist.py 
 ..[2] Harris (2022) - application
 """
+# %%
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -16,6 +17,7 @@ from inspect import signature
 from .extreme_value_theory import chi_loss, inv_gumbel
 from .tf_utils import DiffAugment
 
+# %%
 
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
     """Sample from Gumbel(0, 1)"""
@@ -71,7 +73,7 @@ def compile_wgan(config, nchannels=2):
     optimizer = getattr(optimizers, config['optimizer'])
     d_optimizer = optimizer(**kwargs)
     g_optimizer = optimizer(**kwargs)
-    wgan = WGANGP(config, nchannels=nchannels)
+    wgan = ConditionalWGANGP(config, nchannels=nchannels)
     wgan.compile(
         d_optimizer=d_optimizer,
         g_optimizer=g_optimizer
@@ -82,11 +84,17 @@ def compile_wgan(config, nchannels=2):
 # G(z)
 def define_generator(config, nchannels=2):
     """
-    >>> generator = define_generator()
+    >>> generator = define_generator(config)
     """
-    z = tf.keras.Input(shape=(config['latent_dims'],), name='noise_input')
-    condition = tf.keras.Input(shape=(1,), name='condition')
-    z = layers.concatenate([z, condition])
+    # TODO: try embedding condition at multiple points (like StyleGAN)
+    # input
+    z = tf.keras.Input(shape=(config['latent_dims'],), name='noise_input', dtype='float32')
+    condition = tf.keras.Input(shape=(1,), name='condition', dtype='int32')
+
+    # embed the condition
+    embedding = layers.Embedding(config['nconditions'], config['embedding_depth'])(condition)
+    z = layers.concatenate([z, embedding])
+
 
     # Fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
     fc = layers.Dense(config["g_layers"][0] * 5 * 5 * nchannels, use_bias=False)(z)
@@ -120,7 +128,7 @@ def define_generator(config, nchannels=2):
     conv3 = layers.Resizing(20, 24, interpolation=config['interpolation'])(bn2)
     score = layers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same')(conv3)
     o = score if config['gumbel'] else tf.keras.activations.sigmoid(score) # NOTE: check
-    return tf.keras.Model(z, o, name="generator")
+    return tf.keras.Model([z, condition], o, name="generator")
 
 
 # D(x)
@@ -128,9 +136,15 @@ def define_critic(config, nchannels=2):
     """
     >>> critic = define_critic()
     """
+    # TODO: try embedding condition at multiple points (like StyleGAN)
+    # inputs
     x = tf.keras.Input(shape=(20, 24, nchannels), name='samples')
     condition = tf.keras.Input(shape=(1,), name='condition')
 
+    #* first condition embedding
+    embedding = layers.Embedding(config['nconditions'], config['embedding_depth'] * 20 * 24)(condition)
+    embedding = layers.Reshape((20, 24, config['embedding_depth']))(embedding)
+    x = layers.concatenate([x, embedding])
 
     # 1st hidden layer 9x10x64
     conv1 = layers.Conv2D(config["d_layers"][0], (4, 5), (2, 2), "valid",
@@ -152,11 +166,11 @@ def define_critic(config, nchannels=2):
     flat = layers.Reshape((-1, 5 * 5 * config["d_layers"][2]))(drop3)
     score = layers.Dense(1)(flat)
     out = layers.Reshape((1,))(score)
-    return tf.keras.Model(x, out, name="critic")
+    return tf.keras.Model([x, condition], out, name="critic")
 
 
-class WGANGP(keras.Model):
-    def __init__(self, config, nchannels=2):
+class ConditionalWGANGP(keras.Model):
+    def __init__(self, config, nchannels=2, train=None):
         super().__init__()
         self.critic = define_critic(config, nchannels)
         self.generator = define_generator(config, nchannels)
@@ -184,6 +198,10 @@ class WGANGP(keras.Model):
         self.critic_real_tracker = keras.metrics.Mean(name="critic_real")
         self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
         self.seed = config['seed']
+
+        self.train = train
+        self.conditions = train.number_of_conditions()
+
         
     
     def compile(self, d_optimizer, g_optimizer, *args, **kwargs):
@@ -194,37 +212,41 @@ class WGANGP(keras.Model):
         self.g_optimizer.build(self.generator.trainable_variables)
 
 
-    def call(self, nsamples=5, condition=None, temp=1., offset=0, seed=None):
+    def call(self, nsamples=5, condition=None, latent_vectors=None, temp=1., offset=0, seed=None):
         """Return uniformly distributed samples from the generator."""
-        random_latent_vectors = self.latent_space_distn(
-            (nsamples, self.latent_dim),
-            temperature=temp,
-            offset=offset,
-            seed=seed
-            )
+        if latent_vectors is None:
+            latent_vectors = self.latent_space_distn(
+                (nsamples, self.latent_dim),
+                temperature=temp,
+                offset=offset,
+                seed=seed
+                )
+        else:
+            n = latent_vectors.shape[0]
+            assert n == nsamples, f"Latent vector must be same length ({n}) as requested number of samples ({nsamples})."
         if condition is None:
             condition = tf.random.uniform((nsamples, 1), 0, 2, dtype=tf.float32)
         else:
-            n = condition.shape[-1]
-            assert n == nsamples, f"Number of conditions {n} must equal number of samples {nsamples}."
-        latent_vectors = tf.concat([random_latent_vectors, condition], axis=-1)
-        raw = self.generator(latent_vectors, training=False)
+            n = condition.shape[0]
+            assert n == nsamples, f"Condition vector must be same length ({n}) as requested number of samples ({nsamples})."
+        raw = self.generator([latent_vectors, condition], training=False)
         return self.inv(raw)
 
         
     @tf.function
     def train_step(self, data):
-        data = data[0]
+        data, condition = data
         batch_size = tf.shape(data)[0]
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
-        fake_data = self.generator(random_latent_vectors, training=False)
+        fake_data = self.generator([random_latent_vectors, condition], training=False) #! reusing conditioning, hopefully okay
 
+        #! need to make same as WGANGP.py with sampling in-loop
         # train critic
         # https://github.com/igul222/improved_wgan_training/blob/master/gan_mnist.py:134
         for _ in range(self.config['training_balance']):
             with tf.GradientTape() as tape:
-                score_real = self.critic(self.augment(data))
-                score_fake = self.critic(self.augment(fake_data))
+                score_real = self.critic([self.augment(data), condition])
+                score_fake = self.critic([self.augment(fake_data), condition])
                 critic_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality --Gulrajani 2017)
                 eps = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
                 differences = fake_data - data
@@ -248,7 +270,7 @@ class WGANGP(keras.Model):
         # train generator
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
         with tf.GradientTape() as tape:
-            generated_data = self.generator(random_latent_vectors)
+            generated_data = self.generator([random_latent_vectors, condition])
             score = self.critic(self.augment(generated_data), training=False)
             generator_loss_raw = -tf.reduce_mean(score)
             chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # think this is safe inside GradientTape
