@@ -26,6 +26,7 @@ dependencies:
     - h5py
     - pyarrow>=10.0.1
     - dask
+    - xbatcher
     - pip:
         - environs
         - tensorflow>=2.16 

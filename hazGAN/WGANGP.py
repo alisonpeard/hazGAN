@@ -56,7 +56,7 @@ def process_optimizer_kwargs(config):
         "ema_momentum": config['ema_momentum'],
         "ema_overwrite_frequency": config['ema_overwrite_frequency'],
     }
-    params = get_optimizer_kwargs(config.optimizer)
+    params = get_optimizer_kwargs(config['optimizer'])
     kwargs = {key: val for key, val in kwargs.items() if key in params}
 
     if config.get('lr_decay', False):
@@ -179,7 +179,7 @@ class WGANGP(keras.Model):
         self.value_function_tracker = keras.metrics.Mean(name="value_function")
         self.critic_real_tracker = keras.metrics.Mean(name="critic_real")
         self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
-        self.seed = config['seed']
+        self.seed = config.get('seed', None)
         self.train = train
         
     

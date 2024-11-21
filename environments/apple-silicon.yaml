@@ -42,6 +42,7 @@ dependencies:
     - cartopy # for basemaps
     - seaborn
     - pyarrow>=10.0.1
+    - xbatcher
     - pip:
         - tensorflow-macos
         - tensorflow-metal

@@ -105,51 +105,52 @@ def config_tf_devices():
 
 # %% ----Main function----
 def main(config):
-    # load data
-    minority = hazzy.load_training(datadir,
-                            config['train_size'],
-                            padding_mode='reflect',
-                            gumbel_marginals=config['gumbel'],
-                            u10_min=15,
-                            channels=config['channels']
-                            )
-    majority = hazzy.load_training(datadir,
-                            config['train_size'],
-                            padding_mode='reflect',
-                            gumbel_marginals=config['gumbel'],
-                            u10_max=15,
-                            channels=config['channels']
-                            )
-    pretrain = hazzy.load_pretraining(datadir,
-                                         config['train_size'],
-                                         padding_mode='reflect',
-                                         gumbel_marginals=config['gumbel'],
-                                         channels=config['channels']
-                                         )
-    train_minority = minority['train_u']
-    test_minority = minority['test_u']
-    train_majority = majority['train_u'][:100, ...]
-    test_majority = majority['test_u'][:100, ...]
-    train_pre = pretrain['train_u'][:100, ...]
-    test_pre = pretrain['test_u'][:100, ...]
-    train = hazzy.BalancedBatchNd([train_pre, train_majority, train_minority],
-                               ratios=config['ratios'], infinite=True)
-    test = hazzy.BalancedBatchNd([test_pre, test_majority, test_minority],
-                               ratios=config['ratios'])
-    print("Number of training batches:", len(train))
-    print("Number of validation batches:", len(test))
+    # # load data
+    # minority = hazzy.load_training(datadir,
+    #                         config['train_size'],
+    #                         padding_mode='reflect',
+    #                         gumbel_marginals=config['gumbel'],
+    #                         u10_min=15,
+    #                         channels=config['channels']
+    #                         )
+    # majority = hazzy.load_training(datadir,
+    #                         config['train_size'],
+    #                         padding_mode='reflect',
+    #                         gumbel_marginals=config['gumbel'],
+    #                         u10_max=15,
+    #                         channels=config['channels']
+    #                         )
+    # pretrain = hazzy.load_pretraining(datadir,
+    #                                      config['train_size'],
+    #                                      padding_mode='reflect',
+    #                                      gumbel_marginals=config['gumbel'],
+    #                                      channels=config['channels']
+    #                                      )
+    # train_minority = minority['train_u']
+    # test_minority = minority['test_u']
+    # train_majority = majority['train_u'][:100, ...]
+    # test_majority = majority['test_u'][:100, ...]
+    # train_pre = pretrain['train_u'][:100, ...]
+    # test_pre = pretrain['test_u'][:100, ...]
+    # train = hazzy.BalancedBatchNd([train_pre, train_majority, train_minority],
+    #                            ratios=config['ratios'], infinite=True)
+    # test = hazzy.BalancedBatchNd([test_pre, test_majority, test_minority],
+    #                            ratios=config['ratios'])
+    # print("Number of training batches:", len(train))
+    # print("Number of validation batches:", len(test))
 
-    # define callbacks
-    critic_val = hazzy.CriticVal(test)
-    image_count = hazzy.CountImagesSeen(ntrain=train.size)
-    checkpoint = tf.keras.callbacks.ModelCheckpoint(
-        os.path.join(rundir, "checkpoint.weights.h5"),
-        monitor="compound_metric",
-        save_best_only=True,
-        save_weights_only=True,
-        mode="min",
-        verbose=1
-        )
+    # # define callbacks
+    # critic_val = hazzy.CriticVal(test)
+    # image_count = hazzy.CountImagesSeen(ntrain=train.size)
+    # checkpoint = tf.keras.callbacks.ModelCheckpoint(
+    #     os.path.join(rundir, "checkpoint.weights.h5"),
+    #     monitor="compound_metric",
+    #     save_best_only=True,
+    #     save_weights_only=True,
+    #     mode="min",
+    #     verbose=1
+    #     )
+    train = hazzy.load_training(datadir, config['batch_size'])
     
     # compile
     print("\nStarting training...")
@@ -158,16 +159,16 @@ def main(config):
                       f"compile_{config['model']}")(
                           config,
                           nchannels=len(config['channels']),
-                          train=train
+                        #   train=train
                           )
         history = gan.fit(
             train,
             epochs=config.nepochs,
             callbacks=[
-                critic_val,
-                image_count,
-                WandbMetricsLogger(),
-                checkpoint
+                # critic_val,
+                # image_count,
+                # WandbMetricsLogger(),
+                # checkpoint
                 ]
         )
         gan.cleanup()
@@ -175,142 +176,142 @@ def main(config):
     final_chi_rmse = history.history['chi_rmse'][-1]
     print(f"Final chi_rmse: {final_chi_rmse}")
 
-    if True: #TODO: final_chi_rmse <= 20.0:
-        save_config(rundir)
-        all_data = minority = hazzy.load_training(datadir,
-                            config.train_size,
-                            padding_mode='reflect',
-                            gumbel_marginals=config['gumbel'],
-                            channels=config['channels']
-                            )
-        train_u = all_data['train_u']
-        test_u = all_data['test_u']
+    # if True: #TODO: final_chi_rmse <= 20.0:
+    #     save_config(rundir)
+    #     all_data = minority = hazzy.load_training(datadir,
+    #                         config.train_size,
+    #                         padding_mode='reflect',
+    #                         gumbel_marginals=config['gumbel'],
+    #                         channels=config['channels']
+    #                         )
+    #     train_u = all_data['train_u']
+    #     test_u = all_data['test_u']
 
-        # ----Figures----
-        channel = 0
-        paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
-        train_u = hazzy.inv_gumbel(hazzy.unpad(train_u, paddings)).numpy()
-        test_u = hazzy.inv_gumbel(hazzy.unpad(test_u, paddings)).numpy()
-        fake_u = hazzy.unpad(gan(nsamples=64), paddings).numpy()
+    #     # ----Figures----
+    #     channel = 0
+    #     paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
+    #     train_u = hazzy.inv_gumbel(hazzy.unpad(train_u, paddings)).numpy()
+    #     test_u = hazzy.inv_gumbel(hazzy.unpad(test_u, paddings)).numpy()
+    #     fake_u = hazzy.unpad(gan(nsamples=64), paddings).numpy()
         
-        cmap = plt.cm.coolwarm_r
-        vmin = 1
-        vmax = 2
-        cmap.set_under(cmap(0))
-        cmap.set_over(cmap(.99))
+    #     cmap = plt.cm.coolwarm_r
+    #     vmin = 1
+    #     vmax = 2
+    #     cmap.set_under(cmap(0))
+    #     cmap.set_over(cmap(.99))
 
-        # Fig 1: channel extremal coefficients
-        def get_channel_ext_coefs(x):
-            n, h, w, c = x.shape
-            excoefs = hazzy.get_extremal_coeffs_nd(x, [*range(h * w)])
-            excoefs = np.array([*excoefs.values()]).reshape(h, w)
-            return excoefs
+    #     # Fig 1: channel extremal coefficients
+    #     def get_channel_ext_coefs(x):
+    #         n, h, w, c = x.shape
+    #         excoefs = hazzy.get_extremal_coeffs_nd(x, [*range(h * w)])
+    #         excoefs = np.array([*excoefs.values()]).reshape(h, w)
+    #         return excoefs
         
-        excoefs_train = get_channel_ext_coefs(train_u)
-        excoefs_test = get_channel_ext_coefs(test_u)
-        excoefs_gan = get_channel_ext_coefs(fake_u)
-        fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
-                        gridspec_kw={
-                            'wspace': .02,
-                            'width_ratios': [1, 1, 1, .05]}
-                            )
-        im = ax[0].imshow(excoefs_train, vmin=vmin, vmax=vmax, cmap=cmap)
-        im = ax[1].imshow(excoefs_test, vmin=vmin, vmax=vmax, cmap=cmap)
-        im = ax[2].imshow(excoefs_gan, vmin=vmin, vmax=vmax, cmap=cmap)
-        for a in ax:
-            a.set_yticks([])
-            a.set_xticks([])
-            a.invert_yaxis()
-        ax[0].set_title('Train', fontsize=16)
-        ax[1].set_title('Test', fontsize=16)
-        ax[2].set_title('hazGAN', fontsize=16);
-        fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
-        ax[0].set_ylabel('Extremal coeff', fontsize=18);
-        log_image_to_wandb(fig, f"extremal_dependence", imdir)
+    #     excoefs_train = get_channel_ext_coefs(train_u)
+    #     excoefs_test = get_channel_ext_coefs(test_u)
+    #     excoefs_gan = get_channel_ext_coefs(fake_u)
+    #     fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
+    #                     gridspec_kw={
+    #                         'wspace': .02,
+    #                         'width_ratios': [1, 1, 1, .05]}
+    #                         )
+    #     im = ax[0].imshow(excoefs_train, vmin=vmin, vmax=vmax, cmap=cmap)
+    #     im = ax[1].imshow(excoefs_test, vmin=vmin, vmax=vmax, cmap=cmap)
+    #     im = ax[2].imshow(excoefs_gan, vmin=vmin, vmax=vmax, cmap=cmap)
+    #     for a in ax:
+    #         a.set_yticks([])
+    #         a.set_xticks([])
+    #         a.invert_yaxis()
+    #     ax[0].set_title('Train', fontsize=16)
+    #     ax[1].set_title('Test', fontsize=16)
+    #     ax[2].set_title('hazGAN', fontsize=16);
+    #     fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
+    #     ax[0].set_ylabel('Extremal coeff', fontsize=18);
+    #     log_image_to_wandb(fig, f"extremal_dependence", imdir)
 
-        # Fig 2: spatial extremal coefficients
-        ecs_train = hazzy.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., channel]).numpy()
-        ecs_test = hazzy.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., channel]).numpy()
-        ecs_gen = hazzy.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., channel]).numpy()
-        fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
-                            gridspec_kw={
-                                'wspace': .02,
-                                'width_ratios': [1, 1, 1, .05]}
-                                )
+    #     # Fig 2: spatial extremal coefficients
+    #     ecs_train = hazzy.pairwise_extremal_coeffs(train_u.astype(np.float32)[..., channel]).numpy()
+    #     ecs_test = hazzy.pairwise_extremal_coeffs(test_u.astype(np.float32)[..., channel]).numpy()
+    #     ecs_gen = hazzy.pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., channel]).numpy()
+    #     fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
+    #                         gridspec_kw={
+    #                             'wspace': .02,
+    #                             'width_ratios': [1, 1, 1, .05]}
+    #                             )
         
-        im = axs[0].imshow(ecs_train, vmin=vmin, vmax=vmax, cmap=cmap)
-        im = axs[1].imshow(ecs_test, vmin=vmin, vmax=vmax, cmap=cmap)
-        im = axs[2].imshow(ecs_gen, vmin=vmin, vmax=vmax, cmap=cmap)
-        for ax in axs:
-            ax.set_xticks([])
-            ax.set_yticks([])
-        fig.colorbar(im, cax=axs[3], extend='both', orientation='vertical');
-        axs[0].set_title("Train", fontsize=16)
-        axs[1].set_title("Test", fontsize=16)
-        axs[2].set_title("hazGAN", fontsize=16)
-        axs[0].set_ylabel('Extremal coeff.', fontsize=18);
-        log_image_to_wandb(fig, f"spatial_dependence", imdir)
+    #     im = axs[0].imshow(ecs_train, vmin=vmin, vmax=vmax, cmap=cmap)
+    #     im = axs[1].imshow(ecs_test, vmin=vmin, vmax=vmax, cmap=cmap)
+    #     im = axs[2].imshow(ecs_gen, vmin=vmin, vmax=vmax, cmap=cmap)
+    #     for ax in axs:
+    #         ax.set_xticks([])
+    #         ax.set_yticks([])
+    #     fig.colorbar(im, cax=axs[3], extend='both', orientation='vertical');
+    #     axs[0].set_title("Train", fontsize=16)
+    #     axs[1].set_title("Test", fontsize=16)
+    #     axs[2].set_title("hazGAN", fontsize=16)
+    #     axs[0].set_ylabel('Extremal coeff.', fontsize=18);
+    #     log_image_to_wandb(fig, f"spatial_dependence", imdir)
 
-        # ----Fig 3: 64 most extreme generated samples----
-        X = all_data['train_x'].numpy()
-        U = hazzy.unpad(all_data['train_u']).numpy()
-        params = all_data['params']
-        x = hazzy.POT.inv_probability_integral_transform(fake_u, X, U, params)
+    #     # ----Fig 3: 64 most extreme generated samples----
+    #     X = all_data['train_x'].numpy()
+    #     U = hazzy.unpad(all_data['train_u']).numpy()
+    #     params = all_data['params']
+    #     x = hazzy.POT.inv_probability_integral_transform(fake_u, X, U, params)
 
-        x = fake_u[:64, ..., channel] # x[..., channel]
-        vmin = x.min()
-        vmax = x.max()
-        if x.shape[0] < 64:
-            # repeat x until it has 64 samples
-            x = np.concatenate([x] * int(np.ceil(64 / x.shape[0])), axis=0)
-        maxima = np.max(x, axis=(1, 2))
-        idx = np.argsort(maxima)
-        x = x[idx, ...]
-        lon = np.linspace(80, 95, 22)
-        lat = np.linspace(10, 25, 18)
-        lon, lat = np.meshgrid(lon, lat)
-        fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
-                                gridspec_kw={'hspace': 0, 'wspace': 0})
-        for i, ax in enumerate(axs.ravel()):
-            im = ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r',
-                        vmin=vmin, vmax=vmax, levels=20)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.invert_yaxis()
-        fig.suptitle(f'64 most extreme {config.channels[channel]} generated samples', fontsize=18)
-        fig.colorbar(im, ax=axs.ravel().tolist())
-        log_image_to_wandb(fig, f"max_samples", imdir)
+    #     x = fake_u[:64, ..., channel] # x[..., channel]
+    #     vmin = x.min()
+    #     vmax = x.max()
+    #     if x.shape[0] < 64:
+    #         # repeat x until it has 64 samples
+    #         x = np.concatenate([x] * int(np.ceil(64 / x.shape[0])), axis=0)
+    #     maxima = np.max(x, axis=(1, 2))
+    #     idx = np.argsort(maxima)
+    #     x = x[idx, ...]
+    #     lon = np.linspace(80, 95, 22)
+    #     lat = np.linspace(10, 25, 18)
+    #     lon, lat = np.meshgrid(lon, lat)
+    #     fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
+    #                             gridspec_kw={'hspace': 0, 'wspace': 0})
+    #     for i, ax in enumerate(axs.ravel()):
+    #         im = ax.contourf(lon, lat, x[i, ...], cmap='Spectral_r',
+    #                     vmin=vmin, vmax=vmax, levels=20)
+    #         ax.set_xticks([])
+    #         ax.set_yticks([])
+    #         ax.invert_yaxis()
+    #     fig.suptitle(f'64 most extreme {config.channels[channel]} generated samples', fontsize=18)
+    #     fig.colorbar(im, ax=axs.ravel().tolist())
+    #     log_image_to_wandb(fig, f"max_samples", imdir)
 
-        # ----Fig 4: 64 most extreme training samples----
-        # X = all_data['train_x'].numpy()[..., channel]
-        X = hazzy.unpad(all_data['train_u']).numpy()[:64, ..., channel]
-        vmin = X.min()
-        vmax = X.max()
-        if X.shape[0] < 64:
-            # repeat X until it has 64 samples
-            X = np.concatenate([X] * int(np.ceil(64 / X.shape[0])), axis=0)
-        maxima = np.max(X, axis=(1, 2))
-        idx = np.argsort(maxima)
-        X = X[idx, ...]
-        fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
-                                gridspec_kw={'hspace': 0, 'wspace': 0})
-        for i, ax in enumerate(axs.ravel()):
-            im = ax.contourf(lon, lat, X[i, ...], cmap='Spectral_r',
-                        vmin=vmin, vmax=vmax, levels=20)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.invert_yaxis()
-        fig.colorbar(im, ax=axs.ravel().tolist())
-        fig.suptitle(f'64 most extreme {config.channels[channel]} training samples', fontsize=18)
-        log_image_to_wandb(fig, f"max_train_samples", imdir)
+    #     # ----Fig 4: 64 most extreme training samples----
+    #     # X = all_data['train_x'].numpy()[..., channel]
+    #     X = hazzy.unpad(all_data['train_u']).numpy()[:64, ..., channel]
+    #     vmin = X.min()
+    #     vmax = X.max()
+    #     if X.shape[0] < 64:
+    #         # repeat X until it has 64 samples
+    #         X = np.concatenate([X] * int(np.ceil(64 / X.shape[0])), axis=0)
+    #     maxima = np.max(X, axis=(1, 2))
+    #     idx = np.argsort(maxima)
+    #     X = X[idx, ...]
+    #     fig, axs = plt.subplots(8, 8, figsize=(10, 8), sharex=True, sharey=True,
+    #                             gridspec_kw={'hspace': 0, 'wspace': 0})
+    #     for i, ax in enumerate(axs.ravel()):
+    #         im = ax.contourf(lon, lat, X[i, ...], cmap='Spectral_r',
+    #                     vmin=vmin, vmax=vmax, levels=20)
+    #         ax.set_xticks([])
+    #         ax.set_yticks([])
+    #         ax.invert_yaxis()
+    #     fig.colorbar(im, ax=axs.ravel().tolist())
+    #     fig.suptitle(f'64 most extreme {config.channels[channel]} training samples', fontsize=18)
+    #     log_image_to_wandb(fig, f"max_train_samples", imdir)
     
-        # ---Save a sample for further testing---
-        fake_u = hazzy.unpad(gan(nsamples=1000), paddings).numpy()
-        np.savez(os.path.join(rundir, 'samples.npz'), uniform=fake_u)
+    #     # ---Save a sample for further testing---
+    #     fake_u = hazzy.unpad(gan(nsamples=1000), paddings).numpy()
+    #     np.savez(os.path.join(rundir, 'samples.npz'), uniform=fake_u)
 
-    else: # delete rundir and its contents
-        print("Chi score too high, deleting run directory")
-        os.system(f"rm -r {rundir}")
+    # else: # delete rundir and its contents
+    #     print("Chi score too high, deleting run directory")
+    #     os.system(f"rm -r {rundir}")
     
     return history.history
 

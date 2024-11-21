@@ -19,6 +19,7 @@ dependencies:
     - cudnn
     - cudatoolkit
     - nvidia::cuda-nvcc # https://discuss.tensorflow.org/t/installation-instruction-on-website-are-incomplete/16146
+    - xbatcher
     - pip:
         - environs
         - tensorflow[and-cuda]
