@@ -1,6 +1,6 @@
 from .utils import *
 from .plots import *
-from .better_io import *
+from .io import *
 from .defaults import *
 from .extreme_value_theory import *
 from .tf_utils import *
