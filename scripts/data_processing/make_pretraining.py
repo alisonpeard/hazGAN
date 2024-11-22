@@ -38,7 +38,7 @@ ds_train['duration'].plot.hist()
 window_length = [2, 5, 8, 10, 12, 15, 20]
 
 # %% deseasonalise (with medians)
-monthly = ds.groupby('time.month').median() #!
+monthly = ds.groupby('time.month').median() 
 ds = ds.groupby('time.month') - monthly
 
 # %%
@@ -106,18 +106,41 @@ ds.attrs['last git commit'] = subprocess.check_output(["git", "describe", "--alw
 ds.attrs['git branch'] = subprocess.Popen(["git", "branch", "--show-current"], stdout=subprocess.PIPE).communicate()[0].decode('UTF-8')
 ds.attrs['project'] = 'hazGAN'
 
-# %% Transform to Gumbel(0, 1) using the empirical CDF
+# %% Use the empirical CDF of training data
 def ecdf(ds, var, index_var='time'):
     rank = ds[var].rank(dim=index_var)
     ecdf = rank / (len(ds[index_var]) + 1)
     assert ecdf.max() < 1
     return ecdf
 
-def gumbel(ds, var):
-    uniform = ecdf(ds, var)
-    return -np.log(-np.log(uniform))
+# %%
+def marginal_ecdf(x, xp, up):
+    x_sorted = np.sort(x.copy())
+    xp_sorted = np.sort(xp.copy())
+    up_sorted = np.sort(up.copy())
+    u = np.interp(x_sorted, xp_sorted, up_sorted)
+    return u
 
-ds['uniform'] = ecdf(ds, 'anomaly')
+def ecdf(ds, ds_train, index='time'):
+    """""
+    https://docs.xarray.dev/en/stable/examples/apply_ufunc_vectorize_1d.html
+    """
+    X = ds_train['anomaly']
+    U = ds_train['uniform']
+    x = ds['anomaly']
+    
+    u = xr.apply_ufunc(
+        marginal_ecdf, 
+        x, X, U,
+        input_core_dims=[[index], [index], [index]],
+        output_core_dims=[[index]],
+        exclude_dims={index},
+        join='outer',
+        vectorize=True
+    )
+    return u
+
+ds['uniform'] = ecdf(ds, ds_train)
 
 # %% Have a look
 fig, axs = plt.subplots(2, 2, figsize=(12, 8))
