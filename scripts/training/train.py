@@ -179,16 +179,18 @@ def main(config):
 
     if True: #TODO: final_chi_rmse <= 20.0:
         save_config(rundir)
-        all_data = minority = hazzy.load_training(datadir,
-                            config.train_size,
-                            padding_mode='reflect',
-                            gumbel_marginals=config['gumbel'],
-                            channels=config['channels']
-                            )
+
+        # ----Figures----
+        all_data = hazzy.load_training(
+            datadir,
+            config.train_size,
+            padding_mode='reflect',
+            gumbel_marginals=config['gumbel'],
+            channels=config['channels']
+            )
         train_u = all_data['train_u']
         test_u = all_data['test_u']
 
-        # ----Figures----
         channel = 0
         paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
         train_u = hazzy.inv_gumbel(hazzy.unpad(train_u, paddings)).numpy()

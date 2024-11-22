@@ -39,7 +39,7 @@ def exp(uniform):
 
 
 def gumbel(uniform):
-    maxval = tf.reduce_max(uniform).numpy()
+    maxval = tf.reduce_max(uniform) # .numpy()
     if maxval == 1:
         warnings.warn("Values == 1 found, scaling by 1e-6")
         uniform *= 1 - 1e-6

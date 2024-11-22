@@ -56,7 +56,7 @@ def process_optimizer_kwargs(config):
         "ema_momentum": config['ema_momentum'],
         "ema_overwrite_frequency": config['ema_overwrite_frequency'],
     }
-    params = get_optimizer_kwargs(config.optimizer)
+    params = get_optimizer_kwargs(config['optimizer'])
     kwargs = {key: val for key, val in kwargs.items() if key in params}
 
     if config.get('lr_decay', False):

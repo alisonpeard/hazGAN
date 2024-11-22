@@ -59,3 +59,30 @@ class BalancedBatch(tf.keras.utils.Sequence):
             return balanced_batch, conditions
 
         
+class ConditionalBatch(tf.keras.utils.Sequence):
+    """Data loader for balanced batching of arbitrary data classes."""
+    #* There's a way to do this better with .repeat()
+    def __init__(self, dataset, batch_size=64, infinite=False, **kwargs):
+        super().__init__(**kwargs)
+        if infinite:
+            print('Creating infinite balanced batch generator')
+        self.data = dataset
+        self.inf = infinite
+        self.batch_size = batch_size
+        self.size = len(dataset)
+        self.steps = self.size // batch_size #? unsure
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, index) -> tuple:
+        """Return one balanced batch of data."""
+        if not self.inf:
+            if index >= self.__len__():
+                raise StopIteration
+        
+        batches = []
+        for data in self.data:
+            batches.append(sample(dataset, batch_size, replace=True))
+        balanced_batch = tf.concat(batches, axis=0)
+        return balanced_batch

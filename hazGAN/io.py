@@ -58,16 +58,15 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
         data = data.sel(time=time_no_outlier)
     data = data.sel(channel=channels)
 
+    data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
     if u10_min is not None:
         print_if_verbose(f'Only taking footprints with max u10 anomaly greater than {u10_min}', verbose)
-        data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
         time_subset = data.where(data.maxima >= u10_min, drop=True).time
         data = data.sel(time=time_subset)
         print_if_verbose(f'Number of usable footprints: {len(data.time)}', verbose)
 
     if u10_max is not None:
         print_if_verbose(f'Only taking footprints with max u10 anomaly less than {u10_max}', verbose)
-        data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
         time_subset = data.where(data.maxima < u10_max, drop=True).time
         data = data.sel(time=time_subset)
         print_if_verbose(f'Number of usable footprints: {len(data.time)}', verbose)
@@ -75,6 +74,16 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
     if ntrain < 1:
         ntrain = int(ntrain * data.time.size)
         print_if_verbose(f'Number of training samples: {ntrain}', verbose)
+
+    # #TODO: https://www.tensorflow.org/guide/data
+    # # TODO: xbatcher
+    # # TODO: caching
+    # dataset = tf.data.Dataset.from_tensor_slices(
+    #     (images, labels),
+    #     output_types=(tf.int32, tf.float32),
+    #     output_shapes=((), (None,))
+    #     )
+    # dataset.shuffle().batch().repeat() # order matters
 
     X = tf.image.resize(data.anomaly, image_shape)
     U = tf.image.resize(data[uniform], image_shape)
@@ -117,6 +126,7 @@ def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22)
     # return a dictionary to keep it tidy
     training = {'train_u': train_u, 'test_u': test_u, 'train_x': train_x, 'test_x': test_x,
                 'train_m': train_m, 'test_m': test_m, 'train_z': train_z, 'test_z': test_z,
+
                 'params': params, 'train_mask': train_mask, 'test_mask': test_mask}
     return training
 

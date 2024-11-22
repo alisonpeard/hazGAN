@@ -16,64 +16,15 @@ from inspect import signature
 
 from .extreme_value_theory import chi_loss, inv_gumbel
 from .tf_utils import DiffAugment
+from .unconditional import process_optimizer_kwargs
 
 # %%
-
-def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
-    """Sample from Gumbel(0, 1)"""
-    T = tf.constant(temperature, dtype=tf.float32)
-    O = tf.constant(offset, dtype=tf.float32)
-    U = tf.random.uniform(shape, minval=0, maxval=1, seed=seed)
-    return O - T * tf.math.log(-tf.math.log(U + eps) + eps)
-tf.random.gumbel = sample_gumbel
-
-
-def get_optimizer_kwargs(optimizer):
-    optimizer = getattr(optimizers, optimizer)
-    params = signature(optimizer).parameters
-    return params
-
-
-def exponential_decay(config):
-    initial_lr = config['learning_rate']
-    final_lr = initial_lr / config['final_lr_factor']
-    decay_factor = (final_lr / initial_lr) ** (1 / config['epochs'])
-    steps_per_epoch = int(config['train_size'] / config['batch_size'])
-
-    schedule = ExponentialDecay(
-        initial_learning_rate=initial_lr,
-        decay_steps=steps_per_epoch,
-        decay_rate=decay_factor,
-        staircase=True
-    )
-    return schedule
-
-def process_optimizer_kwargs(config):
-    kwargs = {
-        "learning_rate": config['learning_rate'],
-        "beta_1": config['beta_1'],
-        "beta_2": config['beta_2'],
-        "weight_decay": config['weight_decay'],
-        "use_ema": config['use_ema'],
-        "ema_momentum": config['ema_momentum'],
-        "ema_overwrite_frequency": config['ema_overwrite_frequency'],
-    }
-    params = get_optimizer_kwargs(config.optimizer)
-    kwargs = {key: val for key, val in kwargs.items() if key in params}
-
-    if config.get('lr_decay', False):
-        lr_schedule = exponential_decay(config)
-        kwargs["learning_rate"] = lr_schedule
-    
-    return kwargs
-
-
 def compile_wgan(config, nchannels=2):
     kwargs = process_optimizer_kwargs(config)
     optimizer = getattr(optimizers, config['optimizer'])
     d_optimizer = optimizer(**kwargs)
     g_optimizer = optimizer(**kwargs)
-    wgan = ConditionalWGANGP(config, nchannels=nchannels)
+    wgan = WGANGP(config, nchannels=nchannels)
     wgan.compile(
         d_optimizer=d_optimizer,
         g_optimizer=g_optimizer
@@ -81,23 +32,29 @@ def compile_wgan(config, nchannels=2):
     return wgan
 
 
+def printv(message, verbose):
+    if verbose:
+        tf.print(message)
+
+
 # G(z)
 def define_generator(config, nchannels=2):
     """
     >>> generator = define_generator(config)
     """
-    # TODO: try embedding condition at multiple points (like StyleGAN)
     # input
     z = tf.keras.Input(shape=(config['latent_dims'],), name='noise_input', dtype='float32')
-    condition = tf.keras.Input(shape=(1,), name='condition', dtype='int32')
+    condition = tf.keras.Input(shape=(1,), name='condition', dtype='float32')
+    label = tf.keras.Input(shape=(1,), name="label", dtype='int32')
 
-    # embed the condition
-    embedding = layers.Embedding(config['nconditions'], config['embedding_depth'])(condition)
-    z = layers.concatenate([z, embedding])
-
+    # resize label and condition
+    label_embedded = layers.Embedding(config['nconditions'], config['embedding_depth'])(label)
+    label_embedded = layers.Reshape((config['embedding_depth'],))(label_embedded)
+    condition_projected = layers.Dense(config['embedding_depth'], input_shape=(1,))(condition)
+    concatenated = layers.concatenate([z, condition_projected, label_embedded])
 
     # Fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
-    fc = layers.Dense(config["g_layers"][0] * 5 * 5 * nchannels, use_bias=False)(z)
+    fc = layers.Dense(config["g_layers"][0] * 5 * 5 * nchannels, use_bias=False)(concatenated)
     fc = layers.Reshape((5, 5, int(nchannels * config["g_layers"][0])))(fc)
     lrelu0 = layers.LeakyReLU(config['lrelu'])(fc)
     drop0 = layers.Dropout(config['dropout'])(lrelu0)
@@ -128,7 +85,7 @@ def define_generator(config, nchannels=2):
     conv3 = layers.Resizing(20, 24, interpolation=config['interpolation'])(bn2)
     score = layers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same')(conv3)
     o = score if config['gumbel'] else tf.keras.activations.sigmoid(score) # NOTE: check
-    return tf.keras.Model([z, condition], o, name="generator")
+    return tf.keras.Model([z, condition, label], o, name="generator")
 
 
 # D(x)
@@ -136,19 +93,22 @@ def define_critic(config, nchannels=2):
     """
     >>> critic = define_critic()
     """
-    # TODO: try embedding condition at multiple points (like StyleGAN)
     # inputs
     x = tf.keras.Input(shape=(20, 24, nchannels), name='samples')
     condition = tf.keras.Input(shape=(1,), name='condition')
+    label = tf.keras.Input(shape=(1,), name='label')
 
-    #* first condition embedding
-    embedding = layers.Embedding(config['nconditions'], config['embedding_depth'] * 20 * 24)(condition)
-    embedding = layers.Reshape((20, 24, config['embedding_depth']))(embedding)
-    x = layers.concatenate([x, embedding])
+    label_embedded = layers.Embedding(config['nconditions'], config['embedding_depth'] * 20 * 24)(label)
+    label_embedded = layers.Reshape((20, 24, config['embedding_depth']))(label_embedded)
+
+    condition_projected = layers.Dense(config['embedding_depth'] * 20 * 24)(condition)
+    condition_projected = layers.Reshape((20, 24, config['embedding_depth']))(condition_projected)
+
+    concatenated = layers.concatenate([x, condition_projected, label_embedded])
 
     # 1st hidden layer 9x10x64
     conv1 = layers.Conv2D(config["d_layers"][0], (4, 5), (2, 2), "valid",
-                          kernel_initializer=tf.keras.initializers.GlorotUniform())(x)
+                          kernel_initializer=tf.keras.initializers.GlorotUniform())(concatenated)
     lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
     drop1 = layers.Dropout(config['dropout'])(lrelu1)
 
@@ -166,11 +126,11 @@ def define_critic(config, nchannels=2):
     flat = layers.Reshape((-1, 5 * 5 * config["d_layers"][2]))(drop3)
     score = layers.Dense(1)(flat)
     out = layers.Reshape((1,))(score)
-    return tf.keras.Model([x, condition], out, name="critic")
+    return tf.keras.Model([x, condition, label], out, name="critic")
 
 
-class ConditionalWGANGP(keras.Model):
-    def __init__(self, config, nchannels=2, train=None):
+class WGANGP(keras.Model):
+    def __init__(self, config, nchannels=2):
         super().__init__()
         self.critic = define_critic(config, nchannels)
         self.generator = define_generator(config, nchannels)
@@ -198,10 +158,7 @@ class ConditionalWGANGP(keras.Model):
         self.critic_real_tracker = keras.metrics.Mean(name="critic_real")
         self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
         self.seed = config['seed']
-
-        self.train = train
-        self.conditions = train.number_of_conditions()
-
+        self.critic_steps = 0
         
     
     def compile(self, d_optimizer, g_optimizer, *args, **kwargs):
@@ -212,7 +169,8 @@ class ConditionalWGANGP(keras.Model):
         self.g_optimizer.build(self.generator.trainable_variables)
 
 
-    def call(self, nsamples=5, condition=None, latent_vectors=None, temp=1., offset=0, seed=None):
+    def call(self, condition, label, nsamples=5,
+             latent_vectors=None, temp=1., offset=0, seed=None):
         """Return uniformly distributed samples from the generator."""
         if latent_vectors is None:
             latent_vectors = self.latent_space_distn(
@@ -224,68 +182,60 @@ class ConditionalWGANGP(keras.Model):
         else:
             n = latent_vectors.shape[0]
             assert n == nsamples, f"Latent vector must be same length ({n}) as requested number of samples ({nsamples})."
-        if condition is None:
-            condition = tf.random.uniform((nsamples, 1), 0, 2, dtype=tf.float32)
-        else:
-            n = condition.shape[0]
-            assert n == nsamples, f"Condition vector must be same length ({n}) as requested number of samples ({nsamples})."
-        raw = self.generator([latent_vectors, condition], training=False)
+
+        raw = self.generator([latent_vectors, condition, label], training=False)
         return self.inv(raw)
 
         
     @tf.function
-    def train_step(self, data):
-        data, condition = data
+    def train_step(self, batch):
+        data = batch['uniform']
+        condition = batch['condition']
+        label = batch['label']
         batch_size = tf.shape(data)[0]
+        
+        # train critic
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
-        fake_data = self.generator([random_latent_vectors, condition], training=False) #! reusing conditioning, hopefully okay
-
-        #! need to make same as WGANGP.py with sampling in-loop
-        # train critic
-        # https://github.com/igul222/improved_wgan_training/blob/master/gan_mnist.py:134
-        for _ in range(self.config['training_balance']):
-            with tf.GradientTape() as tape:
-                score_real = self.critic([self.augment(data), condition])
-                score_fake = self.critic([self.augment(fake_data), condition])
-                critic_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality --Gulrajani 2017)
-                eps = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
-                differences = fake_data - data
-                interpolates = data + (eps * differences)  # interpolated data
-                with tf.GradientTape() as tape_gp:
-                    tape_gp.watch(interpolates)
-                    score = self.critic(interpolates)
-                gradients = tape_gp.gradient(score, [interpolates])[0]
-                slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1])) # NOTE: previously , axis=[1, 2, 3] but Gulrajani code has [1]
-                if self.penalty == 'lipschitz':
-                    gradient_penalty = tf.reduce_mean(tf.clip_by_value(slopes - 1., 0., np.infty)**2) # https://openreview.net/forum?id=B1hYRMbCW
-                elif self.penalty == 'gp':
-                    gradient_penalty = tf.reduce_mean((slopes - 1.) ** 2)
-                else:
-                    raise ValueError("Penalty must be either 'lipschitz' or 'gp'.")
-                critic_loss += self.lambda_gp * gradient_penalty
-
-            grads = tape.gradient(critic_loss, self.critic.trainable_weights)
-            self.d_optimizer.apply_gradients(zip(grads, self.critic.trainable_weights))
-
-        # train generator
-        random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
+        fake_data = self.generator([random_latent_vectors, condition, label], training=False)
         with tf.GradientTape() as tape:
-            generated_data = self.generator([random_latent_vectors, condition])
-            score = self.critic(self.augment(generated_data), training=False)
-            generator_loss_raw = -tf.reduce_mean(score)
-            chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # think this is safe inside GradientTape
-            if self.lambda_chi > 0: # NOTE: this doesn't work with GPU
-                generator_loss = generator_loss_raw + (self.lambda_chi * chi_rmse)
+            score_real = self.critic([self.augment(data), condition, label])
+            score_fake = self.critic([self.augment(fake_data), condition, label])
+            critic_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality --Gulrajani 2017)
+            eps = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
+            differences = fake_data - data
+            interpolates = data + (eps * differences)  # interpolated data
+            with tf.GradientTape() as tape_gp:
+                tape_gp.watch(interpolates)
+                score = self.critic([interpolates, condition, label])
+            gradients = tape_gp.gradient(score, [interpolates])[0]
+            slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1])) # NOTE: previously , axis=[1, 2, 3] but Gulrajani code has [1]
+            if self.penalty == 'lipschitz':
+                gradient_penalty = tf.reduce_mean(tf.clip_by_value(slopes - 1., 0., np.infty)**2) # https://openreview.net/forum?id=B1hYRMbCW
+            elif self.penalty == 'gp':
+                gradient_penalty = tf.reduce_mean((slopes - 1.) ** 2)
             else:
-                generator_loss = generator_loss_raw
-        grads = tape.gradient(generator_loss, self.generator.trainable_weights)
-        self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
+                raise ValueError("Penalty must be either 'lipschitz' or 'gp'.")
+            critic_loss += self.lambda_gp * gradient_penalty
+        grads = tape.gradient(critic_loss, self.critic.trainable_weights)
+        self.d_optimizer.apply_gradients(zip(grads, self.critic.trainable_weights))
+        self.critic_steps += 1
 
-        # update metrics and return their values
-        self.critic_loss_tracker(critic_loss)
-        self.generator_loss_tracker.update_state(generator_loss_raw)
-        self.chi_rmse_tracker.update_state(chi_rmse)
-        self.value_function_tracker.update_state(-critic_loss)
+        # train generator (every n steps)
+        if self.critic_steps % self.config['training_balance'] == 0:
+            random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
+            with tf.GradientTape() as tape:
+                generated_data = self.generator([random_latent_vectors, condition, label])
+                score = self.critic(self.augment(generated_data), training=False)
+                generator_loss = -tf.reduce_mean(score)
+                chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # think this is safe inside GradientTape
+            grads = tape.gradient(generator_loss, self.generator.trainable_weights)
+            self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
+
+            # update metrics and return their values
+            self.critic_loss_tracker(critic_loss)
+            self.generator_loss_tracker.update_state(generator_loss)
+            self.chi_rmse_tracker.update_state(chi_rmse)
+            self.value_function_tracker.update_state(-critic_loss)
 
         return {
             "chi_rmse": self.chi_rmse_tracker.result(),

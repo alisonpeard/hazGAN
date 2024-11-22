@@ -25,11 +25,10 @@ penalty:
   desc: Which penalty to use, ['gp', 'lipschitz']
   value: gp
 embedding_depth:
-  depth: How many channels to project the condition to
+  desc: How many channels to project the label to
   value: 32
-classes: #! double-check!
-  depth: Class to condition on
-  value: [0, 1, 2]
+seed:
+  value: 42
 
 # training features
 optimizer:
