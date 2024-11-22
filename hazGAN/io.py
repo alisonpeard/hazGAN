@@ -18,24 +18,27 @@ from tensorflow.data import Dataset
 
 
 def print_if_verbose(string:str, verbose=True):
+    """Self-explanatory"""
     if verbose:
         print(string)
 
 
-def process_outliers(datadir, verbose):
-    outlier_file = os.path.join(datadir, 'outliers.csv')
-    if os.path.isfile(outlier_file):
-        print_if_verbose("Loading file containing outliers.", verbose)
-        outliers = pd.read_csv(outlier_file, index_col=[0])
-        outliers = pd.to_datetime(outliers['time']).to_list()
-        return outliers
-    else:
-        print_if_verbose("No outlier file found.", verbose)
-        return None
+def encode_strings(ds:xr.Dataset, variable:str) -> tf.Tensor:
+    """One-hot encode a string variable"""
+    encoding = {string: number for \
+                        number, string in enumerate(np.unique(ds[variable]))}
+    encoded = np.array([encoding[string] for string in ds[variable].data])
+    depth = len(list(encoding.keys()))
+    return tf.one_hot(encoded, depth)
     
 
+def process_outliers(*args, **kwargs):
+    """Identify wind bombs using Frobernius inner product (find code)"""
+    raise NotImplementedError
 
-def label_data(data, label_ratios={'pre':1/3., 7: 1/3, 20:1/3}) -> xr.DataArray:
+
+def label_data(data, label_ratios:dict={'pre':1/3., 7: 1/3, 20:1/3}) -> xr.DataArray:
+    """Apply labels to storm data using user-provided dict."""
     ratios = list(label_ratios.values())
     assert np.isclose(sum(ratios), 1), "Ratios must sum to one."
 
@@ -49,14 +52,20 @@ def label_data(data, label_ratios={'pre':1/3., 7: 1/3, 20:1/3}) -> xr.DataArray:
     return labels
 
 
-env = Env()
-env.read_env(recurse=True)
-datadir = env.str("TRAINDIR")
-
-
 def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3, 20:1/3},
          train_size=0.8, channels=['u10', 'tp'], image_shape=(18, 22),
-         padding_mode='reflect', gumbel=True, batch_size=16):
+         padding_mode='reflect', gumbel=True, batch_size=16) -> tuple[Dataset, Dataset, dict]:
+    """Main data loader for training.
+
+    Returns:
+    --------
+    train : Dataset
+        Train dataset with (footprint, condition, label)
+    valid : Dataset
+        Validation dataset with (footprint, condition, label)
+    metadata : dict
+        Dict with useful metadata
+    """
     assert condition in ['maxwind', 'time.season', 'label']
 
     print("\nLoading training data (hang on)...")
@@ -70,12 +79,14 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     metadata['epoch'] = np.datetime64('1950-01-01')
     data['maxwind'] = data.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat']) # anomaly
     data['label'] = label_data(data, label_ratios)
+    data['season'] = data['time.season']
     data['time'] = (data['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
     data = data.sel(channel=channels)
 
     # conditioning & sampling variables (pretrain)
     pretrain['maxwind'] = pretrain.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat']) # anomaly
     pretrain['label'] = (0 * pretrain['maxwind']).astype(int) # zero marks training data
+    pretrain['season'] = pretrain['time.season']
     pretrain['time'] = (pretrain['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
     pretrain = pretrain.sel(channel=channels)
 
@@ -102,6 +113,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
             'uniform': data['uniform'].data.astype(np.float32),
             'condition': data[condition].data.astype(np.float32),
             'label': data['label'].data.astype(int),
+            'season': encode_strings(data, "season"),
             'days_since_epoch': data['time']
             }
         return samples
@@ -156,6 +168,10 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
 # %%
 if __name__ == "__main__":
     print('Testing io.py...')
+    env = Env()
+    env.read_env(recurse=True)
+    datadir = env.str("TRAINDIR")
+
     train, valid, metadata = load_data(datadir)
     def benchmark(dataset, num_epochs=2):
         start_time = time.perf_counter()

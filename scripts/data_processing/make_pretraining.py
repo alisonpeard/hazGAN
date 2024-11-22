@@ -4,8 +4,9 @@ Create a pre-training dataset for the GAN as follows:
     1. Create sliding windows of u10 and tp for 2 to 20 day windows, covering all the 
     lengths of storms in the storm footprint data.
     2. Deseasonalise using monthly medians
-    3. Transform to Gumbel(0, 1) using the empirical CDF.
-    4. Save as a new xarray dataset.
+    4. Transform to uniform using the empirical from the storm data (since
+        that's the data we are trying to supplement).
+    5. Save as a new xarray dataset.
 
 Not implemented:
 ----------------
@@ -105,6 +106,7 @@ ds.attrs['script'] = f"scripts/make_pretraining.py"
 ds.attrs['last git commit'] = subprocess.check_output(["git", "describe", "--always"], cwd=os.path.dirname(os.path.abspath(__file__))).strip().decode('UTF-8')
 ds.attrs['git branch'] = subprocess.Popen(["git", "branch", "--show-current"], stdout=subprocess.PIPE).communicate()[0].decode('UTF-8')
 ds.attrs['project'] = 'hazGAN'
+ds.attrs['note'] = "PIT by interpolation from storm data."
 
 # %% Use the empirical CDF of training data
 def ecdf(ds, var, index_var='time'):
