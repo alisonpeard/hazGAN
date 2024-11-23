@@ -284,6 +284,7 @@ def main(config):
         # ----Fig 4: 64 most extreme training samples----
         # X = all_data['train_x'].numpy()[..., channel]
         X = hazzy.unpad(all_data['train_u']).numpy()[:64, ..., channel]
+        X = hazzy.inv_gumbel(X) # fix cbar 23-11-2024
         vmin = X.min()
         vmax = X.max()
         if X.shape[0] < 64:
