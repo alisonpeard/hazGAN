@@ -4,6 +4,7 @@ Improved input-output methods to flexibly load from pretraining and training set
 # %%
 import os
 import time
+from typing import Union
 from environs import Env
 from numbers import Number
 import numpy as np
@@ -16,19 +17,18 @@ from tensorflow.data import Dataset
 PADDINGS = tf.constant([[1, 1], [1, 1], [0, 0]])
 
 
-def print_if_verbose(string:str, verbose=True):
+def print_if_verbose(string:str, verbose=True) -> None:
     """Self-explanatory"""
     if verbose:
         print(string)
 
 
-def process_outliers(datadir, verbose=True):
+def process_outliers(datadir, verbose=True) -> Union[list[np.datetime64], None]:
     """Identify wind bombs using Frobernius inner product (find code)"""
     outlier_file = os.path.join(datadir, 'outliers.csv')
     if os.path.isfile(outlier_file):
         print_if_verbose("Loading file containing outliers.", verbose)
         outliers = pd.read_csv(outlier_file, index_col=[0])
-        # outliers =  outliers['time'].astype('datetime64[ns]').to_list()
         outliers = pd.to_datetime(outliers['time']).to_list()
         outliers = [np.datetime64(date) for date in outliers]
         return outliers
@@ -67,24 +67,6 @@ def label_data(data, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}) -> xr.DataAr
 
     return labels
 
-# %% debuggy
-
-# env = Env()
-# env.read_env(recurse=True)
-# datadir = env.str("TRAINDIR")
-
-# # %%
-# data = xr.open_dataset(os.path.join(datadir, 'data.nc'))
-# pretrain = xr.open_dataset(os.path.join(datadir, 'data_pretrain.nc'))
-# outliers = process_outliers(datadir)
-# print(outliers)
-# # %%
-
-# # data.time.isin(outliers)
-# # %%
-# data.where(~data['time'].isin(outliers), drop=True)
-
-# %%
 
 def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3, 20:1/3},
          train_size=0.8, channels=['u10', 'tp'], image_shape=(18, 22),
@@ -107,10 +89,6 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     data = xr.open_dataset(os.path.join(datadir, 'data.nc'))
     pretrain = xr.open_dataset(os.path.join(datadir, 'data_pretrain.nc'))
 
-    # affects selction/broadcasting etc.
-    dynamic_vars = [var for var in data.data_vars if 'time' in data[var].dims]
-    static_vars = [var for var in data.data_vars if 'time' not in data[var].dims]
-
     def select_no_broadcast(data, selection):
         """Too hardcoded to put outside function."""
         dynamic_vars = [var for var in data.data_vars if 'time' in data[var].dims]
@@ -121,55 +99,33 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
         ])
         return data
 
-    #! Should have done this before fitting GPD and ECDF
-    print("data.params.shape: {}".format(data['params'].shape))
-    print("season data types: {}".format(set([type(string).__name__ for string in data['time.season'].data])))
     outliers = process_outliers(datadir)
     if outliers is not None:
-        # data = data.where(~data.time.isin(outliers), drop=True)
-        #! pretrain = pretrain.where(~pretrain.time.isin(outliers), drop=True)
-        #! causes error with encoding
-        # data = data.where(~data['time'].isin(outliers), drop=True)
         data = select_no_broadcast(data, data.time[~data.time.isin(outliers)])
         pretrain = pretrain.where(~pretrain['time'].isin(outliers), drop=True)
-        # pretrain = select_no_broadcast(pretrain, pretrain.time[~pretrain.time.isin(outliers)])
-        # data = xr.merge([
-        #     data[dynamic_vars].sel(time=data.time[~data.time.isin(outliers)]),
-        #     data[static_vars]
-        # ])
-        #! pretrain = pretrain.sel(time=pretrain.time[~pretrain.time.isin(outliers)]) 
-        #! InvalidIndexError: Reindexing only valid with uniquely valued Index objects
-    print("data.params.shape: {}".format(data['params'].shape))
-    print("season data types: {}".format(set([type(string).__name__ for string in data['time.season'].data])))
-
+    
     metadata = {} # start collecting metadata
 
     # conditioning & sampling variables
-    print("data.params.shape: {}".format(data['params'].shape))
     metadata['epoch'] = np.datetime64('1950-01-01')
     data['maxwind'] = data.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat']) # anomaly
     data['label'] = label_data(data, label_ratios)
     data['season'] = data['time.season']
     data['time'] = (data['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
     data = data.sel(channel=channels)
-    print("season data types: {}".format(set([type(string).__name__ for string in data['season'].data])))
 
     # conditioning & sampling variables (pretrain)
-    print("data.params.shape: {}".format(data['params'].shape))
     pretrain['maxwind'] = pretrain.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat']) # anomaly
     pretrain['label'] = (0 * pretrain['maxwind']).astype(int) # zero marks training data
     pretrain['season'] = pretrain['time.season']
     pretrain['time'] = (pretrain['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
     pretrain = pretrain.sel(channel=channels)
-    print("pretrain season data types: {}".format(set([type(string).__name__ for string in pretrain['season'].data])))
 
     # train/test split
     if isinstance(train_size, float):
         n = data['time'].size
         train_size = int(train_size * n)
-    
-    print("data.params.shape: {}".format(data['params'].shape))
-    
+
     dynamic_vars = [var for var in data.data_vars if 'time' in data[var].dims]
     static_vars = [var for var in data.data_vars if 'time' not in data[var].dims]
 
@@ -182,8 +138,6 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
         data[dynamic_vars].sel(time=data.time[~data.time.isin(train_dates)]),
         data[static_vars]
     ])
-    print("train.params.shape: {}".format(train['params'].shape))
-    print("train season data types: {}".format(set([type(string).__name__ for string in train['season'].data])))
 
     #  get metadata before batching and resampling
     metadata['train'] = train[['uniform', 'anomaly', 'medians', 'params']]
@@ -194,7 +148,6 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     labels = list(np.unique(train['label'].data).astype(int))
     metadata['labels'] = labels
     metadata['paddings'] = PADDINGS
-    print("season data types: {}".format(set([type(string).__name__ for string in data['season'].data])))
 
     def sample_dict(data):
         samples = {
