@@ -351,8 +351,8 @@ def main(config, verbose=True):
         print("Steps per epoch: {:,.0f}".format(steps_per_epoch))
         print("Training for {:,.0f} images".format(number_train_images))
         print("Total number of batches: {:,.0f}".format(number_train_batches))
-        print("Training for {:,.0f} epochs\n".format(epochs))
-        print("Images per epoch: {:,.0f}".format(images_per_epoch))
+        print("Training for {:,.0f} epochs".format(epochs))
+        print("Images per epoch: {:,.0f}\n".format(images_per_epoch))
 
     # callbacks
     image_count = hazzy.CountImagesSeen(batch_size)

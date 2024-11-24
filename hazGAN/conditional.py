@@ -39,7 +39,6 @@ def printv(message, verbose):
         tf.print(message)
 
 
-# G(z)
 def define_generator(config, nchannels=2):
     """
     >>> generator = define_generator(config)
@@ -90,7 +89,6 @@ def define_generator(config, nchannels=2):
     return tf.keras.Model([z, condition, label], o, name="generator")
 
 
-# D(x)
 def define_critic(config, nchannels=2):
     """
     >>> critic = define_critic()
@@ -126,14 +124,14 @@ def define_critic(config, nchannels=2):
 
     # fully connected 1x1
     flat = layers.Reshape((-1, 5 * 5 * config["d_layers"][2]))(drop3)
-    score = layers.Dense(1, activation="sigmoid")(flat) #? sigmoid might smooth training by constraining?, S did similar
+    score = layers.Dense(1)(flat) #? sigmoid might smooth training by constraining?, S did similar
     out = layers.Reshape((1,))(score)
     return tf.keras.Model([x, condition, label], out, name="critic")
 
 
 class WGANGP(keras.Model):
-    def __init__(self, config, nchannels=2):
-        super().__init__()
+    def __init__(self, config, nchannels=2, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.critic = define_critic(config, nchannels)
         self.generator = define_generator(config, nchannels)
         self.latent_dim = config['latent_dims']
@@ -162,7 +160,7 @@ class WGANGP(keras.Model):
         self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
         self.critic_valid_tracker = keras.metrics.Mean(name="critic_valid")
         self.seed = config['seed']
-        self.critic_steps = 0 # for handling critic:generator ratio
+        self.critic_steps = tf.Variable(0, dtype=tf.int32) # for handling critic:generator ratio
 
     
     def compile(self, d_optimizer, g_optimizer, *args, **kwargs):
@@ -211,15 +209,8 @@ class WGANGP(keras.Model):
         return {'critic': self.critic_valid_tracker.result()}
     
 
-    @tf.function
-    def train_step(self, batch):
-        """print(train_step.pretty_printed_concrete_signatures())"""
-        data = batch['uniform']
-        condition = batch['condition']
-        label = batch['label']
-        batch_size = tf.shape(data)[0] # dynamic for graph mode
-        
-        # train critic
+    def train_critic(self, data, condition, label, batch_size):
+        print("Training critic...")
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
         fake_data = self.generator([random_latent_vectors, condition, label], training=False)
         with tf.GradientTape() as tape:
@@ -244,45 +235,62 @@ class WGANGP(keras.Model):
         grads = tape.gradient(critic_loss, self.critic.trainable_weights)
         self.d_optimizer.apply_gradients(zip(grads, self.critic.trainable_weights))
 
-        # update metrics and return their values
         self.critic_loss_tracker(critic_loss)
         self.value_function_tracker.update_state(-critic_loss)
 
+        return critic_loss, tf.reduce_mean(score_real), tf.reduce_mean(score_fake)
+
+    
+    def train_generator(self, data, condition, label, batch_size):
+        """https://www.tensorflow.org/guide/function#conditionals
+        """
+        print("Training generator...")
+        random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
+        with tf.GradientTape() as tape:
+            generated_data = self.generator([random_latent_vectors, condition, label])
+            score = self.critic([self.augment(generated_data), condition, label], training=False)
+            generator_loss = -tf.reduce_mean(score)
+            condition_penalty = tf.reduce_mean(tf.square(tf.reduce_max(generated_data[..., 0], axis=[1, 2]) - condition))
+            generator_penalised_loss = generator_loss + self.lambda_condition * condition_penalty
+        chi_rmse = chi_loss(self.inv(data), self.inv(generated_data))
+        grads = tape.gradient(generator_penalised_loss, self.generator.trainable_weights)
+        self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
+        
+        self.condition_penalty_tracker.update_state(condition_penalty)
+        self.generator_loss_tracker.update_state(generator_loss)
+        self.chi_rmse_tracker.update_state(chi_rmse)
+
+        return condition_penalty, generator_loss, chi_rmse
+
+
+    def dummy(self, *args, **kwargs):
+        return tf.constant(0, dtype=tf.float32), tf.constant(0, dtype=tf.float32), tf.constant(0, dtype=tf.float32)
+    
+
+    @tf.function
+    def train_step(self, batch):
+        """print(train_step.pretty_printed_concrete_signatures())"""
+        data = batch['uniform']
+        condition = batch['condition']
+        label = batch['label']
+        batch_size = tf.shape(data)[0] # dynamic for graph mode
+        
+        # train critic
+        critic_loss, critic_real, critic_fake = self.train_critic(data, condition, label, batch_size)
+
         metrics = {
-            "critic_loss": self.critic_loss_tracker.result(),
-            "value_function": self.value_function_tracker.result(),
-            'critic_real': tf.reduce_mean(score_real),
-            'critic_fake': tf.reduce_mean(score_fake)
+            "critic_loss": critic_loss,
+            "value_function": -critic_loss,
+            'critic_real': critic_real,
+            'critic_fake': critic_fake
         }
 
-        self.critic_steps += 1
+        self.critic_steps.assign_add(1)
 
-        # train generator (first epoch then every n steps), make sure included in graph construction
-        # https://www.tensorflow.org/guide/function#conditionals
-        # https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/autograph/g3doc/reference/control_flow.md#if-statements
-        # https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/autograph/g3doc/reference/limitations.md
-        if tf.math.logical_or(tf.math.equal(self.critic_steps, 1), tf.math.equal(self.critic_steps % self.config['training_balance'], 0)):
-            random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
-            with tf.GradientTape() as tape:
-                generated_data = self.generator([random_latent_vectors, condition, label])
-                score = self.critic([self.augment(generated_data), condition, label], training=False)
-                generator_loss = -tf.reduce_mean(score)
-                condition_penalty = tf.reduce_mean(tf.square(tf.reduce_max(generated_data[..., 0], axis=[1, 2]) - condition))
-                generator_penalised_loss = generator_loss + self.lambda_condition * condition_penalty
-            chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # don't want to affect training
-            grads = tape.gradient(generator_penalised_loss, self.generator.trainable_weights)
-            self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
-            
-            # update loss tracker for generator
-            self.condition_penalty_tracker.update_state(condition_penalty)
-            self.generator_loss_tracker.update_state(generator_loss)
-            self.chi_rmse_tracker.update_state(chi_rmse)
-        else:
-            #TODO: make better solution
-            pass
-            # metrics["condition_penalty"] = tf.constant(0, dtype=tf.float32)
-            # metrics["generator_loss"] = tf.constant(0, dtype=tf.float32)
-            # metrics['chi_rmse'] = tf.constant(0, dtype=tf.float32)
+        # train generator
+        ifelse = tf.math.logical_or(tf.math.equal(self.critic_steps, 1), tf.math.equal(self.critic_steps % self.config['training_balance'], 0))
+        train_generator = lambda: self.train_generator(data, condition, label, batch_size)
+        condition_penalty, generator_loss, chi_rmse = tf.cond(ifelse, train_generator, self.dummy)
         
         metrics["condition_penalty"] = self.condition_penalty_tracker.result()
         metrics["generator_loss"] = self.generator_loss_tracker.result()
