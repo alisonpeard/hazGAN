@@ -15,17 +15,17 @@ import matplotlib.pyplot as plt
 import hazGAN as hazzy
 from hazGAN import WandbMetricsLogger
 
-
 tf.keras.backend.clear_session()
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
-# declare globals
+# globals
 global datadir
 global rundir
 global imdir
 global runname
 global force_cpu
 
+RUN_EAGERLY = False
 
 def check_interactive(sys):
     """Useful check for VS code."""
@@ -268,14 +268,14 @@ def evaluate_results(train,
                      metadata
                      ) -> None:
     """Make some key figures to view results."""
-    #! This should work but only generated samples filtered rn
+    #! This should work ok but only generated samples filtered by label
     final_chi_rmse = history['chi_rmse'][-1]
     print(f"Finished training! chi_rmse: {final_chi_rmse}")
     if final_chi_rmse <= 20.0:
         save_config(rundir, config)
         paddings = metadata['paddings']
 
-        # look at biggest label for everything
+        # look at biggest label for everything and grab conditions
         biggest_label = metadata['labels'][-1]
         train_extreme = train.unbatch().filter(lambda sample: sample['label']==biggest_label) #!
         condition = np.array(list(x['condition'] for x in train_extreme.as_numpy_iterator())) # bit slow
@@ -310,38 +310,41 @@ def evaluate_results(train,
 
 def main(config, verbose=True):
     # load data
+    print("Label ratios: {}".format(config['label_ratios']))
     train, valid, metadata = hazzy.load_data(
         datadir,
-        label_ratios={'pre':1/3, 7: 1/3, 20: 1/3}, #TODO: config['label_ratios']
-        batch_size=64                             #TODO: condig['batch_size']
-        ) #TODO: other variants
+        label_ratios=config['label_ratios'], # {'pre':1/3, 7: 1/3, 20: 1/3}
+        batch_size=config['batch_size']
+        )
     config['nconditions'] = len(metadata['labels'])
 
     # number of epochs calculations
-    steps_per_epoch = 20 #TODO: config['steps_per_epoch']
+    steps_per_epoch = config['steps_per_epoch']
     batch_size = train._input_dataset._batch_size.numpy()
-    number_train_images = 10_000 # 300_000 #TODO: config['number_train_imahes']
+    number_train_images = config['number_train_images']
     number_train_batches = number_train_images // batch_size
     epochs = number_train_batches // steps_per_epoch
 
     if verbose:
         print("Batch size: {:,.0f}".format(batch_size))
         print("Steps per epoch: {:,.0f}".format(steps_per_epoch))
-        print("Training {:,.0f} images".format(number_train_images))
+        print("Training for {:,.0f} images".format(number_train_images))
         print("Total number of batches: {:,.0f}".format(number_train_batches))
-        print("Training for {:,.0f} epochs".format(epochs))
+        print("Training for {:,.0f} epochs\n".format(epochs))
 
     # callbacks
     image_count = hazzy.CountImagesSeen(batch_size)
     wandb_logger = WandbMetricsLogger()
 
     # train
-    cgan = hazzy.conditional.compile_wgan(config) # TODO: getattr(hazzy, config['type']).compile_wgan
-    history = cgan.fit(train, epochs=1, steps_per_epoch=1,
+    tf.config.run_functions_eagerly(RUN_EAGERLY) #for debugging
+    cgan = hazzy.conditional.compile_wgan(config)
+    history = cgan.fit(train, epochs=epochs, steps_per_epoch=steps_per_epoch,
                        validation_data=valid,
                        callbacks=[image_count, wandb_logger])
     
-    evaluate_results(train, config, history.history, cgan, metadata)
+    if config['training_balance'] < number_train_batches:
+        evaluate_results(train, config, history.history, cgan, metadata)
     return history.history
 
 

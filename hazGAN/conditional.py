@@ -7,6 +7,7 @@ References:
 """
 # %%
 import numpy as np
+import sys
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import optimizers
@@ -124,7 +125,7 @@ def define_critic(config, nchannels=2):
 
     # fully connected 1x1
     flat = layers.Reshape((-1, 5 * 5 * config["d_layers"][2]))(drop3)
-    score = layers.Dense(1)(flat)
+    score = layers.Dense(1, activation="sigmoid")(flat) #? sigmoid might smooth training by constraining?, S did similar
     out = layers.Reshape((1,))(score)
     return tf.keras.Model([x, condition, label], out, name="critic")
 
@@ -198,11 +199,13 @@ class WGANGP(keras.Model):
             data = batch['uniform']
             condition = batch["condition"]
             label = batch["label"]
-            score_valid += self.critic([self.augment(data), condition, label], training=False)
-        score_valid /= n
-        self.critic_valid_tracker(score_valid)
-        return {'critic_valid': tf.reduce_mean(score_valid)}
-        
+            critic_score = self.critic([self.augment(data), condition, label], training=False)
+            score_valid += tf.reduce_mean(critic_score)
+        score_valid = score_valid / (n + 1)
+        self.critic_valid_tracker.update_state(score_valid)
+        return {'critic': self.critic_valid_tracker.result()}
+    
+
     @tf.function
     def train_step(self, batch):
         data = batch['uniform']
@@ -234,30 +237,35 @@ class WGANGP(keras.Model):
             critic_loss += self.lambda_gp * gradient_penalty
         grads = tape.gradient(critic_loss, self.critic.trainable_weights)
         self.d_optimizer.apply_gradients(zip(grads, self.critic.trainable_weights))
-        self.critic_steps += 1
 
-        # train generator (every n steps)
-        if self.critic_steps % self.config['training_balance'] == 0:
-            random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
-            with tf.GradientTape() as tape:
-                generated_data = self.generator([random_latent_vectors, condition, label])
-                score = self.critic(self.augment(generated_data), training=False)
-                generator_loss = -tf.reduce_mean(score)
-                chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # think this is safe inside GradientTape
-            grads = tape.gradient(generator_loss, self.generator.trainable_weights)
-            self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
+        # update metrics and return their values
+        self.critic_loss_tracker(critic_loss)
+        self.value_function_tracker.update_state(-critic_loss)
 
-            # update metrics and return their values
-            self.critic_loss_tracker(critic_loss)
-            self.generator_loss_tracker.update_state(generator_loss)
-            self.chi_rmse_tracker.update_state(chi_rmse)
-            self.value_function_tracker.update_state(-critic_loss)
-
-        return {
-            "chi_rmse": self.chi_rmse_tracker.result(),
-            "generator_loss": self.generator_loss_tracker.result(),
+        metrics = {
             "critic_loss": self.critic_loss_tracker.result(),
             "value_function": self.value_function_tracker.result(),
             'critic_real': tf.reduce_mean(score_real),
             'critic_fake': tf.reduce_mean(score_fake)
         }
+
+        self.critic_steps += 1
+
+        # train generator (first epoch then every n steps), make sure included in graph construction
+        if (self.critic_steps == 1) | (self.critic_steps % self.config['training_balance'] == 0):
+            random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
+            with tf.GradientTape() as tape:
+                generated_data = self.generator([random_latent_vectors, condition, label])
+                score = self.critic([self.augment(generated_data), condition, label], training=False)
+                generator_loss = -tf.reduce_mean(score)
+                chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # think this is safe inside GradientTape
+            grads = tape.gradient(generator_loss, self.generator.trainable_weights)
+            self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
+            
+            # update loss tracker for generator
+            self.generator_loss_tracker.update_state(generator_loss)
+            self.chi_rmse_tracker.update_state(chi_rmse)
+            metrics["generator_loss"] = self.generator_loss_tracker.result()
+            metrics['chi_rmse'] = self.chi_rmse_tracker.result()
+
+        return metrics
