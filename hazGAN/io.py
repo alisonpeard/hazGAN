@@ -81,7 +81,6 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     data['season'] = data['time.season']
     data['time'] = (data['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
     data = data.sel(channel=channels)
-    print("data.params.shape: {}".format(train['params'].shape))
 
     # conditioning & sampling variables (pretrain)
     pretrain['maxwind'] = pretrain.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat']) # anomaly
@@ -95,22 +94,26 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
         n = data['time'].size
         train_size = int(train_size * n)
     
-    train_dates = np.random.choice(data['time'].data, train_size)
-    train_mask = data['time'].isin(train_dates)
-    train = data.where(train_mask, drop=True)
-    valid = data.where(~train_mask, drop=True)
-    print("first train.params.shape: {}".format(train['params'].shape))
+
+    train_dates = np.random.choice(data['time'].data, train_size, replace=False)
+    dynamic_vars = [var for var in data.data_vars if 'time' in data[var].dims]
+    static_vars = [var for var in data.data_vars if 'time' not in data[var].dims]
+    train= xr.merge([
+        data[dynamic_vars].sel(time=train_dates),
+        data[static_vars]
+    ])
+    valid = xr.merge([
+        data[dynamic_vars].sel(time=data.time[~data.time.isin(train_dates)]),
+        data[static_vars]
+    ])
+    print("train.params.shape: {}".format(train['params'].shape))
 
     #  get metadata before batching and resampling
     metadata['train'] = train[['uniform', 'anomaly', 'medians', 'params']]
     metadata['valid'] = valid[['uniform', 'anomaly', 'medians', 'params']]
 
     # try concatenating with training data
-    print("initial train.params.shape: {}".format(train['params'].shape))
-    params = train["params"]
-    train = xr.concat([train.drop_vars("params"), pretrain], dim='time', data_vars="minimal")
-    train = train.assign(params=params)
-    print("after concat train.params.shape: {}".format(train['params'].shape)) # (18, 22, 3, 2, 176986)
+    train = xr.concat([train, pretrain], dim='time', data_vars="minimal")
     labels = list(np.unique(train['label'].data).astype(int))
     metadata['labels'] = labels
     metadata['paddings'] = PADDINGS
