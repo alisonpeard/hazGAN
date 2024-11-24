@@ -200,7 +200,7 @@ def figure_three(fake_u, train_u, channel=0,
         cbar_ax = subfig.add_axes([1., .02, .02, .9]) 
         subfig.colorbar(im, cax=cbar_ax)
     fig.suptitle('Percentiles')
-    log_image_to_wandb(fig, f"max_train_samples", imdir)
+    log_image_to_wandb(fig, f"max_percentiles", imdir)
 
 
 def figure_four(fake_u, train_u, train_x, params,
@@ -254,7 +254,56 @@ def figure_four(fake_u, train_u, train_x, params,
         cbar_ax = subfig.add_axes([1., .02, .02, .9]) 
         subfig.colorbar(im, cax=cbar_ax)
     fig.suptitle('Percentiles')
-    log_image_to_wandb(fig, f"max_train_samples", imdir)
+    log_image_to_wandb(fig, f"max_samples", imdir)
+
+
+def figure_five(fake_u, train_u, channel=0,
+                 cmap="Spectral_r", levels=20):
+    """Plot the 32 most extreme train and generated percentiles."""
+    from hazGAN import DiffAugment  
+
+    policy = 'color,translation,cutout'
+
+    # prep data to plot
+    lon = np.linspace(80, 95, 22)
+    lat = np.linspace(10, 25, 18)
+    lon, lat = np.meshgrid(lon, lat)
+    
+    fake = DiffAugment(fake_u, policy).numpy()[..., channel]
+    real = DiffAugment(train_u, policy).numpy()[..., channel]
+
+    if fake.shape[0] < 32:
+        fake = np.tile(
+            fake,
+            reps=(int(np.ceil(32 / fake.shape[0])), 1, 1)
+            )
+
+    samples = {'Generated samples': fake, "Training samples": real}
+
+    # set up plot specs
+    fig = plt.figure(figsize=(16, 16), layout="tight")
+    subfigs = fig.subfigures(2, 1, hspace=0.2)
+
+    for subfig, item in zip(subfigs, samples.items()):
+        axs = subfig.subplots(4, 8, sharex=True, sharey=True,
+                                    gridspec_kw={'hspace': 0, 'wspace': 0})
+        label = item[0]
+        sample = item[1]
+        vmin = sample.min()
+        vmax = sample.max()
+        for i, ax in enumerate(axs.flat):
+            im = ax.contourf(lon, lat, sample[i, ...],
+                             vmin=vmin, vmax=vmax,
+                             cmap=cmap, levels=levels)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.invert_yaxis()
+        subfig.suptitle(label, y=1.04, fontsize=24)
+        subfig.subplots_adjust(right=.99)
+        cbar_ax = subfig.add_axes([1., .02, .02, .9]) 
+        subfig.colorbar(im, cax=cbar_ax)
+    fig.suptitle('Augmented Percentiles')
+    log_image_to_wandb(fig, f"augmented_percentiles", imdir)
 
 
 def export_sample(samples):
@@ -262,36 +311,40 @@ def export_sample(samples):
 
 
 def evaluate_results(train,
+                     valid,
                      config,
                      history,
                      model,
                      metadata
                      ) -> None:
     """Make some key figures to view results."""
-    #! This should work ok but only generated samples filtered by label
+    #! This should work ok but only generated samples are filtered by label
     final_chi_rmse = history['chi_rmse'][-1]
     print(f"Finished training! chi_rmse: {final_chi_rmse}")
     if final_chi_rmse <= 20.0:
         save_config(rundir, config)
-        paddings = metadata['paddings']
 
-        # look at biggest label for everything and grab conditions
+        # look at biggest (most extreme) label for everything and grab conditions
         biggest_label = metadata['labels'][-1]
-        train_extreme = train.unbatch().filter(lambda sample: sample['label']==biggest_label) #!
-        condition = np.array(list(x['condition'] for x in train_extreme.as_numpy_iterator())) # bit slow
+        train_extreme = train.unbatch().filter(lambda sample: sample['label']==biggest_label)
+        condition = np.array(list(x['condition'] for x in train_extreme.as_numpy_iterator()))
         
-        #! very crude condition interpolation - do better later
+        #! very crude condition interpolation to get 1000 realistic conditions
+        x = np.linspace(0, 100, 1000)
         xp = np.linspace(0, 100, len(condition))
         fp = condition
-        x = np.linspace(0, 100, 1000)
         condition = np.interp(x, xp, fp)
         label = np.tile(biggest_label, 1000)
+        print("Conditioning on 1000 {}-{} max wind percentiles".format(condition.min(), condition.max()))
+        print("Conditioning on label: {}".format(label[0]))
 
         paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]]) # different for arrays and datasets
         fake_u = hazzy.unpad(model(condition, label, nsamples=1000), paddings=paddings).numpy()
-        train_u = metadata['train']['uniform'].data
-        train_x = metadata['train']['anomaly'].data
-        valid_u = metadata['valid']['uniform'].data
+        train_u = hazzy.unpad(train_u, paddings=paddings).numpy()
+        valid_u = hazzy.unpad(valid_u, paddings=paddings).numpy()
+        # train_u = metadata['train']['uniform'].data
+        # train_x = metadata['train']['anomaly'].data
+        # valid_u = metadata['valid']['uniform'].data
         params = metadata['train']['params'].data
 
         print("train_u.shape: {}".format(train_u.shape))
@@ -301,7 +354,9 @@ def evaluate_results(train,
         figure_one(fake_u, train_u, valid_u)
         figure_two(fake_u, train_u, valid_u)
         figure_three(fake_u, train_u)                  # gumbel
-        figure_four(fake_u, train_u, train_x, params)  # full-scale
+        # figure_four(fake_u, train_u, train_x, params)  # full-scale
+        figure_four(fake_u, train_u, train_x, params)
+        figure_five(fake_u, train_u)
         export_sample(fake_u)
     else:
         print("Chi score too high, deleting run directory")
@@ -366,7 +421,7 @@ def main(config, verbose=True):
                        callbacks=[image_count, wandb_logger])
     
     if config['training_balance'] < number_train_batches:
-        evaluate_results(train, config, history.history, cgan, metadata)
+        evaluate_results(train, valid, config, history.history, cgan, metadata)
     return history.history
 
 

@@ -18,9 +18,30 @@ from inspect import signature
 
 from .extreme_value_theory import chi_loss, inv_gumbel
 from .tf_utils import DiffAugment
-from .unconditional import process_optimizer_kwargs
 
 # %%
+def get_optimizer_kwargs(optimizer):
+    optimizer = getattr(optimizers, optimizer)
+    params = signature(optimizer).parameters
+    return params
+
+
+def process_optimizer_kwargs(config):
+    kwargs = {
+        "learning_rate": config['learning_rate'],
+        "beta_1": config['beta_1'],
+        "beta_2": config['beta_2'],
+        "weight_decay": config['weight_decay'],
+        "use_ema": config['use_ema'],
+        "ema_momentum": config['ema_momentum'],
+        "ema_overwrite_frequency": config['ema_overwrite_frequency'],
+    }
+    params = get_optimizer_kwargs(config['optimizer'])
+    kwargs = {key: val for key, val in kwargs.items() if key in params}
+    
+    return kwargs
+
+
 def compile_wgan(config, nchannels=2):
     kwargs = process_optimizer_kwargs(config)
     optimizer = getattr(optimizers, config['optimizer'])
@@ -191,6 +212,8 @@ class WGANGP(keras.Model):
 
     def evaluate(self, x, **kwargs):
         """Overwrite evaluation function for custom data.
+
+        #? Is it correct to NOT augment here?
         """
         score_valid = 0
         with warnings.catch_warnings(): # suppress out of range error
@@ -200,7 +223,7 @@ class WGANGP(keras.Model):
                     data = batch['uniform']
                     condition = batch["condition"]
                     label = batch["label"]
-                    critic_score = self.critic([self.augment(data), condition, label], training=False)
+                    critic_score = self.critic([data, condition, label], training=False)
                     score_valid += tf.reduce_mean(critic_score)
                 except tf.errors.OutOfRangeError:
                     break
@@ -290,7 +313,7 @@ class WGANGP(keras.Model):
         # train generator
         ifelse = tf.math.logical_or(tf.math.equal(self.critic_steps, 1), tf.math.equal(self.critic_steps % self.config['training_balance'], 0))
         train_generator = lambda: self.train_generator(data, condition, label, batch_size)
-        condition_penalty, generator_loss, chi_rmse = tf.cond(ifelse, train_generator, self.dummy)
+        _ = tf.cond(ifelse, train_generator, self.dummy)
         
         metrics["condition_penalty"] = self.condition_penalty_tracker.result()
         metrics["generator_loss"] = self.generator_loss_tracker.result()

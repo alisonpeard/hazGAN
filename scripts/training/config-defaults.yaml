@@ -1,7 +1,7 @@
 # training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
 number_train_images:
   desc: Total number of images to show critic (300,000 in Karras)
-  value: 3_000_000
+  value: 3000 # 3_000_000
 steps_per_epoch:
   desc: How many batches per epoch (infinite dataset generator)
   value: 20
@@ -50,7 +50,7 @@ lambda_gp:
   value: 10.
 lambda_condition:
   desc: Weight of penalty on max wind condition
-  value: 0.001
+  value: 0.01
 
 # architecture
 lrelu:
@@ -73,7 +73,7 @@ interpolation:
   value: bilinear
 normalize_generator:
   desc: Whether to batch normalize generator blocks.
-  value: False
+  value: True
 
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
 learning_rate:
@@ -90,13 +90,13 @@ weight_decay:
   value: 0.001
 use_ema:
   desc: Use exponential moving average in training, causes issues when re-loading weights.
-  value: False # only set to true if not loading weights
+  value: True # only set to true if not loading weights
 ema_momentum:
   desc: Momentum of exponential moving average for tf.keras.optimizers.Adam
-  value: 0.9
+  value: 0.99
 ema_overwrite_frequency:
-  desc: How often to overwrite weights with ema.
-  value: 1
+  desc: How often [nbatches] to overwrite weights with ema
+  value: 10
 
 # for linux cluster
 # export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/soge-home/users/spet5107/micromamba/envs/tensorflow/lib
