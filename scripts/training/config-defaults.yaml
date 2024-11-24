@@ -60,6 +60,9 @@ lambda_gp:
 lambda_chi:
   desc: Weight of penalty on l2 error of extremal coefficient
   value: 0
+lambda_condition:
+  desc: Weight of penalty on max wind condition
+  value: 0.1
 true_label_smooth:
   desc: Regularization -- multiply true labels by this to smooth discriminator's labels
   value: 1.

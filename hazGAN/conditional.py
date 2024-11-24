@@ -139,6 +139,7 @@ class WGANGP(keras.Model):
         self.latent_dim = config['latent_dims']
         self.lambda_chi = config['lambda_chi']
         self.lambda_gp = config['lambda_gp']
+        self.lambda_condition = config['lambda_condition']
         self.config = config
         self.latent_space_distn = getattr(tf.random, config['latent_space_distn'])
         self.trainable_vars = [
@@ -154,6 +155,7 @@ class WGANGP(keras.Model):
 
         # trackers average over batches
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
+        self.condition_loss_tracker = keras.metrics.Mean(name="condition_loss")
         self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
         self.critic_loss_tracker = keras.metrics.Mean(name="critic_loss")
         self.value_function_tracker = keras.metrics.Mean(name="value_function")
@@ -262,13 +264,17 @@ class WGANGP(keras.Model):
                 generated_data = self.generator([random_latent_vectors, condition, label])
                 score = self.critic([self.augment(generated_data), condition, label], training=False)
                 generator_loss = -tf.reduce_mean(score)
-                chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # think this is safe inside GradientTape
-            grads = tape.gradient(generator_loss, self.generator.trainable_weights)
+                condition_loss = tf.reduce_mean(tf.square(tf.reduce_max(generated_data[..., 0], axis=[1, 2]) - condition))
+                generator_penalised_loss = generated_data + self.lambda_condition * condition_loss
+            chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # don't want to affect training
+            grads = tape.gradient(generator_penalised_loss, self.generator.trainable_weights)
             self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
             
             # update loss tracker for generator
+            self.condition_loss_tracker.update_state(condition_loss)
             self.generator_loss_tracker.update_state(generator_loss)
             self.chi_rmse_tracker.update_state(chi_rmse)
+            metrics["condition_loss"] = self.condition_loss_tracker.result()
             metrics["generator_loss"] = self.generator_loss_tracker.result()
             metrics['chi_rmse'] = self.chi_rmse_tracker.result()
 
