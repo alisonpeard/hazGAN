@@ -1,9 +1,5 @@
 """
 Improved input-output methods to flexibly load from pretraining and training sets.
-
-Methods:
---------
-- load_data
 """
 # %%
 import os
@@ -15,6 +11,9 @@ from numbers import Number
 import xarray as xr
 import tensorflow as tf
 from tensorflow.data import Dataset
+
+
+PADDINGS = tf.constant([[1, 1], [1, 1], [0, 0]])
 
 
 def print_if_verbose(string:str, verbose=True):
@@ -37,7 +36,7 @@ def process_outliers(*args, **kwargs):
     raise NotImplementedError
 
 
-def label_data(data, label_ratios:dict={'pre':1/3., 7: 1/3, 20:1/3}) -> xr.DataArray:
+def label_data(data, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}) -> xr.DataArray:
     """Apply labels to storm data using user-provided dict."""
     ratios = list(label_ratios.values())
     assert np.isclose(sum(ratios), 1), "Ratios must sum to one."
@@ -68,7 +67,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     """
     assert condition in ['maxwind', 'time.season', 'label']
 
-    print("\nLoading training data (hang on)...")
+    print("\nLoading training data (hang on) ...")
     start = time.time() # time data loading
     data = xr.open_dataset(os.path.join(datadir, 'data.nc'))
     pretrain = xr.open_dataset(os.path.join(datadir, 'data_pretrain.nc'))
@@ -82,6 +81,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     data['season'] = data['time.season']
     data['time'] = (data['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
     data = data.sel(channel=channels)
+    print("data.params.shape: {}".format(train['params'].shape))
 
     # conditioning & sampling variables (pretrain)
     pretrain['maxwind'] = pretrain.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat']) # anomaly
@@ -94,19 +94,26 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     if isinstance(train_size, float):
         n = data['time'].size
         train_size = int(train_size * n)
+    
     train_dates = np.random.choice(data['time'].data, train_size)
     train_mask = data['time'].isin(train_dates)
     train = data.where(train_mask, drop=True)
     valid = data.where(~train_mask, drop=True)
+    print("first train.params.shape: {}".format(train['params'].shape))
 
     #  get metadata before batching and resampling
     metadata['train'] = train[['uniform', 'anomaly', 'medians', 'params']]
     metadata['valid'] = valid[['uniform', 'anomaly', 'medians', 'params']]
 
     # try concatenating with training data
-    train = xr.concat([train, pretrain], dim='time')
+    print("initial train.params.shape: {}".format(train['params'].shape))
+    params = train["params"]
+    train = xr.concat([train.drop_vars("params"), pretrain], dim='time', data_vars="minimal")
+    train = train.assign(params=params)
+    print("after concat train.params.shape: {}".format(train['params'].shape)) # (18, 22, 3, 2, 176986)
     labels = list(np.unique(train['label'].data).astype(int))
     metadata['labels'] = labels
+    metadata['paddings'] = PADDINGS
 
     def sample_dict(data):
         samples = {
@@ -122,41 +129,31 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     valid = Dataset.from_tensor_slices(sample_dict(valid)).shuffle(100)
 
     #  Define transformations
-    warn('Different ECDFs for train and pretrain being combined.')
     def gumbel(uniform, eps=1e-6):
         tf.debugging.Assert(tf.less_equal(tf.reduce_max(uniform), 1.), [uniform])
         tf.debugging.Assert(tf.greater_equal(tf.reduce_min(uniform), 0.), [uniform])
         uniform = tf.clip_by_value(uniform, eps, 1-eps)
         return -tf.math.log(-tf.math.log(uniform))
 
-    def train_transforms(sample):
+    def transforms(sample):
         uniform = sample['uniform']
         uniform = tf.image.resize(uniform, image_shape)
         if gumbel:
             uniform = gumbel(uniform)
         if padding_mode is not None:
-            paddings = tf.constant([[1, 1], [1, 1], [0, 0]])
+            paddings = PADDINGS
             uniform = tf.pad(uniform, paddings, mode=padding_mode)
         sample['uniform'] = uniform
         return sample
 
-    def valid_transforms(sample):
-        uniform = sample['uniform']
-        uniform = tf.image.resize(uniform, image_shape)
-        if gumbel:
-            uniform = gumbel(uniform)
-        sample['uniform'] = uniform
-        return sample
-
-    train = train.map(train_transforms)
-    valid = valid.map(valid_transforms).batch(batch_size)
+    train = train.map(transforms)
+    valid = valid.map(transforms).batch(batch_size, drop_remainder=True)
 
     # manual under/oversampling
-    target_dist = list(label_ratios.values())
     split_train = [train.filter(lambda sample: sample['label']==label) for label in labels]
+    target_dist = list(label_ratios.values())
 
     train = tf.data.Dataset.sample_from_datasets(split_train, target_dist).batch(batch_size)
-    # train = train.repeat() will generate infinite samples
     end = time.time()
     print('Time taken to load datasets: {:.2f} seconds.\n'.format(end - start))
 
@@ -173,6 +170,7 @@ if __name__ == "__main__":
     datadir = env.str("TRAINDIR")
 
     train, valid, metadata = load_data(datadir)
+
     def benchmark(dataset, num_epochs=2):
         start_time = time.perf_counter()
         for epoch_num in range(num_epochs):
@@ -183,8 +181,10 @@ if __name__ == "__main__":
     benchmark(train)
     benchmark(valid)
 
-    train.save(os.path.join(datadir, 'train_dataset'))
-    valid.save(os.path.join(datadir, 'valid_dataset'))
+    print("param shapes: {}".format(metadata['train']['params']))
+
+    # train.save(os.path.join(datadir, 'train_dataset'))
+    # valid.save(os.path.join(datadir, 'valid_dataset'))
 # %%
 # TODO: Make a class to handle train, valid, and metadata
 if False:
@@ -226,4 +226,4 @@ if False:
                 json.dumps(self.metadata, fp)
 
 
-# %%
+

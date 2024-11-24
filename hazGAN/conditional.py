@@ -146,7 +146,7 @@ class WGANGP(keras.Model):
         if config['gumbel']:
             self.inv = inv_gumbel
         else:
-            self.inv = lambda x: x
+            self.inv = lambda x: x # will make serialising etc. difficult
         self.augment = lambda x: DiffAugment(x, config['augment_policy'])
         self.penalty = config['penalty']
 
@@ -157,9 +157,10 @@ class WGANGP(keras.Model):
         self.value_function_tracker = keras.metrics.Mean(name="value_function")
         self.critic_real_tracker = keras.metrics.Mean(name="critic_real")
         self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
+        self.critic_valid_tracker = keras.metrics.Mean(name="critic_valid")
         self.seed = config['seed']
-        self.critic_steps = 0
-        
+        self.critic_steps = 0 # for handling critic:generator ratio
+
     
     def compile(self, d_optimizer, g_optimizer, *args, **kwargs):
         super().compile(*args, **kwargs)
@@ -185,14 +186,29 @@ class WGANGP(keras.Model):
 
         raw = self.generator([latent_vectors, condition, label], training=False)
         return self.inv(raw)
-
+    
+    
+    def evaluate(self, x, **kwargs):
+        """Overwrite evaluation function for custom data.
+        
+        #!Validation data is not resampled so might look odd?
+        """
+        score_valid = 0
+        for n, batch in enumerate(x):
+            data = batch['uniform']
+            condition = batch["condition"]
+            label = batch["label"]
+            score_valid += self.critic([self.augment(data), condition, label], training=False)
+        score_valid /= n
+        self.critic_valid_tracker(score_valid)
+        return {'critic_valid': tf.reduce_mean(score_valid)}
         
     @tf.function
     def train_step(self, batch):
         data = batch['uniform']
         condition = batch['condition']
         label = batch['label']
-        batch_size = tf.shape(data)[0]
+        batch_size = tf.shape(data)[0] # dynamic for graph mode
         
         # train critic
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
@@ -243,5 +259,5 @@ class WGANGP(keras.Model):
             "critic_loss": self.critic_loss_tracker.result(),
             "value_function": self.value_function_tracker.result(),
             'critic_real': tf.reduce_mean(score_real),
-            'critic_fake': tf.reduce_mean(score_fake),
+            'critic_fake': tf.reduce_mean(score_fake)
         }

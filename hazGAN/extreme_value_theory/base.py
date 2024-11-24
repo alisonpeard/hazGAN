@@ -74,8 +74,9 @@ def empirical_quantile(uniform, x, y, params=None):
 
     x [was] a vector of interpolated uniform quantiles of data (usually 100,000)
     Now x and y are data that original quantiles were calculated from, where x
-    is data and y corresponding densities.
+    is data and y corresponding densities. #!ARE THEY?
     """
+    #!!!CHECK THIS!!!
     x = sorted(x)
 
     if (uniform.max() - uniform.min()) == 0.0:

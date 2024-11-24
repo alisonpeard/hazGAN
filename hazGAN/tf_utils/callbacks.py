@@ -17,7 +17,8 @@ class WandbMetricsLogger(Callback):
 
     Source: https://community.wandb.ai/t/sweeps-not-showing-val-loss-with-keras/4495"""
     def on_epoch_end(self, epoch, logs=None):
-        wandb.log(logs)
+        if wandb.run is not None:
+            wandb.log(logs)
 
 
 class OverfittingDetector(Callback):
@@ -48,14 +49,16 @@ class OverfittingDetector(Callback):
             self.model.stop_training = True
 
 class CountImagesSeen(Callback):
-    def __init__(self, ntrain):
+    def __init__(self, batch_size):
+        """Add to image counter at end of each batch."""
         super().__init__()
-        self.images_seen = 0
-        self.ntrain = ntrain
+        self.batch_size = batch_size
+        self.batches_seen = 0
 
-    def on_epoch_end(self, epoch, logs={}):
+    def on_batch_end(self, batch, logs={}):
         # get training data
-        logs['images_seen'] = (epoch+1) * self.ntrain
+        self.batches_seen += 1
+        logs['images_seen'] = int(self.batches_seen * self.batch_size)
 
 
 class CriticVal(Callback):

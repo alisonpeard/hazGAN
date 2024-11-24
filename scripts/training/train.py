@@ -64,6 +64,7 @@ res = (18, 22)
 paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
+
 def check_interactive(sys):
     """Check if running in interactive mode"""
     if hasattr(sys, 'ps1'):
@@ -266,7 +267,8 @@ def main(config):
         vmax = x.max()
         if x.shape[0] < 64:
             # repeat x until it has 64 samples
-            x = np.concatenate([x] * int(np.ceil(64 / x.shape[0])), axis=0)
+            x = np.tile(x, reps=(int(np.ceil(64 / x.shape[0])), 1, 1))
+            # x = np.concatenate([x] * int(np.ceil(64 / x.shape[0])), axis=0)
         maxima = np.max(x, axis=(1, 2))
         idx = np.argsort(maxima)
         x = x[idx, ...]
