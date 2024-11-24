@@ -154,7 +154,7 @@ class WGANGP(keras.Model):
 
         # trackers average over batches
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
-        self.condition_loss_tracker = keras.metrics.Mean(name="condition_loss")
+        self.condition_penalty_tracker = keras.metrics.Mean(name="condition_loss")
         self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
         self.critic_loss_tracker = keras.metrics.Mean(name="critic_loss")
         self.value_function_tracker = keras.metrics.Mean(name="value_function")
@@ -213,6 +213,7 @@ class WGANGP(keras.Model):
 
     @tf.function
     def train_step(self, batch):
+        """print(train_step.pretty_printed_concrete_signatures())"""
         data = batch['uniform']
         condition = batch['condition']
         label = batch['label']
@@ -257,24 +258,34 @@ class WGANGP(keras.Model):
         self.critic_steps += 1
 
         # train generator (first epoch then every n steps), make sure included in graph construction
-        if (self.critic_steps == 1) | (self.critic_steps % self.config['training_balance'] == 0):
+        # https://www.tensorflow.org/guide/function#conditionals
+        # https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/autograph/g3doc/reference/control_flow.md#if-statements
+        # https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/autograph/g3doc/reference/limitations.md
+        if tf.math.logical_or(tf.math.equal(self.critic_steps, 1), tf.math.equal(self.critic_steps % self.config['training_balance'], 0)):
             random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
             with tf.GradientTape() as tape:
                 generated_data = self.generator([random_latent_vectors, condition, label])
                 score = self.critic([self.augment(generated_data), condition, label], training=False)
                 generator_loss = -tf.reduce_mean(score)
-                condition_loss = tf.reduce_mean(tf.square(tf.reduce_max(generated_data[..., 0], axis=[1, 2]) - condition))
-                generator_penalised_loss = generator_loss + self.lambda_condition * condition_loss
+                condition_penalty = tf.reduce_mean(tf.square(tf.reduce_max(generated_data[..., 0], axis=[1, 2]) - condition))
+                generator_penalised_loss = generator_loss + self.lambda_condition * condition_penalty
             chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # don't want to affect training
             grads = tape.gradient(generator_penalised_loss, self.generator.trainable_weights)
             self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
             
             # update loss tracker for generator
-            self.condition_loss_tracker.update_state(condition_loss)
+            self.condition_penalty_tracker.update_state(condition_penalty)
             self.generator_loss_tracker.update_state(generator_loss)
             self.chi_rmse_tracker.update_state(chi_rmse)
-            metrics["condition_loss"] = self.condition_loss_tracker.result()
-            metrics["generator_loss"] = self.generator_loss_tracker.result()
-            metrics['chi_rmse'] = self.chi_rmse_tracker.result()
+        else:
+            #TODO: make better solution
+            pass
+            # metrics["condition_penalty"] = tf.constant(0, dtype=tf.float32)
+            # metrics["generator_loss"] = tf.constant(0, dtype=tf.float32)
+            # metrics['chi_rmse'] = tf.constant(0, dtype=tf.float32)
+        
+        metrics["condition_penalty"] = self.condition_penalty_tracker.result()
+        metrics["generator_loss"] = self.generator_loss_tracker.result()
+        metrics['chi_rmse'] = self.chi_rmse_tracker.result()
 
         return metrics

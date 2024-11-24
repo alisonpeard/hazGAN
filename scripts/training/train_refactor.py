@@ -343,6 +343,7 @@ def main(config, verbose=True):
     batch_size = train._input_dataset._batch_size.numpy()
     number_train_images = config['number_train_images']
     number_train_batches = number_train_images // batch_size
+    images_per_epoch = steps_per_epoch * batch_size
     epochs = number_train_batches // steps_per_epoch
 
     if verbose:
@@ -351,6 +352,7 @@ def main(config, verbose=True):
         print("Training for {:,.0f} images".format(number_train_images))
         print("Total number of batches: {:,.0f}".format(number_train_batches))
         print("Training for {:,.0f} epochs\n".format(epochs))
+        print("Images per epoch: {:,.0f}".format(images_per_epoch))
 
     # callbacks
     image_count = hazzy.CountImagesSeen(batch_size)
@@ -359,7 +361,7 @@ def main(config, verbose=True):
     # train
     tf.config.run_functions_eagerly(RUN_EAGERLY) #for debugging
     cgan = hazzy.conditional.compile_wgan(config, nchannels=len(config['channels']))
-    history = cgan.fit(train, epochs=epochs, steps_per_epoch=steps_per_epoch,
+    history = cgan.fit(train.repeat(), epochs=epochs, steps_per_epoch=steps_per_epoch,
                        validation_data=valid,
                        callbacks=[image_count, wandb_logger])
     
