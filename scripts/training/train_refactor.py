@@ -1,4 +1,6 @@
-"""For conditional training (no constants yet)."""
+"""
+For conditional training (no constants yet).
+"""
 # %%
 import os
 import sys
@@ -8,9 +10,11 @@ import wandb
 from environs import Env
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
+
 import hazGAN as hazzy
 from hazGAN import WandbMetricsLogger
-import matplotlib.pyplot as plt
+
 
 tf.keras.backend.clear_session()
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
@@ -164,11 +168,11 @@ def figure_three(fake_u, train_u, channel=0,
             )
 
     fake_maxima = np.max(fake, axis=(1, 2))
-    fake_sorting = np.argsort(fake_maxima)
+    fake_sorting = np.argsort(fake_maxima)[::-1]
     fake = fake[fake_sorting, ...]
 
     real_maxima = np.max(real, axis=(1, 2))
-    real_sorting = np.argsort(real_maxima)
+    real_sorting = np.argsort(real_maxima)[::-1]
     real = real[real_sorting, ...]
 
     samples = {'Generated samples': fake, "Training samples": real}
@@ -211,9 +215,6 @@ def figure_four(fake_u, train_u, train_x, params,
     lat = np.linspace(10, 25, 18)
     lon, lat = np.meshgrid(lon, lat)
     
-    fake = fake_u[..., channel]
-    real = train_u[..., channel]
-
     if fake.shape[0] < 32:
         fake = np.tile(
             fake,
@@ -221,11 +222,11 @@ def figure_four(fake_u, train_u, train_x, params,
             )
 
     fake_maxima = np.max(fake, axis=(1, 2))
-    fake_sorting = np.argsort(fake_maxima)
+    fake_sorting = np.argsort(fake_maxima)[::-1]
     fake = fake[fake_sorting, ...]
 
     real_maxima = np.max(real, axis=(1, 2))
-    real_sorting = np.argsort(real_maxima)
+    real_sorting = np.argsort(real_maxima)[::-1]
     real = real[real_sorting, ...]
 
     samples = {'Generated samples': fake, "Training samples": real}

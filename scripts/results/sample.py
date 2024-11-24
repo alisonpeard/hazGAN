@@ -8,6 +8,7 @@ import hazGAN as hg
 from hazGAN import POT
 import wandb
 
+
 # %%
 wd = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN"
 RUNNAME = "absurd-sweep-1" # "absurd-sweep-1" # "atomic-sweep-1" # "amber-sweep-13"
