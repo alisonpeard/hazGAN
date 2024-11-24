@@ -327,10 +327,14 @@ def main(config, verbose=True):
         {float(k) if k.isnumeric() else k: v for k, v in config['label_ratios'].items()}
         )
     print("Label ratios: {}".format(config['label_ratios']))
+
     train, valid, metadata = hazzy.load_data(
         datadir,
         label_ratios=config['label_ratios'], 
-        batch_size=config['batch_size']
+        batch_size=config['batch_size'],
+        train_size=config['train_size'],
+        channels=config['channels'],
+        gumbel=config['gumbel']
         )
     config = update_config(config, 'nconditions', len(metadata['labels']))
 
@@ -354,7 +358,7 @@ def main(config, verbose=True):
 
     # train
     tf.config.run_functions_eagerly(RUN_EAGERLY) #for debugging
-    cgan = hazzy.conditional.compile_wgan(config)
+    cgan = hazzy.conditional.compile_wgan(config, nchannels=len(config['channels']))
     history = cgan.fit(train, epochs=epochs, steps_per_epoch=steps_per_epoch,
                        validation_data=valid,
                        callbacks=[image_count, wandb_logger])

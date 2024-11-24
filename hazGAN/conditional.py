@@ -137,7 +137,6 @@ class WGANGP(keras.Model):
         self.critic = define_critic(config, nchannels)
         self.generator = define_generator(config, nchannels)
         self.latent_dim = config['latent_dims']
-        self.lambda_chi = config['lambda_chi']
         self.lambda_gp = config['lambda_gp']
         self.lambda_condition = config['lambda_condition']
         self.config = config
@@ -265,7 +264,7 @@ class WGANGP(keras.Model):
                 score = self.critic([self.augment(generated_data), condition, label], training=False)
                 generator_loss = -tf.reduce_mean(score)
                 condition_loss = tf.reduce_mean(tf.square(tf.reduce_max(generated_data[..., 0], axis=[1, 2]) - condition))
-                generator_penalised_loss = generated_data + self.lambda_condition * condition_loss
+                generator_penalised_loss = generator_loss + self.lambda_condition * condition_loss
             chi_rmse = chi_loss(self.inv(data), self.inv(generated_data)) # don't want to affect training
             grads = tape.gradient(generator_penalised_loss, self.generator.trainable_weights)
             self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))

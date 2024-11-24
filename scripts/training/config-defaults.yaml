@@ -5,28 +5,19 @@ number_train_images:
 steps_per_epoch:
   desc: How many batches per epoch (infinite dataset generator)
   value: 20
-label_ratios:
-  desc: see if this works
-  value:
-    pre: 0.3333333
-    '7': 0.3333333
-    '20': 0.3333333
-nepochs:
-  desc: Gulrajani et al. 2017 use 200_000
-  value: 20 # 3000 # or 1,500,000/train_size
 train_size:
-  value: 0.6 # 840 # 50
+  value: 0.8 # 840 # 50
 batch_size:
   value: 128
 channels:
   desc: Which channels to model, subsets of ['u10', 'tp', 'mslp']
   value: ['u10']
-ratios:
-  desc: Dataset representation per-batch
-  value: [0.333334, 0.333333, 0.333333]
-chi_frequency:
-  desc: How often to calculate chi-score for train and test.
-  value: 10
+label_ratios:
+  desc: Dataset representation, by value
+  value:
+    pre: 0.3333333
+    '7': 0.3333333
+    '20': 0.3333333
 augment_policy:
   desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
   value: 'color,translation,cutout'
@@ -57,15 +48,9 @@ uniform:
   value: uniform
 lambda_gp:
   value: 10.
-lambda_chi:
-  desc: Weight of penalty on l2 error of extremal coefficient
-  value: 0
 lambda_condition:
   desc: Weight of penalty on max wind condition
   value: 0.1
-true_label_smooth:
-  desc: Regularization -- multiply true labels by this to smooth discriminator's labels
-  value: 1.
 
 # architecture
 lrelu:
