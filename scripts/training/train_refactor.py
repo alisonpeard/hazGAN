@@ -308,15 +308,31 @@ def evaluate_results(train,
         os.system(f"rm -r {rundir}")
 
 
+def update_config(config, key, value):
+    """Wrapper for updating config values."""
+    if isinstance(config, wandb.sdk.wandb_config.Config):
+        config.update({key: value}, allow_val_change=True)
+    elif isinstance(config, dict):
+        config[key] = value
+    else:
+        raise ValueError("config must be either a dict or a wandb Config object.")
+    return config
+
+
 def main(config, verbose=True):
     # load data
+    config = update_config(
+        config,
+        'label_ratios',
+        {float(k) if k.isnumeric() else k: v for k, v in config['label_ratios'].items()}
+        )
     print("Label ratios: {}".format(config['label_ratios']))
     train, valid, metadata = hazzy.load_data(
         datadir,
-        label_ratios=config['label_ratios'], # {'pre':1/3, 7: 1/3, 20: 1/3}
+        label_ratios=config['label_ratios'], 
         batch_size=config['batch_size']
         )
-    config['nconditions'] = len(metadata['labels'])
+    config = update_config(config, 'nconditions', len(metadata['labels']))
 
     # number of epochs calculations
     steps_per_epoch = config['steps_per_epoch']
@@ -379,12 +395,11 @@ if __name__ == "__main__":
             config = yaml.safe_load(stream)
         config = {key: value['value'] for key, value in config.items()}
         runname = "dry-run"
-        config['seed'] = np.random.randint(0, 100)
     else:
         wandb.init(allow_val_change=True)  # saves snapshot of code as artifact
         runname = wandb.run.name
-        wandb.config["seed"] = np.random.randint(0, 100)
         config = wandb.config
+    config = update_config(config, 'seed', np.random.randint(0, 100))
     rundir = os.path.join(workdir, "_wandb-runs", runname)
     os.makedirs(rundir, exist_ok=True)
     

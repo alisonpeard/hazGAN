@@ -56,7 +56,7 @@ def encode_strings(ds:xr.Dataset, variable:str) -> tf.Tensor:
 def label_data(data, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}) -> xr.DataArray:
     """Apply labels to storm data using user-provided dict."""
     ratios = list(label_ratios.values())
-    assert np.isclose(sum(ratios), 1), "Ratios must sum to one."
+    assert np.isclose(sum(ratios), 1), "Ratios must sum to one, got {}.".format(sum(ratios))
 
     nlabels = len(list(label_ratios.keys())) - 1 # excluding pretrain
     labels = 0 * data['maxwind'] + nlabels

@@ -6,8 +6,9 @@ References:
 ..[2] Harris (2022) - application
 """
 # %%
-import numpy as np
 import sys
+import warnings
+import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import optimizers
@@ -188,19 +189,22 @@ class WGANGP(keras.Model):
         raw = self.generator([latent_vectors, condition, label], training=False)
         return self.inv(raw)
     
-    
+
     def evaluate(self, x, **kwargs):
         """Overwrite evaluation function for custom data.
-        
-        #!Validation data is not resampled so might look odd?
         """
         score_valid = 0
-        for n, batch in enumerate(x):
-            data = batch['uniform']
-            condition = batch["condition"]
-            label = batch["label"]
-            critic_score = self.critic([self.augment(data), condition, label], training=False)
-            score_valid += tf.reduce_mean(critic_score)
+        with warnings.catch_warnings(): # suppress out of range error
+            warnings.filterwarnings("ignore", message="Local rendezvous")
+            for n, batch in enumerate(x):
+                try:
+                    data = batch['uniform']
+                    condition = batch["condition"]
+                    label = batch["label"]
+                    critic_score = self.critic([self.augment(data), condition, label], training=False)
+                    score_valid += tf.reduce_mean(critic_score)
+                except tf.errors.OutOfRangeError:
+                    break
         score_valid = score_valid / (n + 1)
         self.critic_valid_tracker.update_state(score_valid)
         return {'critic': self.critic_valid_tracker.result()}

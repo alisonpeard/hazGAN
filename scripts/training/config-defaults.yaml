@@ -7,7 +7,10 @@ steps_per_epoch:
   value: 20
 label_ratios:
   desc: see if this works
-  value: {'pre': 0.3333333, 7: 0.3333333, 20: 0.3333333}
+  value:
+    pre: 0.3333333
+    '7': 0.3333333
+    '20': 0.3333333
 nepochs:
   desc: Gulrajani et al. 2017 use 200_000
   value: 20 # 3000 # or 1,500,000/train_size
