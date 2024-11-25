@@ -145,7 +145,7 @@ def define_critic(config, nchannels=2):
 
     # fully connected 1x1
     flat = layers.Reshape((-1, 5 * 5 * config["d_layers"][2]))(drop3)
-    score = layers.Dense(1)(flat) #? sigmoid might smooth training by constraining?, S did similar
+    score = layers.Dense(1)(flat) #? sigmoid might smooth training by constraining?, S did similar, caused nans
     out = layers.Reshape((1,))(score)
     return tf.keras.Model([x, condition, label], out, name="critic")
 
