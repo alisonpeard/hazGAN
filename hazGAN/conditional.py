@@ -18,6 +18,7 @@ from inspect import signature
 
 from .extreme_value_theory import chi_loss, inv_gumbel
 from .tf_utils import DiffAugment
+from .tf_utils import wrappers
 
 # %%
 def get_optimizer_kwargs(optimizer):
@@ -70,13 +71,13 @@ def define_generator(config, nchannels=2):
     label = tf.keras.Input(shape=(1,), name="label", dtype='int32')
 
     # resize label and condition
-    label_embedded = layers.Embedding(config['nconditions'], config['embedding_depth'])(label)
+    label_embedded = wrappers.Embedding(config['nconditions'], config['embedding_depth'])(label)
     label_embedded = layers.Reshape((config['embedding_depth'],))(label_embedded)
-    condition_projected = layers.Dense(config['embedding_depth'], input_shape=(1,))(condition)
+    condition_projected = wrappers.Dense(config['embedding_depth'], input_shape=(1,))(condition)
     concatenated = layers.concatenate([z, condition_projected, label_embedded])
 
     # Fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
-    fc = layers.Dense(config["g_layers"][0] * 5 * 5 * nchannels, use_bias=False)(concatenated)
+    fc = wrappers.Dense(config["g_layers"][0] * 5 * 5 * nchannels, use_bias=False)(concatenated)
     fc = layers.Reshape((5, 5, int(nchannels * config["g_layers"][0])))(fc)
     lrelu0 = layers.LeakyReLU(config['lrelu'])(fc)
     drop0 = layers.Dropout(config['dropout'])(lrelu0)
@@ -86,7 +87,7 @@ def define_generator(config, nchannels=2):
         bn0 = drop0
     
     # 1st deconvolution block, 5 x 5 x 1024 -> 7 x 7 x 512
-    conv1 = layers.Conv2DTranspose(config["g_layers"][1], 3, 1, use_bias=False)(bn0)
+    conv1 = wrappers.Conv2DTranspose(config["g_layers"][1], 3, 1, use_bias=False)(bn0)
     lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
     drop1 = layers.Dropout(config['dropout'])(lrelu1)
     if config['normalize_generator']:
@@ -95,7 +96,7 @@ def define_generator(config, nchannels=2):
         bn1 = drop1
 
     # 2nd deconvolution block, 6 x 8 x 512 -> 14 x 18 x 256
-    conv2 = layers.Conv2DTranspose(config["g_layers"][2], (3, 4), 1, use_bias=False)(bn1)
+    conv2 = wrappers.Conv2DTranspose(config["g_layers"][2], (3, 4), 1, use_bias=False)(bn1)
     lrelu2 = layers.LeakyReLU(config['lrelu'])(conv2)
     drop2 = layers.Dropout(config['dropout'])(lrelu2)
     if config['normalize_generator']:
@@ -105,7 +106,7 @@ def define_generator(config, nchannels=2):
 
     # Output layer, 17 x 21 x 128 -> 20 x 24 x nchannels, resizing not inverse conv
     conv3 = layers.Resizing(20, 24, interpolation=config['interpolation'])(bn2)
-    score = layers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same')(conv3)
+    score = wrappers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same')(conv3)
     o = score if config['gumbel'] else tf.keras.activations.sigmoid(score) # NOTE: check
     return tf.keras.Model([z, condition, label], o, name="generator")
 
@@ -119,33 +120,32 @@ def define_critic(config, nchannels=2):
     condition = tf.keras.Input(shape=(1,), name='condition')
     label = tf.keras.Input(shape=(1,), name='label')
 
-    label_embedded = layers.Embedding(config['nconditions'], config['embedding_depth'] * 20 * 24)(label)
+    label_embedded = wrappers.Embedding(config['nconditions'], config['embedding_depth'] * 20 * 24)(label)
     label_embedded = layers.Reshape((20, 24, config['embedding_depth']))(label_embedded)
 
-    condition_projected = layers.Dense(config['embedding_depth'] * 20 * 24)(condition)
+    condition_projected = wrappers.Dense(config['embedding_depth'] * 20 * 24)(condition)
     condition_projected = layers.Reshape((20, 24, config['embedding_depth']))(condition_projected)
 
     concatenated = layers.concatenate([x, condition_projected, label_embedded])
 
     # 1st hidden layer 9x10x64
-    conv1 = layers.Conv2D(config["d_layers"][0], (4, 5), (2, 2), "valid",
-                          kernel_initializer=tf.keras.initializers.GlorotUniform())(concatenated)
+    conv1 = wrappers.Conv2D(config["d_layers"][0], (4, 5), (2, 2), "valid")(concatenated)
     lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
     drop1 = layers.Dropout(config['dropout'])(lrelu1)
 
     # 2nd hidden layer 7x7x128
-    conv1 = layers.Conv2D(config["d_layers"][1], (3, 4), (1, 1), "valid")(drop1)
+    conv1 = wrappers.Conv2D(config["d_layers"][1], (3, 4), (1, 1), "valid")(drop1)
     lrelu2 = layers.LeakyReLU(config['lrelu'])(conv1)
     drop2 = layers.Dropout(config['dropout'])(lrelu2)
 
     # 3rd hidden layer 5x5x256
-    conv2 = layers.Conv2D(config["d_layers"][2], (3, 3), (1, 1), "valid")(drop2)
+    conv2 = wrappers.Conv2D(config["d_layers"][2], (3, 3), (1, 1), "valid")(drop2)
     lrelu3 = layers.LeakyReLU(config['lrelu'])(conv2)
     drop3 = layers.Dropout(config['dropout'])(lrelu3)
 
     # fully connected 1x1
     flat = layers.Reshape((-1, 5 * 5 * config["d_layers"][2]))(drop3)
-    score = layers.Dense(1)(flat) #? sigmoid might smooth training by constraining?, S did similar, caused nans
+    score = wrappers.Dense(1)(flat) #? sigmoid might smooth training by constraining?, S did similar, caused nans
     out = layers.Reshape((1,))(score)
     return tf.keras.Model([x, condition, label], out, name="critic")
 
