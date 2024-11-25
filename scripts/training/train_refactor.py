@@ -208,6 +208,7 @@ def figure_four(fake_u, train_u, train_x, params,
     """Plot the 32 most extreme train and generated percentiles."""
     # prep data to plot
     fake = hazzy.POT.inv_probability_integral_transform(fake_u, train_u, train_x, params)
+    real = hazzy.POT.inv_probability_integral_transform(train_u, train_u, train_x, params)
     fake = fake[..., channel]
     real = train_x[..., channel]
 
@@ -327,6 +328,7 @@ def evaluate_results(train,
         # look at biggest (most extreme) label for everything and grab conditions
         biggest_label = metadata['labels'][-1]
         train_extreme = train.unbatch().filter(lambda sample: sample['label']==biggest_label)
+        valid_extreme = valid.unbatch().filter(lambda sample: sample['label']==biggest_label)
         condition = np.array(list(x['condition'] for x in train_extreme.as_numpy_iterator()))
         
         #! very crude condition interpolation to get 1000 realistic conditions
@@ -335,16 +337,21 @@ def evaluate_results(train,
         fp = condition
         condition = np.interp(x, xp, fp)
         label = np.tile(biggest_label, 1000)
-        print("Conditioning on 1000 {}-{} max wind percentiles".format(condition.min(), condition.max()))
+        print("Conditioning on 1000 {:.2f}-{:.2f} max wind percentiles".format(condition.min(), condition.max()))
         print("Conditioning on label: {}".format(label[0]))
 
         paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]]) # different for arrays and datasets
         fake_u = hazzy.unpad(model(condition, label, nsamples=1000), paddings=paddings).numpy()
-        train_u = hazzy.unpad(train_u, paddings=paddings).numpy()
-        valid_u = hazzy.unpad(valid_u, paddings=paddings).numpy()
-        # train_u = metadata['train']['uniform'].data
-        # train_x = metadata['train']['anomaly'].data
-        # valid_u = metadata['valid']['uniform'].data
+
+        #TODO: inverse transform train_u to make sure that's working
+        # train_u = np.array(list(x['uniform'] for x in train_extreme.as_numpy_iterator()))
+        # valid_u = np.array(list(x['uniform'] for x in valid_extreme.as_numpy_iterator()))
+        # train_u = hazzy.unpad(train_u, paddings=paddings).numpy()
+        # valid_u = hazzy.unpad(valid_u, paddings=paddings).numpy()
+
+        train_u = metadata['train']['uniform'].data
+        train_x = metadata['train']['anomaly'].data
+        valid_u = metadata['valid']['uniform'].data
         params = metadata['train']['params'].data
 
         print("train_u.shape: {}".format(train_u.shape))
@@ -354,8 +361,7 @@ def evaluate_results(train,
         figure_one(fake_u, train_u, valid_u)
         figure_two(fake_u, train_u, valid_u)
         figure_three(fake_u, train_u)                  # gumbel
-        # figure_four(fake_u, train_u, train_x, params)  # full-scale
-        figure_four(fake_u, train_u, train_x, params)
+        figure_four(fake_u, train_u, train_x, params)  # full-scale
         figure_five(fake_u, train_u)
         export_sample(fake_u)
     else:

@@ -108,7 +108,8 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
 
     # conditioning & sampling variables
     metadata['epoch'] = np.datetime64('1950-01-01')
-    data['maxwind'] = data.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat']) # anomaly
+     #! would be nice to have some uniform version for RMSE, but need to check feasible
+    data['maxwind'] = data.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat'])
     data['label'] = label_data(data, label_ratios)
     data['season'] = data['time.season']
     data['time'] = (data['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)

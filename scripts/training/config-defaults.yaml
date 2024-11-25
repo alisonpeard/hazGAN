@@ -1,7 +1,7 @@
 # training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
 number_train_images:
   desc: Total number of images to show critic (300,000 in Karras)
-  value: 3000 # 3_000_000
+  value: 300_000
 steps_per_epoch:
   desc: How many batches per epoch (infinite dataset generator)
   value: 20
