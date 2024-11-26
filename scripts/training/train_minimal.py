@@ -17,10 +17,11 @@ with open(os.path.join(workdir, "config-defaults.yaml"), 'r') as stream:
     config = yaml.safe_load(stream)
     config = {key: value['value'] for key, value in config.items()}
 
+
 train, valid, metadata = hazzy.load_data(
     datadir,
-    label_ratios={'pre':1/3, 7: 1/3, 20: 1/3},
-    batch_size=128
+    label_ratios=config['label_ratios'],
+    batch_size=config['batch_size']
     )
 
 # %%

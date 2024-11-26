@@ -328,7 +328,7 @@ def evaluate_results(train,
         # look at biggest (most extreme) label for everything and grab conditions
         biggest_label = metadata['labels'][-1]
         train_extreme = train.unbatch().filter(lambda sample: sample['label']==biggest_label)
-        valid_extreme = valid.unbatch().filter(lambda sample: sample['label']==biggest_label)
+        # valid_extreme = valid.unbatch().filter(lambda sample: sample['label']==biggest_label)
         condition = np.array(list(x['condition'] for x in train_extreme.as_numpy_iterator()))
         
         #! very crude condition interpolation to get 1000 realistic conditions
@@ -382,13 +382,6 @@ def update_config(config, key, value):
 
 def main(config, verbose=True):
     # load data
-    config = update_config(
-        config,
-        'label_ratios',
-        {float(k) if k.isnumeric() else k: v for k, v in config['label_ratios'].items()}
-        )
-    print("Label ratios: {}".format(config['label_ratios']))
-
     train, valid, metadata = hazzy.load_data(
         datadir,
         label_ratios=config['label_ratios'], 
@@ -399,35 +392,33 @@ def main(config, verbose=True):
         )
     config = update_config(config, 'nconditions', len(metadata['labels']))
 
-    # number of epochs calculations
-    steps_per_epoch = config['steps_per_epoch']
-    batch_size = train._input_dataset._batch_size.numpy()
-    number_train_images = config['number_train_images']
-    number_train_batches = number_train_images // batch_size
-    images_per_epoch = steps_per_epoch * batch_size
-    epochs = number_train_batches // steps_per_epoch
+    # number of epochs calculations (1 step == 1 batch)
+    steps_per_epoch = 200_000 // config['batch_size'] # good rule of thumb
+    total_steps = steps_per_epoch * config['epochs']  # to cycle through all data
+    images_per_epoch = steps_per_epoch * config['batch_size']
+    total_images = total_steps * config['batch_size']
 
     if verbose:
-        print("Batch size: {:,.0f}".format(batch_size))
+        print("Batch size: {:,.0f}".format(config['batch_size']))
         print("Steps per epoch: {:,.0f}".format(steps_per_epoch))
-        print("Training for {:,.0f} images".format(number_train_images))
-        print("Total number of batches: {:,.0f}".format(number_train_batches))
-        print("Training for {:,.0f} epochs".format(epochs))
-        print("Images per epoch: {:,.0f}\n".format(images_per_epoch))
+        print("Total steps: {:,.0f}".format(total_steps))
+        print("Images per epoch: {:,.0f}".format(images_per_epoch))
+        print("Total number of epochs: {:,.0f}".format(config['epochs']))
+        print("Total number of training images: {:,.0f}\n".format(total_images))
 
     # callbacks
-    image_count = hazzy.CountImagesSeen(batch_size)
+    image_count = hazzy.CountImagesSeen(config['batch_size'])
     wandb_logger = WandbMetricsLogger()
 
     # train
     tf.config.run_functions_eagerly(RUN_EAGERLY) #for debugging
     cgan = hazzy.conditional.compile_wgan(config, nchannels=len(config['channels']))
-    history = cgan.fit(train.repeat(), epochs=epochs, steps_per_epoch=steps_per_epoch,
+    history = cgan.fit(train, epochs=total_steps,
+                       steps_per_epoch=steps_per_epoch,
                        validation_data=valid,
                        callbacks=[image_count, wandb_logger])
     
-    if config['training_balance'] < number_train_batches:
-        evaluate_results(train, valid, config, history.history, cgan, metadata)
+    evaluate_results(train, valid, config, history.history, cgan, metadata)
     return history.history
 
 
@@ -461,14 +452,23 @@ if __name__ == "__main__":
         with open(os.path.join(os.path.dirname(__file__), "config-defaults.yaml"), 'r') as stream:
             config = yaml.safe_load(stream)
         config = {key: value['value'] for key, value in config.items()}
+        config = update_config(config, 'epochs', 1)
+        config = update_config(config, 'train_size', int(1))
         runname = "dry-run"
     else:
         wandb.init(allow_val_change=True)  # saves snapshot of code as artifact
         runname = wandb.run.name
         config = wandb.config
+    
     config = update_config(config, 'seed', np.random.randint(0, 100))
+    config = update_config(
+        config,
+        'label_ratios',
+        {float(k) if k.isnumeric() else k: v for k, v in config['label_ratios'].items()}
+        )
     rundir = os.path.join(workdir, "_wandb-runs", runname)
     os.makedirs(rundir, exist_ok=True)
+    print("Label ratios: {}".format(config['label_ratios']))
     
     # make reproducible
     tf.keras.utils.set_random_seed(config["seed"])  # sets seeds for base-python, numpy and tf

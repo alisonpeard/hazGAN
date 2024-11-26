@@ -2,13 +2,13 @@
 number_train_images:
   desc: Total number of images to show critic (300,000 in Karras)
   value: 3_000_000
-steps_per_epoch:
-  desc: How many batches per epoch (infinite dataset generator)
-  value: 20
+epochs:
+  desc: Number of epochs to train for
+  value: 100
 train_size:
   value: 0.8 # 840 # 50
 batch_size:
-  value: 128
+  value: 128 # for GPU constraints
 channels:
   desc: Which channels to model, subsets of ['u10', 'tp', 'mslp']
   value: ['u10']

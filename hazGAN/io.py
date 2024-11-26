@@ -70,7 +70,8 @@ def label_data(data, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}) -> xr.DataAr
 
 def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3, 20:1/3},
          train_size=0.8, channels=['u10', 'tp'], image_shape=(18, 22),
-         padding_mode='reflect', gumbel=True, batch_size=16) -> tuple[Dataset, Dataset, dict]:
+         padding_mode='reflect', gumbel=True, batch_size=16,
+         verbose=True) -> tuple[Dataset, Dataset, dict]:
     """Main data loader for training.
 
     Returns:
@@ -84,7 +85,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     """
     assert condition in ['maxwind', 'time.season', 'label']
 
-    print("\nLoading training data (hang on) ...")
+    print("\nLoading training data (hang on)...")
     start = time.time() # time data loading
     data = xr.open_dataset(os.path.join(datadir, 'data.nc'))
     pretrain = xr.open_dataset(os.path.join(datadir, 'data_pretrain.nc'))
@@ -108,7 +109,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
 
     # conditioning & sampling variables
     metadata['epoch'] = np.datetime64('1950-01-01')
-     #! would be nice to have some uniform version for RMSE, but need to check feasible
+     #! would be nice to have some 'uniform' version for RMSE, but need to check feasible
     data['maxwind'] = data.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat'])
     data['label'] = label_data(data, label_ratios)
     data['season'] = data['time.season']
@@ -121,6 +122,10 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     pretrain['season'] = pretrain['time.season']
     pretrain['time'] = (pretrain['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
     pretrain = pretrain.sel(channel=channels)
+
+    if verbose:
+        print("{:,.0f} samples from storm dataset".format(data['time'].size))
+        print("{:,.0f} samples from normal climate dataset".format(pretrain['time'].size))
 
     # train/test split
     if isinstance(train_size, float):
@@ -160,8 +165,8 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
             }
         return samples
 
-    train = Dataset.from_tensor_slices(sample_dict(train)).shuffle(100)
-    valid = Dataset.from_tensor_slices(sample_dict(valid)).shuffle(100)
+    train = Dataset.from_tensor_slices(sample_dict(train)).shuffle(10_000)
+    valid = Dataset.from_tensor_slices(sample_dict(valid)).shuffle(500)
 
     #  Define transformations
     def gumbel(uniform, eps=1e-6):
@@ -182,18 +187,25 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
         return sample
 
     train = train.map(transforms)
-    valid = valid.map(transforms).batch(batch_size, drop_remainder=True)
+    valid = valid.map(transforms)
 
     # manual under/oversampling
     split_train = [train.filter(lambda sample: sample['label']==label) for label in labels]
     target_dist = list(label_ratios.values())
 
-    train = tf.data.Dataset.sample_from_datasets(split_train, target_dist).batch(batch_size)
+    train = tf.data.Dataset.sample_from_datasets(split_train, target_dist)#.batch(batch_size)
+
+    # pipeline methods
+    train = train.shuffle(10_000)
+    train = train.repeat()
+    train = train.batch(batch_size, drop_remainder=True)
+    train = train.prefetch(tf.data.AUTOTUNE)
+
+    valid = valid.batch(batch_size, drop_remainder=True)
+    valid = valid.prefetch(tf.data.AUTOTUNE)
+
     end = time.time()
     print('Time taken to load datasets: {:.2f} seconds.\n'.format(end - start))
-
-    train = train.prefetch(tf.data.AUTOTUNE)
-    valid = valid.prefetch(tf.data.AUTOTUNE)
     return train, valid, metadata
 
 

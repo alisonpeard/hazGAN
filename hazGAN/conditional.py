@@ -270,12 +270,14 @@ class WGANGP(keras.Model):
         """
         print("Training generator...")
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
+        
         with tf.GradientTape() as tape:
             generated_data = self.generator([random_latent_vectors, condition, label])
             score = self.critic([self.augment(generated_data), condition, label], training=False)
             generator_loss = -tf.reduce_mean(score)
             condition_penalty = tf.reduce_mean(tf.square(tf.reduce_max(generated_data[..., 0], axis=[1, 2]) - condition))
-            generator_penalised_loss = generator_loss #+ self.lambda_condition * condition_penalty
+            generator_penalised_loss = generator_loss #!+ self.lambda_condition * condition_penalty
+        
         chi_rmse = chi_loss(self.inv(data), self.inv(generated_data))
         grads = tape.gradient(generator_penalised_loss, self.generator.trainable_weights)
         self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
