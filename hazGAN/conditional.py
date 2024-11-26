@@ -171,7 +171,7 @@ class WGANGP(keras.Model):
         self.augment = lambda x: DiffAugment(x, config['augment_policy'])
         self.penalty = config['penalty']
 
-        # trackers average over batches
+        # trackers over batches
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
         self.condition_penalty_tracker = keras.metrics.Mean(name="condition_loss")
         self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
@@ -180,6 +180,7 @@ class WGANGP(keras.Model):
         self.critic_real_tracker = keras.metrics.Mean(name="critic_real")
         self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
         self.critic_valid_tracker = keras.metrics.Mean(name="critic_valid")
+        self.images_seen = keras.metrics.Sum(name="images_seen")
         self.seed = config['seed']
         self.critic_steps = tf.Variable(0, dtype=tf.int32) # for handling critic:generator ratio
 
@@ -213,7 +214,7 @@ class WGANGP(keras.Model):
     def evaluate(self, x, **kwargs):
         """Overwrite evaluation function for custom data.
 
-        #? Is it correct to NOT augment here?
+        # ? Is it correct to NOT augment here ?
         """
         score_valid = 0
         with warnings.catch_warnings(): # suppress out of range error
@@ -308,6 +309,7 @@ class WGANGP(keras.Model):
             'critic_fake': critic_fake
         }
 
+        # update critic step count
         self.critic_steps.assign_add(1)
 
         # train generator
@@ -315,8 +317,27 @@ class WGANGP(keras.Model):
         train_generator = lambda: self.train_generator(data, condition, label, batch_size)
         _ = tf.cond(ifelse, train_generator, self.dummy)
         
+        # update metrics
+        self.images_seen.update_state(batch_size) # ? does this work ?
+        metrics["images_seen"] = self.images_seen.result()
         metrics["condition_penalty"] = self.condition_penalty_tracker.result()
         metrics["generator_loss"] = self.generator_loss_tracker.result()
         metrics['chi_rmse'] = self.chi_rmse_tracker.result()
 
         return metrics
+
+    @property
+    def metrics(self):
+        """Define metrics to reset per-epoch."""
+        return [
+            self.critic_real_tracker,
+            self.critic_fake_tracker,
+            self.critic_valid_tracker,
+            self.critic_loss_tracker,
+            self.generator_loss_tracker,
+            self.value_function_tracker,
+            self.condition_penalty_tracker,
+            self.chi_rmse_tracker
+        ]
+
+# %%
