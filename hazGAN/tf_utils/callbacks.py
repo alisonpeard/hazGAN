@@ -10,6 +10,7 @@ from IPython.display import clear_output
 from ..extreme_value_theory import chi_loss, inv_gumbel, pairwise_extremal_coeffs, chi2metric
 from ..utils import unpad
 from ..extreme_value_theory.peak_over_threshold import inv_probability_integral_transform
+from ..plots import figure_three
 
 
 class WandbMetricsLogger(Callback):
@@ -206,10 +207,10 @@ class CrossEntropy(Callback):
 
 class ChannelVisualiser(Callback):
     def __init__(self, frequency=1, channel=0, runname='untitled-run',
-                 conditions=None, labels=None):
+                 imdir='.', conditions=None, labels=None):
         super().__init__()
         self.frequency = frequency
-        self.generated_images = []
+        # self.generated_images = []
         self.runname = runname
         self.channel = channel
 
@@ -223,6 +224,7 @@ class ChannelVisualiser(Callback):
 
         print("Warning: resolution hard-coded as 18x22 for ChannelVisualiser callback.")
 
+
     def on_epoch_end(self, epoch, logs={}):
         if (epoch % self.frequency == 0):
             clear_output(wait=True)
@@ -230,10 +232,29 @@ class ChannelVisualiser(Callback):
             condition = tf.constant(self.conditions, dtype=tf.float32)
             labels = tf.constant(self.labels, dtype=tf.int32)
             generated_data = unpad(self.model(condition, labels, nsamples=64))
+            generated_data = generated_data.numpy()
+            vmin = generated_data.min()
+            vmax = generated_data.max()
 
-
-
-            # log_image_to_wandb(fig, f"channel{self.channel}_{epoch}", dir="imgs")
+            fig, axs = plt.subplots(6, 6, sharex=True, sharey=True,
+                                    gridspec_kw={'hspace': 0, 'wspace': 0}
+                                    )
+            for i, ax in enumerate(axs.flat):
+                im = ax.imshow(
+                    generated_data[i, ..., self.channel],
+                    vmin=vmin,
+                    vmax=vmax,
+                    cmap='Spectral_r'
+                    )
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.invert_yaxis()
+                ax.axis('off')
+            fig.suptitle(f"Samples for {self.runname} at epoch {epoch}")
+            fig.colorbar(im, ax=list(axs.flat))
+            log_image_to_wandb(fig, f"samples", self.imdir)
+            # return fig
+            fig.show()
 
 
 def log_image_to_wandb(fig, name:str, dir:str, **figkwargs):

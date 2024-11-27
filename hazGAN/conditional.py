@@ -237,7 +237,7 @@ class WGANGP(keras.Model):
     
 
     def train_critic(self, data, condition, label, batch_size):
-        print("Training critic...")
+        print("\nTracing critic...")
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
         fake_data = self.generator([random_latent_vectors, condition, label], training=False)
         with tf.GradientTape() as tape:
@@ -272,7 +272,7 @@ class WGANGP(keras.Model):
     def train_generator(self, data, condition, label, batch_size):
         """https://www.tensorflow.org/guide/function#conditionals
         """
-        print("Training generator...")
+        print("\nTracing generator...")
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
         
         with tf.GradientTape() as tape:

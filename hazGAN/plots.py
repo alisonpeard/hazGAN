@@ -63,7 +63,9 @@ def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str) -
     ax[2].set_title('hazGAN', fontsize=16);
     fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
     ax[0].set_ylabel('Extremal coeff', fontsize=18);
+    
     log_image_to_wandb(fig, f"extremal_dependence", imdir)
+    return fig
 
 
 def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str, channel=0) -> None:
@@ -99,6 +101,7 @@ def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str, c
     axs[0].set_ylabel('Extremal coeff.', fontsize=18);
 
     log_image_to_wandb(fig, f"spatial_dependence", imdir)
+    return fig
 
 
 def figure_three(fake_u:np.array, train_u:np.array, imdir:str, channel=0,
@@ -152,6 +155,7 @@ def figure_three(fake_u:np.array, train_u:np.array, imdir:str, channel=0,
         subfig.colorbar(im, cax=cbar_ax)
     fig.suptitle('Percentiles')
     log_image_to_wandb(fig, f"max_percentiles", imdir)
+    return fig
 
 
 def figure_four(fake_u, train_u, train_x, params, imdir:str,
@@ -207,6 +211,7 @@ def figure_four(fake_u, train_u, train_x, params, imdir:str,
         subfig.colorbar(im, cax=cbar_ax)
     fig.suptitle('Percentiles')
     log_image_to_wandb(fig, f"max_samples", imdir)
+    return fig
 
 
 def figure_five(fake_u, train_u, imdir:str, channel=0,
@@ -256,6 +261,7 @@ def figure_five(fake_u, train_u, imdir:str, channel=0,
         subfig.colorbar(im, cax=cbar_ax)
     fig.suptitle('Augmented Percentiles')
     log_image_to_wandb(fig, f"augmented_percentiles", imdir)
+    return fig
 
 
 ## ----Old stuff (decide if needed later)---- ##

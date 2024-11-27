@@ -10,7 +10,6 @@ import wandb
 from environs import Env
 import numpy as np
 import tensorflow as tf
-import matplotlib.pyplot as plt
 
 import hazGAN as hazzy
 from hazGAN import plots
@@ -32,10 +31,10 @@ RUN_EAGERLY = False
 def check_interactive(sys):
     """Useful check for VS code."""
     if hasattr(sys, 'ps1'):
-        print("\nRunning interactive session.")
+        print("\nRunning interactive session.\n")
         return True
     else:
-        print("Not running interactive session.")
+        print("\nNot running interactive session.\n")
         return False
 
 
@@ -51,6 +50,17 @@ def config_tf_devices():
     else:
         print(f"Using GPU: {gpu_names[0]}")
         return gpu_names[0]
+
+
+def update_config(config, key, value):
+    """Wrapper for updating config values."""
+    if isinstance(config, wandb.sdk.wandb_config.Config):
+        config.update({key: value}, allow_val_change=True)
+    elif isinstance(config, dict):
+        config[key] = value
+    else:
+        raise ValueError("config must be either a dict or a wandb Config object.")
+    return config
 
 
 def save_config(dir, config):
@@ -82,13 +92,12 @@ def evaluate_results(train,
     """Make some key figures to view results."""
     #! This should work ok but only generated samples are filtered by label
     final_chi_rmse = history['chi_rmse'][-1]
-    print(f"Finished training! chi_rmse: {final_chi_rmse}")
+    print(f"\nFinished training!\n")
     if final_chi_rmse <= 20.0:
         save_config(rundir, config)
-
-        # look at biggest (most extreme) label for everything and grab conditions
+        print("Gathering labels and conditions...")
         biggest_label = metadata['labels'][-1]
-        train_extreme = train.unbatch().filter(lambda sample: sample['label']==biggest_label)
+        train_extreme = train.take(1000).unbatch().filter(lambda sample: sample['label']==biggest_label)
         # valid_extreme = valid.unbatch().filter(lambda sample: sample['label']==biggest_label)
         condition = np.array(list(x['condition'] for x in train_extreme.as_numpy_iterator()))
         
@@ -98,9 +107,10 @@ def evaluate_results(train,
         fp = condition
         condition = np.interp(x, xp, fp)
         label = np.tile(biggest_label, 1000)
-        print("Conditioning on 1000 {:.2f}-{:.2f} max wind percentiles".format(condition.min(), condition.max()))
+        print("\nConditioning on 1000 {:.2f} - {:.2f} max wind percentiles".format(condition.min(), condition.max()))
         print("Conditioning on label: {}".format(label[0]))
 
+        print("\nGenerating samples...")
         paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]]) # different for arrays and datasets
         fake_u = hazzy.unpad(model(condition, label, nsamples=1000), paddings=paddings).numpy()
 
@@ -110,35 +120,30 @@ def evaluate_results(train,
         # train_u = hazzy.unpad(train_u, paddings=paddings).numpy()
         # valid_u = hazzy.unpad(valid_u, paddings=paddings).numpy()
 
+        print("\nGathering validation data...")
         train_u = metadata['train']['uniform'].data
         train_x = metadata['train']['anomaly'].data
         valid_u = metadata['valid']['uniform'].data
         params = metadata['train']['params'].data
-
+        
+        print("\nValidation data shapes:\n----------------------")
         print("train_u.shape: {}".format(train_u.shape))
         print("fake_u.shape: {}".format(fake_u.shape))
         print("params.shape: {}".format(params.shape))
 
+        print("\nGenerating figures...")
         plots.figure_one(fake_u, train_u, valid_u, imdir)
         plots.figure_two(fake_u, train_u, valid_u, imdir)
         plots.figure_three(fake_u, train_u, imdir)                  # gumbel
         plots.figure_four(fake_u, train_u, train_x, params, imdir)  # full-scale
-        plots.figure_five(fake_u, train_u)                          # augmented    
+        plots.figure_five(fake_u, train_u, imdir)                   # augmented    
         export_sample(fake_u)
     else:
         print("Chi score too high, deleting run directory")
         os.system(f"rm -r {rundir}")
-
-
-def update_config(config, key, value):
-    """Wrapper for updating config values."""
-    if isinstance(config, wandb.sdk.wandb_config.Config):
-        config.update({key: value}, allow_val_change=True)
-    elif isinstance(config, dict):
-        config[key] = value
-    else:
-        raise ValueError("config must be either a dict or a wandb Config object.")
-    return config
+    
+    print("\nResults:\n--------")
+    print(f"final_chi_rmse: {final_chi_rmse:.4f}")
 
 
 def main(config, verbose=True):
@@ -151,15 +156,17 @@ def main(config, verbose=True):
         channels=config['channels'],
         gumbel=config['gumbel']
         )
+    
     config = update_config(config, 'nconditions', len(metadata['labels']))
 
     # number of epochs calculations (1 step == 1 batch)
-    steps_per_epoch = 200_000 // config['batch_size'] # good rule of thumb
-    total_steps = steps_per_epoch * config['epochs']  # to cycle through all data
+    steps_per_epoch = 5 if dry_run else 200_000 // config['batch_size'] # good rule of thumb
+    total_steps = config['epochs'] * steps_per_epoch
     images_per_epoch = steps_per_epoch * config['batch_size']
     total_images = total_steps * config['batch_size']
 
     if verbose:
+        print("Training info:\n--------------")
         print("Batch size: {:,.0f}".format(config['batch_size']))
         print("Steps per epoch: {:,.0f}".format(steps_per_epoch))
         print("Total steps: {:,.0f}".format(total_steps))
@@ -174,7 +181,7 @@ def main(config, verbose=True):
     # train
     tf.config.run_functions_eagerly(RUN_EAGERLY) #for debugging
     cgan = hazzy.conditional.compile_wgan(config, nchannels=len(config['channels']))
-    history = cgan.fit(train, epochs=total_steps,
+    history = cgan.fit(train, epochs=config['epochs'],
                        steps_per_epoch=steps_per_epoch,
                        validation_data=valid,
                        callbacks=[image_count, wandb_logger])
@@ -186,7 +193,6 @@ def main(config, verbose=True):
 if __name__ == "__main__":
     # setup environment
     if not check_interactive(sys):
-        # parse arguments (if running from command line)
         parser = argparse.ArgumentParser()
         parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
         parser.add_argument('--force-cpu', '-f', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
@@ -194,7 +200,6 @@ if __name__ == "__main__":
         dry_run = args.dry_run
         force_cpu = args.force_cpu
     else:
-        # set defaults for interactive mode
         dry_run = True
         force_cpu = False
 
@@ -208,12 +213,12 @@ if __name__ == "__main__":
     datadir = env.str('TRAINDIR')
     imdir = os.path.join(workdir, "figures", "temp")
 
-    # intialise hyperparameters
+    # intialise configuration
     if dry_run:
         with open(os.path.join(os.path.dirname(__file__), "config-defaults.yaml"), 'r') as stream:
             config = yaml.safe_load(stream)
         config = {key: value['value'] for key, value in config.items()}
-        config = update_config(config, 'epochs', 1)
+        config = update_config(config, 'epochs', 2)
         runname = "dry-run"
     else:
         wandb.init(allow_val_change=True)  # saves snapshot of code as artifact
@@ -228,7 +233,7 @@ if __name__ == "__main__":
         )
     rundir = os.path.join(workdir, "_wandb-runs", runname)
     os.makedirs(rundir, exist_ok=True)
-    print("Label ratios: {}".format(config['label_ratios']))
+    print("\nSampling ratios: {}".format(config['label_ratios']))
     
     # make reproducible
     tf.keras.utils.set_random_seed(config["seed"])  # sets seeds for base-python, numpy and tf
@@ -236,5 +241,11 @@ if __name__ == "__main__":
 
     # train
     history = main(config)
+
+    def notify(title, subtitle, message):
+        os.system("""
+                    osascript -e 'display notification "{}" with title "{}" subtitle "{}" beep'
+                    """.format(message, title, subtitle))
+    notify("Process finished", "Python script", "Finished making pretraining data")
 
 # %% dev
