@@ -4,7 +4,7 @@ number_train_images:
   value: 3_000_000
 epochs:
   desc: Number of epochs to train for
-  value: 100
+  value: 20
 train_size:
   value: 0.8 # 840 # 50
 batch_size:

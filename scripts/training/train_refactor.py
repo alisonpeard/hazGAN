@@ -453,7 +453,6 @@ if __name__ == "__main__":
             config = yaml.safe_load(stream)
         config = {key: value['value'] for key, value in config.items()}
         config = update_config(config, 'epochs', 1)
-        config = update_config(config, 'train_size', int(1))
         runname = "dry-run"
     else:
         wandb.init(allow_val_change=True)  # saves snapshot of code as artifact

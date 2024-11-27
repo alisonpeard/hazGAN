@@ -59,7 +59,7 @@ def label_data(data, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}) -> xr.DataAr
     assert np.isclose(sum(ratios), 1), "Ratios must sum to one, got {}.".format(sum(ratios))
 
     nlabels = len(list(label_ratios.keys())) - 1 # excluding pretrain
-    labels = 0 * data['maxwind'] + nlabels
+    labels = 0 * data['maxwind'] + nlabels       # assign highest label to everything
 
     for label, lower_bound in enumerate(label_ratios.keys()):
         if isinstance(lower_bound, Number): # first is always 'pre'
@@ -109,7 +109,6 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
 
     # conditioning & sampling variables
     metadata['epoch'] = np.datetime64('1950-01-01')
-     #! would be nice to have some 'uniform' version for RMSE, but need to check feasible
     data['maxwind'] = data.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat'])
     data['label'] = label_data(data, label_ratios)
     data['season'] = data['time.season']
@@ -118,7 +117,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
 
     # conditioning & sampling variables (pretrain)
     pretrain['maxwind'] = pretrain.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat']) # anomaly
-    pretrain['label'] = (0 * pretrain['maxwind']).astype(int) # zero marks training data
+    pretrain['label'] = (0 * pretrain['maxwind']).astype(int) # zero indicates normal climate data
     pretrain['season'] = pretrain['time.season']
     pretrain['time'] = (pretrain['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
     pretrain = pretrain.sel(channel=channels)
@@ -168,6 +167,11 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     train = Dataset.from_tensor_slices(sample_dict(train)).shuffle(10_000)
     valid = Dataset.from_tensor_slices(sample_dict(valid)).shuffle(500)
 
+    # manual under/oversampling
+    split_train = [train.filter(lambda sample: sample['label']==label) for label in labels]
+    target_dist = list(label_ratios.values())
+    train = tf.data.Dataset.sample_from_datasets(split_train, target_dist)
+
     #  Define transformations
     def gumbel(uniform, eps=1e-6):
         tf.debugging.Assert(tf.less_equal(tf.reduce_max(uniform), 1.), [uniform])
@@ -189,16 +193,10 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     train = train.map(transforms)
     valid = valid.map(transforms)
 
-    # manual under/oversampling
-    split_train = [train.filter(lambda sample: sample['label']==label) for label in labels]
-    target_dist = list(label_ratios.values())
-
-    train = tf.data.Dataset.sample_from_datasets(split_train, target_dist)#.batch(batch_size)
-
     # pipeline methods
     train = train.shuffle(10_000)
     train = train.repeat()
-    train = train.batch(batch_size, drop_remainder=True)
+    train = train.batch(batch_size)
     train = train.prefetch(tf.data.AUTOTUNE)
 
     valid = valid.batch(batch_size, drop_remainder=True)
