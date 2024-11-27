@@ -11,11 +11,13 @@ from ..extreme_value_theory import chi_loss, inv_gumbel, pairwise_extremal_coeff
 from ..utils import unpad
 from ..extreme_value_theory.peak_over_threshold import inv_probability_integral_transform
 
+
 class WandbMetricsLogger(Callback):
     """
     Custom Wandb callback to log metrics.
 
-    Source: https://community.wandb.ai/t/sweeps-not-showing-val-loss-with-keras/4495"""
+    Source: https://community.wandb.ai/t/sweeps-not-showing-val-loss-with-keras/4495
+    """
     def on_epoch_end(self, epoch, logs=None):
         if wandb.run is not None:
             wandb.log(logs)
@@ -47,6 +49,7 @@ class OverfittingDetector(Callback):
         if (rv > 0.999) & batch > 8:
             print("\nEarly stopping due to overfitting.\n")
             self.model.stop_training = True
+
 
 class CountImagesSeen(Callback):
     def __init__(self, batch_size):
@@ -203,62 +206,40 @@ class CrossEntropy(Callback):
 
 class ChannelVisualiser(Callback):
     def __init__(self, frequency=1, channel=0, runname='untitled-run',
-                 data: tuple = None):
+                 conditions=None, labels=None):
         super().__init__()
         self.frequency = frequency
         self.generated_images = []
         self.runname = runname
-        self.data = data
         self.channel = channel
+
+        if conditions is None:
+            conditions = np.linspace(20, 60, 64)
+        if labels is None:
+            labels = np.array([2] * 64)
+
+        self.conditions = conditions
+        self.labels = labels
+
         print("Warning: resolution hard-coded as 18x22 for ChannelVisualiser callback.")
 
     def on_epoch_end(self, epoch, logs={}):
-        if (epoch % self.frequency == 0) & (epoch > 0):
+        if (epoch % self.frequency == 0):
             clear_output(wait=True)
 
-            generated_data = unpad(self.model(nsamples=3))
-            if self.data is not None:
-                X, U = self.data
-                X = X.numpy()
-                U = unpad(U).numpy()
-                generated_data = generated_data.numpy()
-                generated_data = inv_probability_integral_transform(generated_data, X, U)
-                dist = "original"
-            else:
-                dist = "Gumbel"
-                generated_data = generated_data.numpy()
-            
-            fig, axs = plt.subplots(1, 3, figsize=(10, 2.5),
-                                    gridspec_kw={"wspace": 0},
-                                    sharex=True, sharey=True)
-            vmin = tf.reduce_min(generated_data)
-            vmax = tf.reduce_max(generated_data)
-            lats = np.linspace(25, 10, 18)
-            lons = np.linspace(80, 95, 22)
-            X, Y = np.meshgrid(lons, lats)
-            for i, ax in enumerate(axs):
-                im = ax.contourf(
-                    X,
-                    Y,
-                    generated_data[i, ..., self.channel],
-                    cmap="Spectral_r",
-                    levels=20,
-                    vmin=vmin,
-                    vmax=vmax
-                )
-                ax.invert_yaxis()
-                ax.label_outer()
-                ax.set_xlabel('Longitude')
-            axs[0].set_ylabel('Latitude')
-            fig.subplots_adjust(right=0.8)
-            cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-            fig.colorbar(im, cax=cbar_ax)
-            fig.suptitle(f"Generated images for {self.runname} for epoch: {epoch} ({dist} scale)")
-            log_image_to_wandb(fig, f"channel{self.channel}_{epoch}", dir="imgs")
-            # plt.show()
+            condition = tf.constant(self.conditions, dtype=tf.float32)
+            labels = tf.constant(self.labels, dtype=tf.int32)
+            generated_data = unpad(self.model(condition, labels, nsamples=64))
 
 
-def log_image_to_wandb(fig, name: str, dir: str):
-    impath = os.path.join(dir, f"{name}.png")
-    fig.savefig(impath)
-    wandb.log({name: wandb.Image(impath)})
+
+            # log_image_to_wandb(fig, f"channel{self.channel}_{epoch}", dir="imgs")
+
+
+def log_image_to_wandb(fig, name:str, dir:str, **figkwargs):
+    if wandb.run is not None:
+        impath = os.path.join(dir, f"{name}.png")
+        fig.savefig(impath, **figkwargs)
+        wandb.log({name: wandb.Image(impath)})
+    else:
+        print("Not logging figure, wandb not intialised.")

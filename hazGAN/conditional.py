@@ -171,7 +171,7 @@ class WGANGP(keras.Model):
         self.augment = lambda x: DiffAugment(x, config['augment_policy'])
         self.penalty = config['penalty']
 
-        # trackers over batches
+        # stateful metrics
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
         self.condition_penalty_tracker = keras.metrics.Mean(name="condition_loss")
         self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
@@ -180,9 +180,14 @@ class WGANGP(keras.Model):
         self.critic_real_tracker = keras.metrics.Mean(name="critic_real")
         self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
         self.critic_valid_tracker = keras.metrics.Mean(name="critic_valid")
+
+        # training statistics
         self.images_seen = keras.metrics.Sum(name="images_seen")
+
+        # for monitoring critic:generator ratio
         self.seed = config['seed']
-        self.critic_steps = tf.Variable(0, dtype=tf.int32) # for handling critic:generator ratio
+        self.critic_steps = tf.Variable(0, dtype=tf.int32, trainable=False) 
+        self.generator_steps = tf.Variable(0, dtype=tf.int32, trainable=False)
 
     
     def compile(self, d_optimizer, g_optimizer, *args, **kwargs):
@@ -213,8 +218,6 @@ class WGANGP(keras.Model):
 
     def evaluate(self, x, **kwargs):
         """Overwrite evaluation function for custom data.
-
-        # ? Is it correct to NOT augment here ?
         """
         score_valid = 0
         with warnings.catch_warnings(): # suppress out of range error
@@ -262,6 +265,7 @@ class WGANGP(keras.Model):
         self.critic_loss_tracker(critic_loss)
         self.value_function_tracker.update_state(-critic_loss)
 
+        self.critic_steps.assign_add(tf.constant(1, dtype=tf.int32))
         return critic_loss, tf.reduce_mean(score_real), tf.reduce_mean(score_fake)
 
     
@@ -286,11 +290,13 @@ class WGANGP(keras.Model):
         self.generator_loss_tracker.update_state(generator_loss)
         self.chi_rmse_tracker.update_state(chi_rmse)
 
-        return condition_penalty, generator_loss, chi_rmse
+        self.generator_steps.assign_add(tf.constant(1, dtype=tf.int32))
+        return None
 
 
-    def dummy(self, *args, **kwargs):
-        return tf.constant(0, dtype=tf.float32), tf.constant(0, dtype=tf.float32), tf.constant(0, dtype=tf.float32)
+    def skip(self, *args, **kwargs):
+        # return tf.constant(0, dtype=tf.float32), tf.constant(0, dtype=tf.float32), tf.constant(0, dtype=tf.float32)
+        return None
     
 
     @tf.function
@@ -311,20 +317,29 @@ class WGANGP(keras.Model):
             'critic_fake': critic_fake
         }
 
-        # update critic step count
-        self.critic_steps.assign_add(1)
-
         # train generator
-        ifelse = tf.math.logical_or(tf.math.equal(self.critic_steps, 1), tf.math.equal(self.critic_steps % self.config['training_balance'], 0))
+        generator_flag = tf.math.logical_or(tf.math.equal(self.critic_steps, 1), tf.math.equal(self.critic_steps % self.config['training_balance'], 0))
         train_generator = lambda: self.train_generator(data, condition, label, batch_size)
-        _ = tf.cond(ifelse, train_generator, self.dummy)
-        
+        skip_generator = lambda: self.skip()
+        tf.cond(
+            generator_flag,
+            train_generator,
+            skip_generator
+            )
+
         # update metrics
         self.images_seen.update_state(batch_size) # ? does this work ?
         metrics["images_seen"] = self.images_seen.result()
         metrics["condition_penalty"] = self.condition_penalty_tracker.result()
         metrics["generator_loss"] = self.generator_loss_tracker.result()
         metrics['chi_rmse'] = self.chi_rmse_tracker.result()
+
+        # print logs if in eager mode
+        if tf.executing_eagerly():
+            print(f"\nBatch mean:", tf.math.reduce_mean(data))
+            print(f"Batch std:", tf.math.reduce_std(data))
+            print(f"Critic steps type: {type(self.critic_steps).__name__}, value: {self.critic_steps.numpy()}")
+            print(f"Generator steps type: {type(self.generator_steps).__name__}, value: {self.generator_steps.numpy()}\n")
 
         return metrics
 
