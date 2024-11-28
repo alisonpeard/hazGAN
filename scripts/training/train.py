@@ -21,6 +21,7 @@ tf.keras.backend.clear_session()
 # ? add memory growth ?
 
 RUN_EAGERLY = False
+MIN_CHI_RMSE = 1000.
 
 # globals
 global datadir
@@ -95,7 +96,7 @@ def evaluate_results(train,
     #! This should work ok but only generated samples are filtered by label
     final_chi_rmse = history['chi_rmse'][-1]
     print(f"\nFinished training!\n")
-    if final_chi_rmse <= 20.0:
+    if final_chi_rmse <= MIN_CHI_RMSE:
         save_config(rundir, config)
         print("Gathering labels and conditions...")
         biggest_label = metadata['labels'][-1]
