@@ -187,7 +187,7 @@ def main(config, verbose=True):
                        callbacks=[image_count, wandb_logger])
     
     evaluate_results(train, valid, config, history.history, cgan, metadata)
-    
+
     return history.history
 
 
@@ -243,10 +243,14 @@ if __name__ == "__main__":
     # train
     history = main(config)
 
+    # system notify 
     def notify(title, subtitle, message):
         os.system("""
                     osascript -e 'display notification "{}" with title "{}" subtitle "{}" beep'
                     """.format(message, title, subtitle))
-    notify("Process finished", "Python script", "Finished making pretraining data")
+    try:
+        notify("Process finished", "Python script", "Finished making pretraining data")
+    except Exception as e:
+        print("Notification failed: {}".format(e))
 
 # %% dev

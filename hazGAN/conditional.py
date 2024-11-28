@@ -252,7 +252,7 @@ class WGANGP(keras.Model):
                 tape_gp.watch(interpolates)
                 score = self.critic([interpolates, condition, label])
             gradients = tape_gp.gradient(score, [interpolates])[0]
-            slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1])) # NOTE: previously , axis=[1, 2, 3] but Gulrajani code has [1]
+            slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]))
             print("Shape of slopes:", slopes.shape)
 
             gradient_penalty = tf.reduce_mean((slopes - 1.) ** 2)
