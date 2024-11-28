@@ -10,6 +10,7 @@ import sys
 import warnings
 import numpy as np
 import tensorflow as tf
+import tensorflow.keras.backend as K
 from tensorflow import keras
 from tensorflow.keras import optimizers
 from tensorflow.keras import layers
@@ -46,12 +47,12 @@ def process_optimizer_kwargs(config):
 def compile_wgan(config, nchannels=2):
     kwargs = process_optimizer_kwargs(config)
     optimizer = getattr(optimizers, config['optimizer'])
-    d_optimizer = optimizer(**kwargs)
-    g_optimizer = optimizer(**kwargs)
+    critic_optimizer = optimizer(**kwargs)
+    generator_optimizer = optimizer(**kwargs)
     wgan = WGANGP(config, nchannels=nchannels)
     wgan.compile(
-        d_optimizer=d_optimizer,
-        g_optimizer=g_optimizer
+        critic_optimizer=critic_optimizer,
+        generator_optimizer=generator_optimizer
         )
     return wgan
 
@@ -169,6 +170,7 @@ class WGANGP(keras.Model):
         else:
             self.inv = lambda x: x # will make serialising etc. difficult
         self.augment = lambda x: DiffAugment(x, config['augment_policy'])
+        self.seed = config['seed']
 
         # stateful metrics
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
@@ -179,22 +181,27 @@ class WGANGP(keras.Model):
         self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
         self.critic_valid_tracker = keras.metrics.Mean(name="critic_valid")
 
-        # training statistics
+        # training statistics # ? setting dtype=tf.int32 fails ?
         self.images_seen = keras.metrics.Sum(name="images_seen")
+        self.critic_steps = keras.metrics.Sum(name="critic_steps")
+        self.generator_steps = keras.metrics.Sum(name="generator_steps")
+        self.critic_grad_norm = keras.metrics.Mean(name="critic_grad_norm")
+        self.generator_grad_norm = keras.metrics.Mean(name="generator_grad_norm")
 
-        # for monitoring critic:generator ratio
-        self.seed = config['seed']
-        self.critic_steps = tf.Variable(0, dtype=tf.int32, trainable=False) 
-        self.generator_steps = tf.Variable(0, dtype=tf.int32, trainable=False)
-        #? Could I also do this as keras.metrcs.Sum()?
+        # monitor for vanishing gradients
+        self.critic_grad_norms = [
+            keras.metrics.Mean(name=f"critic_{i}_{var.path}") for i, var in enumerate(self.critic.trainable_variables)
+        ]
+        self.generator_grad_norms = [
+            keras.metrics.Mean(name=f"generator_{i}_{var.path}") for i, var in enumerate(self.generator.trainable_variables)
+        ]
 
-    
-    def compile(self, d_optimizer, g_optimizer, *args, **kwargs) -> None:
+    def compile(self, critic_optimizer, generator_optimizer, *args, **kwargs) -> None:
         super().compile(*args, **kwargs)
-        self.d_optimizer = d_optimizer
-        self.g_optimizer = g_optimizer
-        self.d_optimizer.build(self.critic.trainable_variables)
-        self.g_optimizer.build(self.generator.trainable_variables)
+        self.critic_optimizer = critic_optimizer
+        self.generator_optimizer = generator_optimizer
+        self.critic_optimizer.build(self.critic.trainable_variables)
+        self.generator_optimizer.build(self.generator.trainable_variables)
 
 
     def call(self, condition, label, nsamples=5,
@@ -233,7 +240,7 @@ class WGANGP(keras.Model):
         score_valid = score_valid / (n + 1)
         self.critic_valid_tracker.update_state(score_valid)
         return {'critic': self.critic_valid_tracker.result()}
-    
+
 
     def train_critic(self, data, condition, label, batch_size) -> None:
         """Train critic with gradient penalty."""
@@ -248,25 +255,33 @@ class WGANGP(keras.Model):
             eps = tf.random.uniform([batch_size, 1, 1, 1], 0., 1.)
             differences = fake_data - data
             interpolates = data + (eps * differences)  # interpolated data
+
             with tf.GradientTape() as tape_gp:
                 tape_gp.watch(interpolates)
                 score = self.critic([interpolates, condition, label])
             gradients = tape_gp.gradient(score, [interpolates])[0]
             slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]))
-            print("Shape of slopes:", slopes.shape)
+            print("Shape of interpolated gradients:", slopes.shape)
 
             gradient_penalty = tf.reduce_mean((slopes - 1.) ** 2)
             critic_loss += self.lambda_gp * gradient_penalty
 
-        grads = tape.gradient(critic_loss, self.critic.trainable_weights)
-        self.d_optimizer.apply_gradients(zip(grads, self.critic.trainable_weights))
+        gradients = tape.gradient(critic_loss, self.critic.trainable_weights)
+        self.critic_optimizer.apply_gradients(zip(gradients, self.critic.trainable_weights))
 
         self.critic_loss_tracker(critic_loss)
         self.value_function_tracker.update_state(-critic_loss)
         self.critic_real_tracker.update_state(tf.reduce_mean(score_real))
         self.critic_fake_tracker.update_state(tf.reduce_mean(score_fake))
 
-        self.critic_steps.assign_add(tf.constant(1, dtype=tf.int32))
+        self.critic_steps.update_state(tf.constant(1, dtype=tf.int32))
+
+        # get gradient norms
+        global_gradient_norm = tf.linalg.global_norm(gradients)
+        self.critic_grad_norm.update_state(global_gradient_norm)
+
+        for i, grad in enumerate(gradients):
+            self.critic_grad_norms[i].update_state(tf.linalg.global_norm([grad]))
 
         return None
 
@@ -274,7 +289,7 @@ class WGANGP(keras.Model):
     def train_generator(self, data, condition, label, batch_size) -> None:
         """https://www.tensorflow.org/guide/function#conditionals
         """
-        print("\nTracing generator...")
+        print("\nTracing generator...\n")
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
         
         with tf.GradientTape() as tape:
@@ -285,13 +300,21 @@ class WGANGP(keras.Model):
             generator_penalised_loss = generator_loss #!+ self.lambda_condition * condition_penalty
         
         chi_rmse = chi_loss(self.inv(data), self.inv(generated_data))
-        grads = tape.gradient(generator_penalised_loss, self.generator.trainable_weights)
-        self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
+        gradients = tape.gradient(generator_penalised_loss, self.generator.trainable_weights)
+        self.generator_optimizer.apply_gradients(zip(gradients, self.generator.trainable_weights))
         
         self.generator_loss_tracker.update_state(generator_loss)
         self.chi_rmse_tracker.update_state(chi_rmse)
 
-        self.generator_steps.assign_add(tf.constant(1, dtype=tf.int32))
+        self.generator_steps.update_state(tf.constant(1, dtype=tf.int32))
+
+        # get gradient norms
+        global_gradient_norm = tf.linalg.global_norm(gradients)
+        self.generator_grad_norm.update_state(global_gradient_norm)
+        
+        for i, grad in enumerate(gradients):
+            self.generator_grad_norms[i].update_state(tf.linalg.global_norm([grad]))
+
         return None
 
 
@@ -318,7 +341,10 @@ class WGANGP(keras.Model):
         }
 
         # train generator
-        generator_flag = tf.math.logical_or(tf.math.equal(self.critic_steps, 1), tf.math.equal(self.critic_steps % self.config['training_balance'], 0))
+        generator_flag = tf.math.logical_or(tf.math.equal(
+            self.critic_steps.result(), 1),
+            tf.math.equal(self.critic_steps.result() % self.config['training_balance'], 0)
+            )
         train_generator = lambda: self.train_generator(data, condition, label, batch_size)
         skip_generator = lambda: self.skip()
         tf.cond(
@@ -326,25 +352,38 @@ class WGANGP(keras.Model):
             train_generator,
             skip_generator
             )
-
+        
         # update metrics
         self.images_seen.update_state(batch_size)
-        metrics["images_seen"] = self.images_seen.result()
         metrics["generator_loss"] = self.generator_loss_tracker.result()
         metrics['chi_rmse'] = self.chi_rmse_tracker.result()
+        metrics['critic_steps'] = self.critic_steps.result()
+        metrics['generator_steps'] = self.generator_steps.result()
+
+        metrics["images_seen"] = self.images_seen.result()
+        metrics["critic_grad_norm"] = self.critic_grad_norm.result()
+        metrics["generator_grad_norm"] = self.generator_grad_norm.result()
+        
+        i = 0
+        for var, metric in zip(self.critic.trainable_variables, self.critic_grad_norms):
+            metrics[f"critic_{i}_{var.path}"] = metric.result()
+            i += 1
+
+        i = 0
+        for var, metric in zip(self.generator.trainable_variables, self.generator_grad_norms):
+            metrics[f"generator_{i}_{var.path}"] = metric.result()
+            i += 1
 
         # print logs if in eager mode
         if tf.executing_eagerly():
             print(f"\nBatch mean:", tf.math.reduce_mean(data))
             print(f"Batch std:", tf.math.reduce_std(data))
-            print(f"Critic steps type: {type(self.critic_steps).__name__}, value: {self.critic_steps.numpy()}")
-            print(f"Generator steps type: {type(self.generator_steps).__name__}, value: {self.generator_steps.numpy()}\n")
-
+        
         return metrics
 
     @property
     def metrics(self) -> list:
-        """Define metrics to reset per-epoch."""
+        """Define which stateful metrics to reset per-epoch."""
         return [
             self.critic_real_tracker,
             self.critic_fake_tracker,
@@ -352,7 +391,9 @@ class WGANGP(keras.Model):
             self.critic_loss_tracker,
             self.generator_loss_tracker,
             self.value_function_tracker,
-            self.chi_rmse_tracker
-        ]
+            self.chi_rmse_tracker,
+            self.critic_grad_norm,
+            self.generator_grad_norm
+        ] + self.critic_grad_norms + self.generator_grad_norms
 
 # %%

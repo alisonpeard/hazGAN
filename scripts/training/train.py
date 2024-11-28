@@ -15,10 +15,12 @@ import hazGAN as hazzy
 from hazGAN import plots
 from hazGAN import WandbMetricsLogger
 
-tf.keras.backend.clear_session()
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
-RUN_EAGERLY = True
+tf.keras.backend.clear_session()
+# ? add memory growth ?
+
+RUN_EAGERLY = False
 
 # globals
 global datadir
