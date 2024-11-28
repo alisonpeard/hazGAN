@@ -123,7 +123,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     pretrain = pretrain.sel(channel=channels)
 
     if verbose:
-        print("\nData info:\n----------")
+        print("\nData summary:\n-------------")
         print("{:,.0f} samples from storm dataset".format(data['time'].size))
         print("{:,.0f} samples from normal climate dataset".format(pretrain['time'].size))
 

@@ -18,14 +18,14 @@ from hazGAN import WandbMetricsLogger
 tf.keras.backend.clear_session()
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
+RUN_EAGERLY = True
+
 # globals
 global datadir
 global rundir
 global imdir
 global runname
 global force_cpu
-
-RUN_EAGERLY = False
 
 
 def check_interactive(sys):
@@ -166,7 +166,7 @@ def main(config, verbose=True):
     total_images = total_steps * config['batch_size']
 
     if verbose:
-        print("Training info:\n--------------")
+        print("Training summary:\n-----------------")
         print("Batch size: {:,.0f}".format(config['batch_size']))
         print("Steps per epoch: {:,.0f}".format(steps_per_epoch))
         print("Total steps: {:,.0f}".format(total_steps))
@@ -187,6 +187,7 @@ def main(config, verbose=True):
                        callbacks=[image_count, wandb_logger])
     
     evaluate_results(train, valid, config, history.history, cgan, metadata)
+    
     return history.history
 
 

@@ -213,6 +213,7 @@ class ChannelVisualiser(Callback):
         # self.generated_images = []
         self.runname = runname
         self.channel = channel
+        self.imdir = imdir
 
         if conditions is None:
             conditions = np.linspace(20, 60, 64)
@@ -233,6 +234,7 @@ class ChannelVisualiser(Callback):
             labels = tf.constant(self.labels, dtype=tf.int32)
             generated_data = unpad(self.model(condition, labels, nsamples=64))
             generated_data = generated_data.numpy()
+            
             vmin = generated_data.min()
             vmax = generated_data.max()
 

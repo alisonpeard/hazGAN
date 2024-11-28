@@ -18,9 +18,6 @@ label_ratios:
 augment_policy:
   desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
   value: 'color,translation,cutout'
-penalty:
-  desc: Which penalty to use, ['gp', 'lipschitz']
-  value: gp
 embedding_depth:
   desc: How many channels to project the label to
   value: 32

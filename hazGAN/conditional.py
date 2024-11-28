@@ -151,7 +151,7 @@ def define_critic(config, nchannels=2):
 
 
 class WGANGP(keras.Model):
-    def __init__(self, config, nchannels=2, *args, **kwargs):
+    def __init__(self, config, nchannels=2, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.critic = define_critic(config, nchannels)
         self.generator = define_generator(config, nchannels)
@@ -169,11 +169,9 @@ class WGANGP(keras.Model):
         else:
             self.inv = lambda x: x # will make serialising etc. difficult
         self.augment = lambda x: DiffAugment(x, config['augment_policy'])
-        self.penalty = config['penalty']
 
         # stateful metrics
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
-        self.condition_penalty_tracker = keras.metrics.Mean(name="condition_loss")
         self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
         self.critic_loss_tracker = keras.metrics.Mean(name="critic_loss")
         self.value_function_tracker = keras.metrics.Mean(name="value_function")
@@ -188,9 +186,10 @@ class WGANGP(keras.Model):
         self.seed = config['seed']
         self.critic_steps = tf.Variable(0, dtype=tf.int32, trainable=False) 
         self.generator_steps = tf.Variable(0, dtype=tf.int32, trainable=False)
+        #? Could I also do this as keras.metrcs.Sum()?
 
     
-    def compile(self, d_optimizer, g_optimizer, *args, **kwargs):
+    def compile(self, d_optimizer, g_optimizer, *args, **kwargs) -> None:
         super().compile(*args, **kwargs)
         self.d_optimizer = d_optimizer
         self.g_optimizer = g_optimizer
@@ -199,7 +198,7 @@ class WGANGP(keras.Model):
 
 
     def call(self, condition, label, nsamples=5,
-             latent_vectors=None, temp=1., offset=0, seed=None):
+             latent_vectors=None, temp=1., offset=0, seed=None) -> tf.Tensor:
         """Return uniformly distributed samples from the generator."""
         if latent_vectors is None:
             latent_vectors = self.latent_space_distn(
@@ -216,7 +215,7 @@ class WGANGP(keras.Model):
         return self.inv(raw)
     
 
-    def evaluate(self, x, **kwargs):
+    def evaluate(self, x, **kwargs) -> dict:
         """Overwrite evaluation function for custom data.
         """
         score_valid = 0
@@ -236,15 +235,17 @@ class WGANGP(keras.Model):
         return {'critic': self.critic_valid_tracker.result()}
     
 
-    def train_critic(self, data, condition, label, batch_size):
+    def train_critic(self, data, condition, label, batch_size) -> None:
+        """Train critic with gradient penalty."""
         print("\nTracing critic...")
         random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
         fake_data = self.generator([random_latent_vectors, condition, label], training=False)
+
         with tf.GradientTape() as tape:
             score_real = self.critic([self.augment(data), condition, label])
             score_fake = self.critic([self.augment(fake_data), condition, label])
             critic_loss = tf.reduce_mean(score_fake) - tf.reduce_mean(score_real) # value function (observed to correlate with sample quality --Gulrajani 2017)
-            eps = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
+            eps = tf.random.uniform([batch_size, 1, 1, 1], 0., 1.)
             differences = fake_data - data
             interpolates = data + (eps * differences)  # interpolated data
             with tf.GradientTape() as tape_gp:
@@ -252,24 +253,25 @@ class WGANGP(keras.Model):
                 score = self.critic([interpolates, condition, label])
             gradients = tape_gp.gradient(score, [interpolates])[0]
             slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1])) # NOTE: previously , axis=[1, 2, 3] but Gulrajani code has [1]
-            if self.penalty == 'lipschitz':
-                gradient_penalty = tf.reduce_mean(tf.clip_by_value(slopes - 1., 0., np.infty)**2) # https://openreview.net/forum?id=B1hYRMbCW
-            elif self.penalty == 'gp':
-                gradient_penalty = tf.reduce_mean((slopes - 1.) ** 2)
-            else:
-                raise ValueError("Penalty must be either 'lipschitz' or 'gp'.")
+            print("Shape of slopes:", slopes.shape)
+
+            gradient_penalty = tf.reduce_mean((slopes - 1.) ** 2)
             critic_loss += self.lambda_gp * gradient_penalty
+
         grads = tape.gradient(critic_loss, self.critic.trainable_weights)
         self.d_optimizer.apply_gradients(zip(grads, self.critic.trainable_weights))
 
         self.critic_loss_tracker(critic_loss)
         self.value_function_tracker.update_state(-critic_loss)
+        self.critic_real_tracker.update_state(tf.reduce_mean(score_real))
+        self.critic_fake_tracker.update_state(tf.reduce_mean(score_fake))
 
         self.critic_steps.assign_add(tf.constant(1, dtype=tf.int32))
-        return critic_loss, tf.reduce_mean(score_real), tf.reduce_mean(score_fake)
+
+        return None
 
     
-    def train_generator(self, data, condition, label, batch_size):
+    def train_generator(self, data, condition, label, batch_size) -> None:
         """https://www.tensorflow.org/guide/function#conditionals
         """
         print("\nTracing generator...")
@@ -286,7 +288,6 @@ class WGANGP(keras.Model):
         grads = tape.gradient(generator_penalised_loss, self.generator.trainable_weights)
         self.g_optimizer.apply_gradients(zip(grads, self.generator.trainable_weights))
         
-        self.condition_penalty_tracker.update_state(condition_penalty)
         self.generator_loss_tracker.update_state(generator_loss)
         self.chi_rmse_tracker.update_state(chi_rmse)
 
@@ -294,13 +295,12 @@ class WGANGP(keras.Model):
         return None
 
 
-    def skip(self, *args, **kwargs):
-        # return tf.constant(0, dtype=tf.float32), tf.constant(0, dtype=tf.float32), tf.constant(0, dtype=tf.float32)
+    def skip(self, *args, **kwargs) -> None:
         return None
     
 
     @tf.function
-    def train_step(self, batch):
+    def train_step(self, batch) -> dict:
         """print(train_step.pretty_printed_concrete_signatures())"""
         data = batch['uniform']
         condition = batch['condition']
@@ -308,13 +308,13 @@ class WGANGP(keras.Model):
         batch_size = tf.shape(data)[0] # dynamic for graph mode
         
         # train critic
-        critic_loss, critic_real, critic_fake = self.train_critic(data, condition, label, batch_size)
+        self.train_critic(data, condition, label, batch_size)
 
         metrics = {
-            "critic_loss": critic_loss,
-            "value_function": -critic_loss,
-            'critic_real': critic_real,
-            'critic_fake': critic_fake
+            "critic_loss": self.critic_loss_tracker.result(),
+            "value_function": -self.value_function_tracker.result(),
+            'critic_real': self.critic_real_tracker.result(),
+            'critic_fake': self.critic_fake_tracker.result()
         }
 
         # train generator
@@ -328,9 +328,8 @@ class WGANGP(keras.Model):
             )
 
         # update metrics
-        self.images_seen.update_state(batch_size) # ? does this work ?
+        self.images_seen.update_state(batch_size)
         metrics["images_seen"] = self.images_seen.result()
-        metrics["condition_penalty"] = self.condition_penalty_tracker.result()
         metrics["generator_loss"] = self.generator_loss_tracker.result()
         metrics['chi_rmse'] = self.chi_rmse_tracker.result()
 
@@ -344,7 +343,7 @@ class WGANGP(keras.Model):
         return metrics
 
     @property
-    def metrics(self):
+    def metrics(self) -> list:
         """Define metrics to reset per-epoch."""
         return [
             self.critic_real_tracker,
@@ -353,7 +352,6 @@ class WGANGP(keras.Model):
             self.critic_loss_tracker,
             self.generator_loss_tracker,
             self.value_function_tracker,
-            self.condition_penalty_tracker,
             self.chi_rmse_tracker
         ]
 
