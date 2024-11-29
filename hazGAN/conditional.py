@@ -18,10 +18,19 @@ from tensorflow.keras.optimizers.schedules import ExponentialDecay
 from inspect import signature
 
 from .extreme_value_theory import chi_loss, inv_gumbel
-from .tf_utils import DiffAugment
-from .tf_utils import wrappers
+from .tensorflow import DiffAugment
+from .tensorflow import wrappers
 
 # %%
+def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
+    """Sample from Gumbel(0, 1)"""
+    T = tf.constant(temperature, dtype=tf.float32)
+    O = tf.constant(offset, dtype=tf.float32)
+    U = tf.random.uniform(shape, minval=0, maxval=1, seed=seed)
+    return O - T * tf.math.log(-tf.math.log(U + eps) + eps)
+tf.random.gumbel = sample_gumbel
+
+
 def get_optimizer_kwargs(optimizer):
     optimizer = getattr(optimizers, optimizer)
     params = signature(optimizer).parameters
@@ -66,6 +75,12 @@ def define_generator(config, nchannels=2):
     """
     >>> generator = define_generator(config)
     """
+    def normalise(x):
+        if config['normalize_generator']:
+            return layers.BatchNormalization(axis=-1)(x)
+        else:
+            return x
+    
     # input
     z = tf.keras.Input(shape=(config['latent_dims'],), name='noise_input', dtype='float32')
     condition = tf.keras.Input(shape=(1,), name='condition', dtype='float32')
@@ -82,28 +97,19 @@ def define_generator(config, nchannels=2):
     fc = layers.Reshape((5, 5, int(nchannels * config["g_layers"][0])))(fc)
     lrelu0 = layers.LeakyReLU(config['lrelu'])(fc)
     drop0 = layers.Dropout(config['dropout'])(lrelu0)
-    if config['normalize_generator']:
-        bn0 = layers.BatchNormalization(axis=-1)(drop0)  # normalise along features layer (1024)
-    else:
-        bn0 = drop0
+    bn0 = normalise(drop0)
     
     # 1st deconvolution block, 5 x 5 x 1024 -> 7 x 7 x 512
     conv1 = wrappers.Conv2DTranspose(config["g_layers"][1], 3, 1, use_bias=False)(bn0)
     lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
     drop1 = layers.Dropout(config['dropout'])(lrelu1)
-    if config['normalize_generator']:
-        bn1 = layers.BatchNormalization(axis=-1)(drop1)
-    else:
-        bn1 = drop1
+    bn1 = normalise(drop1)
 
     # 2nd deconvolution block, 6 x 8 x 512 -> 14 x 18 x 256
     conv2 = wrappers.Conv2DTranspose(config["g_layers"][2], (3, 4), 1, use_bias=False)(bn1)
     lrelu2 = layers.LeakyReLU(config['lrelu'])(conv2)
     drop2 = layers.Dropout(config['dropout'])(lrelu2)
-    if config['normalize_generator']:
-        bn2 = layers.BatchNormalization(axis=-1)(drop2)
-    else:
-        bn2 = drop2
+    bn2 = normalise(drop2)
 
     # Output layer, 17 x 21 x 128 -> 20 x 24 x nchannels, resizing not inverse conv
     conv3 = layers.Resizing(20, 24, interpolation=config['interpolation'])(bn2)
@@ -116,6 +122,11 @@ def define_critic(config, nchannels=2):
     """
     >>> critic = define_critic()
     """
+    def normalise(x):
+        if config['normalize_critic']:
+            return layers.LayerNormalization(axis=-1)(x)
+        else:
+            return x
     # inputs
     x = tf.keras.Input(shape=(20, 24, nchannels), name='samples')
     condition = tf.keras.Input(shape=(1,), name='condition')
@@ -133,16 +144,19 @@ def define_critic(config, nchannels=2):
     conv1 = wrappers.Conv2D(config["d_layers"][0], (4, 5), (2, 2), "valid")(concatenated)
     lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
     drop1 = layers.Dropout(config['dropout'])(lrelu1)
+    drop1 = normalise(drop1)
 
     # 2nd hidden layer 7x7x128
     conv1 = wrappers.Conv2D(config["d_layers"][1], (3, 4), (1, 1), "valid")(drop1)
     lrelu2 = layers.LeakyReLU(config['lrelu'])(conv1)
     drop2 = layers.Dropout(config['dropout'])(lrelu2)
+    drop2 = normalise(drop2)
 
     # 3rd hidden layer 5x5x256
     conv2 = wrappers.Conv2D(config["d_layers"][2], (3, 3), (1, 1), "valid")(drop2)
     lrelu3 = layers.LeakyReLU(config['lrelu'])(conv2)
     drop3 = layers.Dropout(config['dropout'])(lrelu3)
+    drop3 = normalise(drop3)
 
     # fully connected 1x1
     flat = layers.Reshape((-1, 5 * 5 * config["d_layers"][2]))(drop3)
@@ -195,6 +209,7 @@ class WGANGP(keras.Model):
         self.generator_grad_norms = [
             keras.metrics.Mean(name=f"generator_{i}_{var.path}") for i, var in enumerate(self.generator.trainable_variables)
         ]
+
 
     def compile(self, critic_optimizer, generator_optimizer, *args, **kwargs) -> None:
         super().compile(*args, **kwargs)

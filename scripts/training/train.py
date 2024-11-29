@@ -2,7 +2,7 @@
 For conditional training (no constants yet).
 """
 # %%
-RUN_EAGERLY = True
+RUN_EAGERLY = False
 MIN_CHI_RMSE = 1000.
 MEMORY_GROWTH = True
 

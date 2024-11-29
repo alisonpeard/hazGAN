@@ -206,7 +206,7 @@ class CrossEntropy(Callback):
 
 
 class ImageLogger(Callback):
-    def __init__(self, frequency=1, channel=0, nsamples=3,
+    def __init__(self, frequency=1, channel=0, nsamples=8,
                  conditions=None, labels=None, noise=None):
         super().__init__()
         self.frequency = frequency
@@ -216,34 +216,38 @@ class ImageLogger(Callback):
             conditions = np.linspace(20, 60, nsamples)
         if labels is None:
             labels = np.array([2] * nsamples)
-        if noise is None:
-            noise = self.model.latent_space_distn(
-                (nsamples, self.model.latent_dim)
-                )
-
+   
+        self.nsamples = nsamples
         self.conditions = conditions
         self.labels = labels
         self.noise = noise
-
-        print("Warning: resolution hard-coded as 18x22 for ChannelVisualiser callback.")
+        self.seed = 42
 
 
     def on_epoch_end(self, epoch, logs={}):
         if (epoch % self.frequency == 0):
             clear_output(wait=True)
 
+            if self.noise is None:
+                # set noise on first epoch only
+                self.noise = self.model.latent_space_distn(
+                    (self.nsamples, self.model.latent_dim),
+                    seed=self.seed
+                    )
+
             condition = tf.constant(self.conditions, dtype=tf.float32)
             labels = tf.constant(self.labels, dtype=tf.int32)
             noise = tf.constant(self.noise, dtype=tf.float32)
 
-            generated_data = unpad(self.model(condition, labels, nsamples=64, noise=noise))
-            generated_data = generated_data.numpy()
+            generated_data = unpad(self.model(condition, labels, nsamples=self.nsamples, noise=noise))
+            generated_data = generated_data.numpy()[:, ::-1, :, self.channel]
 
             generated_images = tf.clip_by_value(generated_data * 127.5 + 127.5, 0, 255)
             generated_images = tf.cast(generated_images, tf.uint8)
             wandb_images = [wandb.Image(img) for img in generated_images.numpy()]
 
-            wandb.log({
-            "generated_images": wandb_images,
-            "epoch": epoch
-            })
+            if wandb.run is not None:
+                wandb.log({
+                "generated_images": wandb_images,
+                "epoch": epoch
+                })

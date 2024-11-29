@@ -93,16 +93,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
         os.path.join(datadir, 'data_pretrain.nc'),
         chunks={'time': 1000}
         )
-
-    # def select_no_broadcast(data, selection):
-    #     """Too hardcoded to place outside load_data function."""
-    #     dynamic_vars = [var for var in data.data_vars if 'time' in data[var].dims]
-    #     static_vars = [var for var in data.data_vars if 'time' not in data[var].dims]
-    #     data = xr.merge([
-    #         data[dynamic_vars].sel(time=selection),
-    #         data[static_vars]
-    #     ])
-    #     return data
+    pretrain = pretrain.transpose("time", "lat", "lon", "channel")
 
     def filter_dataset(dataset, outliers):
         mask = ~np.isin(dataset.time.values, outliers)
@@ -136,8 +127,8 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
 
     if verbose:
         print("\nData summary:\n-------------")
-        print("{:,.0f} samples from storm dataset".format(data.dims['time']))
-        print("{:,.0f} samples from normal climate dataset".format(pretrain.dims['time']))
+        print("{:,.0f} samples from storm dataset".format(data.sizes['time']))
+        print("{:,.0f} samples from normal climate dataset".format(pretrain.sizes['time']))
 
     # train/test split
     if isinstance(train_size, float):
@@ -164,7 +155,6 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     # try concatenating with training data
     train = xr.concat([train, pretrain], dim='time', data_vars="minimal")
     labels = da.unique(train['label'].data).astype(int).compute().tolist()
-
     metadata['labels'] = labels
     metadata['paddings'] = PADDINGS
 

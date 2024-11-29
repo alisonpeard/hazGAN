@@ -3,8 +3,7 @@ from .plots import *
 from .io import *
 from .defaults import *
 from .extreme_value_theory import *
-from .tf_utils import *
-from . import unconditional
+from .tensorflow import *
 from . import conditional
 
 __version__ = "2.02"

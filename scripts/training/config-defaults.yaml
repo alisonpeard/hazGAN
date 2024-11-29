@@ -66,7 +66,10 @@ interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
   value: bilinear
 normalize_generator:
-  desc: Whether to batch normalize generator blocks.
+  desc: Whether to batch normalise generator blocks.
+  value: True
+normalize_critic:
+  desc: Whether to layer normalise critic blocks
   value: True
 
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
