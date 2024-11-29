@@ -107,7 +107,7 @@ def evaluate_results(train,
         #! very crude condition interpolation to get 1000 realistic conditions
         x = np.linspace(0, 100, 1000)
         xp = np.linspace(0, 100, len(condition))
-        fp = condition
+        fp = sorted(condition)
         condition = np.interp(x, xp, fp)
         label = np.tile(biggest_label, 1000)
         print("\nConditioning on 1000 {:.2f} - {:.2f} max wind percentiles".format(condition.min(), condition.max()))

@@ -33,6 +33,7 @@ from cartopy import crs as ccrs
 
 
 plt.rcParams['font.family'] = 'serif'
+hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k'}
 
 CHANNELS = ["u10", "tp", 'mslp']
 RESOLUTION = (22, 18)
@@ -244,7 +245,6 @@ def main(datadir):
 
         fig, axs = plt.subplots(1, 2)
         for i, ax in enumerate(axs):
-            hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k'}
             ax.hist(ds.isel(channel=i).anomaly.values.ravel(), **hist_kws);
         
     ds.close()

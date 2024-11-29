@@ -1,7 +1,7 @@
 # training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
 epochs:
   desc: Number of epochs to train for
-  value: 10
+  value: 20
 train_size:
   value: 0.8 # 840 # 50
 batch_size:
@@ -72,7 +72,7 @@ normalize_generator:
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
 learning_rate:
   desc: Gulrajani et al. 2017 use 0.0001 (Appendix B)
-  value: 0.001
+  value: 0.0003
 beta_1:
   desc: Gulrajani et al. 2017 use 0.5, [0, 0.5]
   value: 0.5
@@ -87,11 +87,7 @@ use_ema:
   value: True # only set to true if not loading weights
 ema_momentum:
   desc: Momentum of exponential moving average for tf.keras.optimizers.Adam (higher --> smoother)
-  value: 0.9999
+  value: 0.999
 ema_overwrite_frequency:
   desc: How often [batches] to overwrite weights with ema
   value: 1
-
-# for linux cluster
-# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/soge-home/users/spet5107/micromamba/envs/tensorflow/lib
-# Distributions: https://docs.wandb.ai/guides/sweeps/sweep-config-keys/#distribution-options-for-random-and-bayesian-search
