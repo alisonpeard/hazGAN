@@ -10,14 +10,18 @@ from IPython.display import clear_output
 from ..extreme_value_theory import chi_loss, inv_gumbel, pairwise_extremal_coeffs, chi2metric
 from ..utils import unpad
 from ..extreme_value_theory.peak_over_threshold import inv_probability_integral_transform
+from ..plots import figure_three
+
 
 class WandbMetricsLogger(Callback):
     """
     Custom Wandb callback to log metrics.
 
-    Source: https://community.wandb.ai/t/sweeps-not-showing-val-loss-with-keras/4495"""
+    Source: https://community.wandb.ai/t/sweeps-not-showing-val-loss-with-keras/4495
+    """
     def on_epoch_end(self, epoch, logs=None):
-        wandb.log(logs)
+        if wandb.run is not None:
+            wandb.log(logs)
 
 
 class OverfittingDetector(Callback):
@@ -47,15 +51,18 @@ class OverfittingDetector(Callback):
             print("\nEarly stopping due to overfitting.\n")
             self.model.stop_training = True
 
-class CountImagesSeen(Callback):
-    def __init__(self, ntrain):
-        super().__init__()
-        self.images_seen = 0
-        self.ntrain = ntrain
 
-    def on_epoch_end(self, epoch, logs={}):
+class CountImagesSeen(Callback):
+    def __init__(self, batch_size):
+        """Add to image counter at end of each batch."""
+        super().__init__()
+        self.batch_size = batch_size
+        self.batches_seen = 0
+
+    def on_batch_end(self, batch, logs={}):
         # get training data
-        logs['images_seen'] = (epoch+1) * self.ntrain
+        self.batches_seen += 1
+        logs['images_seen'] = int(self.batches_seen * self.batch_size)
 
 
 class CriticVal(Callback):
@@ -198,64 +205,49 @@ class CrossEntropy(Callback):
         logs["g_loss_test"] = g_loss_test
 
 
-class ChannelVisualiser(Callback):
-    def __init__(self, frequency=1, channel=0, runname='untitled-run',
-                 data: tuple = None):
+class ImageLogger(Callback):
+    def __init__(self, frequency=1, channel=0, nsamples=8,
+                 conditions=None, labels=None, noise=None):
         super().__init__()
         self.frequency = frequency
-        self.generated_images = []
-        self.runname = runname
-        self.data = data
         self.channel = channel
-        print("Warning: resolution hard-coded as 18x22 for ChannelVisualiser callback.")
+
+        if conditions is None:
+            conditions = np.linspace(20, 60, nsamples)
+        if labels is None:
+            labels = np.array([2] * nsamples)
+   
+        self.nsamples = nsamples
+        self.conditions = conditions
+        self.labels = labels
+        self.noise = noise
+        self.seed = 42
+
 
     def on_epoch_end(self, epoch, logs={}):
-        if (epoch % self.frequency == 0) & (epoch > 0):
+        if (epoch % self.frequency == 0):
             clear_output(wait=True)
 
-            generated_data = unpad(self.model(nsamples=3))
-            if self.data is not None:
-                X, U = self.data
-                X = X.numpy()
-                U = unpad(U).numpy()
-                generated_data = generated_data.numpy()
-                generated_data = inv_probability_integral_transform(generated_data, X, U)
-                dist = "original"
-            else:
-                dist = "Gumbel"
-                generated_data = generated_data.numpy()
-            
-            fig, axs = plt.subplots(1, 3, figsize=(10, 2.5),
-                                    gridspec_kw={"wspace": 0},
-                                    sharex=True, sharey=True)
-            vmin = tf.reduce_min(generated_data)
-            vmax = tf.reduce_max(generated_data)
-            lats = np.linspace(25, 10, 18)
-            lons = np.linspace(80, 95, 22)
-            X, Y = np.meshgrid(lons, lats)
-            for i, ax in enumerate(axs):
-                im = ax.contourf(
-                    X,
-                    Y,
-                    generated_data[i, ..., self.channel],
-                    cmap="Spectral_r",
-                    levels=20,
-                    vmin=vmin,
-                    vmax=vmax
-                )
-                ax.invert_yaxis()
-                ax.label_outer()
-                ax.set_xlabel('Longitude')
-            axs[0].set_ylabel('Latitude')
-            fig.subplots_adjust(right=0.8)
-            cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-            fig.colorbar(im, cax=cbar_ax)
-            fig.suptitle(f"Generated images for {self.runname} for epoch: {epoch} ({dist} scale)")
-            log_image_to_wandb(fig, f"channel{self.channel}_{epoch}", dir="imgs")
-            # plt.show()
+            if self.noise is None:
+                # set noise on first epoch only
+                self.noise = self.model.latent_space_distn(
+                    (self.nsamples, self.model.latent_dim),
+                    seed=self.seed
+                    )
 
+            condition = tf.constant(self.conditions, dtype=tf.float32)
+            labels = tf.constant(self.labels, dtype=tf.int32)
+            noise = tf.constant(self.noise, dtype=tf.float32)
 
-def log_image_to_wandb(fig, name: str, dir: str):
-    impath = os.path.join(dir, f"{name}.png")
-    fig.savefig(impath)
-    wandb.log({name: wandb.Image(impath)})
+            generated_data = unpad(self.model(condition, labels, nsamples=self.nsamples, noise=noise))
+            generated_data = generated_data.numpy()[:, ::-1, :, self.channel]
+
+            generated_images = tf.clip_by_value(generated_data * 127.5 + 127.5, 0, 255)
+            generated_images = tf.cast(generated_images, tf.uint8)
+            wandb_images = [wandb.Image(img) for img in generated_images.numpy()]
+
+            if wandb.run is not None:
+                wandb.log({
+                "generated_images": wandb_images,
+                "epoch": epoch
+                })

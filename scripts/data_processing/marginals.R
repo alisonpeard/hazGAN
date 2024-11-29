@@ -1,7 +1,9 @@
+# Convert all of this to Python before publishing!
 # Identify events and fit GPD to componentwise maxima. Also assign RP to each event
 # INPUT: data_1950_2022.nc
 # OUTPUT: (1) event_data.parquet, (2) fitted_data.parquet, (3) monthly_medians.csv
 # https://cran.r-project.org/web/packages/eva/eva.pdf
+# LAST RUN: 28-11-2024
 rm(list = ls())
 library(eva)
 library(arrow)
@@ -35,7 +37,9 @@ monthly.medians <- function(df, var){
   return(monthly.median)
 }
 get.ecdf <- function(x){
-  return(ecdf(x)(x))
+  rankings <- rank(x, ties.method=c("average"))
+  n <- length(x)
+  return(rankings/(n+1))
 }
 progress_bar <- function(n, prefix="", suffix="") {
   pb <- utils::txtProgressBar(min = 0, max = n, style = 3)
@@ -88,7 +92,7 @@ ind <- which(nclusters == max(nclusters), arr.ind=TRUE)
 r <- rs[ind[1]]
 q <- qs[ind[2]]
 
-# make dataframe of events
+# make data.frame of events
 thresh <- quantile(df$u10, q)
 print(paste(r, q, thresh, sep=", ")) # for paper
 
@@ -180,16 +184,8 @@ for(i in 1:ngrid){
     maxima$shape  <- shape
     maxima$p      <- fit.u10$p.value
     
-    # semiparametric cdf transform (old 03-09-2024)
-    ecdf.func <- ecdf(maxima$u10)
-    maxima$scdf <- maxima$u10
-    maxima$scdf[maxima$u10 < thresh.u10] <- ecdf.func(maxima$u10[maxima$u10 < thresh.u10])
-    f.exceed <- 1 - ecdf.func(thresh.u10)
-    survival.probs <- f.exceed * (1 - pgpd(maxima$u10[maxima$u10 >= thresh.u10], thresh.u10, scale, shape))
-    maxima$scdf[maxima$u10 >= thresh.u10] <- 1 - survival.probs
-    
     # empirical cdf transform (new 03-09-2024)
-    maxima$ecdf <- ecdf.func(maxima$u10)
+    maxima$ecdf <- get.ecdf(maxima$u10)
     
     maxima # assigns maxima to new.row
   }, error=function(e){
@@ -238,16 +234,8 @@ for(i in 1:ngrid){
     maxima$shape <- shape
     maxima$p <- fit.msl$p.value
     
-    # semiparametric cdf transform (old 03-09-2024)
-    ecdf.func <- ecdf(maxima$msl)
-    maxima$scdf <- maxima$msl
-    maxima$scdf[maxima$msl < thresh.msl] <- ecdf.func(maxima$msl[maxima$msl < thresh.msl])
-    f.exceed <- 1 - ecdf.func(thresh.msl)
-    survival.probs <- f.exceed * (1 - pgpd(maxima$msl[maxima$msl >= thresh.msl], thresh.msl, scale, shape))
-    maxima$scdf[maxima$msl >= thresh.msl] <- 1 - survival.probs
-    
     # empirical cdf transform (new 03-09-2024)
-    maxima$ecdf <- ecdf.func(maxima$msl)
+    maxima$ecdf <- get.ecdf(maxima$msl)
     
     maxima # assigns maxima to new.row
   }, error=function(e){
@@ -295,17 +283,9 @@ for(i in 1:ngrid){
     maxima$scale <- scale
     maxima$shape <- shape
     maxima$p <- fit.tp$p.value
-
-    # semiparametric cdf transform (old 03-09-2024)
-    ecdf.func <- ecdf(maxima$tp)
-    maxima$scdf <- maxima$tp
-    maxima$scdf[maxima$tp < thresh.tp] <- ecdf.func(maxima$tp[maxima$tp < thresh.tp])
-    f.exceed <- 1 - ecdf.func(thresh.tp)
-    survival.probs <- f.exceed * (1 - pgpd(maxima$tp[maxima$tp >= thresh.tp], thresh.tp, scale, shape))
-    maxima$scdf[maxima$tp >= thresh.tp] <- 1 - survival.probs
     
     # empirical cdf transform (new 03-09-2024)
-    maxima$ecdf <- ecdf.func(maxima$tp)
+    maxima$ecdf <- get.ecdf(maxima$tp)
     
     maxima # assigns maxima to new.row
   }, error=function(e){
@@ -340,8 +320,8 @@ write.csv(medians, paste0(indir, '/', 'monthly_medians.csv'), row.names=FALSE)
 write_parquet(cluster.df, paste0(indir, '/', 'event_data.parquet'))
 write_parquet(final.df, paste0(indir, '/', 'fitted_data.parquet'))
 
-print(paste0("Saved as ", indir, '/', 'fitted_data.csv.'))
-print(paste0(length(unique(transformed.df$storm)), " events processed."))
+cat("\nSaved as:", paste0(indir, '/', 'fitted_data.csv.'))
+print(paste0(length(unique(final.df$storm)), " events processed.")) # ?
 ########### FIGURES ############################################################
 if(TRUE){
   GRIDCELL <- 15

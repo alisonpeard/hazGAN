@@ -1,7 +1,7 @@
 project: hazGAN
 program: train.py
 method: bayes
-name: balanced-batching
+name: first-conditional
 metric:
   goal: minimize
   name: chi_rmse
@@ -13,6 +13,11 @@ parameters:
       - ['u10']
       - ['u10', 'tp']
       - ['u10', 'mslp']
+  label_ratios:
+    values:
+      - {'pre': .2, 7: .4, 20: .4}
+      - {'pre': .333333, 7: .333333, 20: .333333}
+      - {'pre': .6, 7: .3, 20: .1}
   training_balance:
     distribution: int_uniform
     min: 1

@@ -1,29 +1,28 @@
 # training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
-model:
-  desc: Which model to train, ['wgan' | 'dcgan'].
-  value: wgan
-nepochs:
-  desc: Gulrajani et al. 2017 use 200_000
-  value: 20 # 3000 # or 1,500,000/train_size
+epochs:
+  desc: Number of epochs to train for
+  value: 20
 train_size:
-  value: 0.6 # 840 # 50
+  value: 0.8 # 840 # 50
 batch_size:
-  value: 128
+  value: 128 # for GPU constraints
 channels:
   desc: Which channels to model, subsets of ['u10', 'tp', 'mslp']
-  value: ['u10']
-ratios:
-  desc: Dataset representation per-batch
-  value: [0.333334, 0.333333, 0.333333]
-chi_frequency:
-  desc: How often to calculate chi-score for train and test.
-  value: 10
+  value: ['u10', 'mslp']
+label_ratios:
+  desc: Dataset representation, by value
+  value:
+    pre: 0.3333333
+    '7': 0.3333333
+    '20': 0.3333333
 augment_policy:
   desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
   value: 'color,translation,cutout'
-penalty:
-  desc: Which penalty to use, ['gp', 'lipschitz']
-  value: gp
+embedding_depth:
+  desc: How many channels to project the label to
+  value: 32
+seed:
+  value: 42
 
 # training features
 optimizer:
@@ -43,12 +42,9 @@ uniform:
   value: uniform
 lambda_gp:
   value: 10.
-lambda_chi:
-  desc: Weight of penalty on l2 error of extremal coefficient
-  value: 0
-true_label_smooth:
-  desc: Regularization -- multiply true labels by this to smooth discriminator's labels
-  value: 1.
+lambda_condition:
+  desc: Weight of penalty on max wind condition
+  value: 0.01
 
 # architecture
 lrelu:
@@ -70,13 +66,16 @@ interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
   value: bilinear
 normalize_generator:
-  desc: Whether to batch normalize generator blocks.
-  value: False
+  desc: Whether to batch normalise generator blocks.
+  value: True
+normalize_critic:
+  desc: Whether to layer normalise critic blocks
+  value: True
 
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
 learning_rate:
   desc: Gulrajani et al. 2017 use 0.0001 (Appendix B)
-  value: 0.00001
+  value: 0.0003
 beta_1:
   desc: Gulrajani et al. 2017 use 0.5, [0, 0.5]
   value: 0.5
@@ -88,14 +87,10 @@ weight_decay:
   value: 0.001
 use_ema:
   desc: Use exponential moving average in training, causes issues when re-loading weights.
-  value: False # only set to true if not loading weights
+  value: True # only set to true if not loading weights
 ema_momentum:
-  desc: Momentum of exponential moving average for tf.keras.optimizers.Adam
-  value: 0.9
+  desc: Momentum of exponential moving average for tf.keras.optimizers.Adam (higher --> smoother)
+  value: 0.999
 ema_overwrite_frequency:
-  desc: How often to overwrite weights with ema.
+  desc: How often [batches] to overwrite weights with ema
   value: 1
-
-# for linux cluster
-# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/soge-home/users/spet5107/micromamba/envs/tensorflow/lib
-# Distributions: https://docs.wandb.ai/guides/sweeps/sweep-config-keys/#distribution-options-for-random-and-bayesian-search

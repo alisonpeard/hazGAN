@@ -1,209 +1,278 @@
-"""Data handling methods for the hazGAN model."""
+"""
+Improved input-output methods to flexibly load from pretraining and training sets.
+"""
+# %%
 import os
+import time
+from typing import Union
+from environs import Env
+from numbers import Number
+import numpy as np
 import pandas as pd
-import tensorflow as tf
 import xarray as xr
-from .extreme_value_theory import gumbel
+import dask.array as da
+import tensorflow as tf
+from tensorflow.data import Dataset
 
 
-def print_if_verbose(string:str, verbose=True):
+PADDINGS = tf.constant([[1, 1], [1, 1], [0, 0]])
+
+
+def print_if_verbose(string:str, verbose=True) -> None:
+    """Self-explanatory"""
     if verbose:
         print(string)
 
 
-def process_outliers(datadir, verbose):
+def process_outliers(datadir, verbose=True) -> Union[list[np.datetime64], None]:
+    """Identify wind bombs using Frobernius inner product (find code)"""
     outlier_file = os.path.join(datadir, 'outliers.csv')
     if os.path.isfile(outlier_file):
-        print_if_verbose("Loading file containing outliers.", verbose)
+        print_if_verbose("Loading file containing outliers...", verbose)
         outliers = pd.read_csv(outlier_file, index_col=[0])
         outliers = pd.to_datetime(outliers['time']).to_list()
+        outliers = np.array([np.datetime64(date) for date in outliers])
         return outliers
     else:
         print_if_verbose("No outlier file found.", verbose)
         return None
     
 
-# @tf.py_function(Tout=tf.float32)
-def load_training(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
-                  numpy=False, gumbel_marginals=True, channels=['u10', 'tp'],
-                  uniform='uniform', u10_min=None, u10_max=None, verbose=True):
-    """
-    Load the hazGAN training data from the data.nc file.
+def encode_strings(ds:xr.Dataset, variable:str) -> tf.Tensor:
+    """One-hot encode a string variable"""
+    # check that all ds[variable] data are strings
 
-    Parameters:
-    ----------
-    datadir : str
-        Directory where the data.nc file is stored.
-    ntrain : int
-        Number of training samples.
-    padding_mode : {'constant', 'reflect', 'symmetric', None}, default 'constant'
-        Padding mode for the uniform-transformed marginals.
-    image_shape : tuple, default=(18, 22)
-        Shape of the image data.
-    numpy : bool, default False
-        Whether to return numpy arrays or tensors.
-    gumbel_marginals : bool, default False
-        Whether to use Gumbel-transformed marginals.
-    channels : list, default ['u10', 'tp']
-        List of channels to use.
-    uniform : {'uniform', 'uniform'}, default 'uniform'
-        What type of uniform-transformed marginals to use. 'uniform' comes from
-        the ECDF and 'uniform_semi' comes from the semiparametric CDF of Heffernan
-        and Tawn  (2004).
+    if not all(isinstance(string, str) for string in ds[variable].data):
+        error = "Not all data in {} variable are strings. ".format(variable) + \
+            "Data types found: {}.".format(set([type(string).__name__ for string in ds[variable].data]))
+
+        raise ValueError(error)
+
+    encoding = {string: number for  number, string in enumerate(np.unique(ds[variable]))}
+    encoded = np.array([encoding[string] for string in ds[variable].data])
+    depth = len(list(encoding.keys()))
+    return tf.one_hot(encoded, depth)
+    
+
+def label_data(data, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}) -> xr.DataArray:
+    """Apply labels to storm data using user-provided dict."""
+    ratios = list(label_ratios.values())
+    assert np.isclose(sum(ratios), 1), "Ratios must sum to one, got {}.".format(sum(ratios))
+
+    nlabels = len(list(label_ratios.keys())) - 1 # excluding pretrain
+    labels = 0 * data['maxwind'] + nlabels       # assign highest label to everything
+
+    for label, lower_bound in enumerate(label_ratios.keys()):
+        if isinstance(lower_bound, Number): # first is always 'pre'
+            labels = labels.where(data['maxwind'] < lower_bound, int(label))
+
+    return labels
+
+
+def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3, 20:1/3},
+         train_size=0.8, channels=['u10', 'tp'], image_shape=(18, 22),
+         padding_mode='reflect', gumbel=True, batch_size=16,
+         verbose=True) -> tuple[Dataset, Dataset, dict]:
+    """Main data loader for training.
+
+    Returns:
+    --------
+    train : Dataset
+        Train dataset with (footprint, condition, label)
+    valid : Dataset
+        Validation dataset with (footprint, condition, label)
+    metadata : dict
+        Dict with useful metadata
     """
-    data = xr.open_dataset(os.path.join(datadir, "data.nc"))
-    outliers = process_outliers(datadir, verbose)
+    assert condition in ['maxwind', 'time.season', 'label']
+
+    print("\nLoading training data (hang on)...")
+    start = time.time() # time data loading
+    data = xr.open_dataset(os.path.join(datadir, 'data.nc')) # , engine='zarr'
+    pretrain = xr.open_dataset(
+        os.path.join(datadir, 'data_pretrain.nc'),
+        chunks={'time': 1000}
+        )
+    pretrain = pretrain.transpose("time", "lat", "lon", "channel")
+
+    def filter_dataset(dataset, outliers):
+        mask = ~np.isin(dataset.time.values, outliers)
+        return dataset.isel(time=mask)
+
+    outliers = process_outliers(datadir)
     if outliers is not None:
-        time_no_outlier = data.where(~data.time.isin(outliers), drop=True).time
-        data = data.sel(time=time_no_outlier)
+        data = filter_dataset(data, outliers)
+        pretrain = filter_dataset(pretrain, outliers)
+        print("Pretrain shape: {}".format(pretrain['uniform'].data.shape))
+        print("Train shape: {}".format(data['uniform'].data.shape))
+
+    print("\nData loaded. Processing data...\n")
+    
+    metadata = {} # start collecting metadata
+
+    # conditioning & sampling variables
+    metadata['epoch'] = np.datetime64('1950-01-01')
+    data['maxwind'] = data.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat'])
+    data['label'] = label_data(data, label_ratios)
+    data['season'] = data['time.season']
+    data['time'] = (data['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
     data = data.sel(channel=channels)
 
-    if u10_min is not None:
-        print_if_verbose(f'Only taking footprints with max u10 anomaly greater than {u10_min}', verbose)
-        data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
-        time_subset = data.where(data.maxima >= u10_min, drop=True).time
-        data = data.sel(time=time_subset)
-        print_if_verbose(f'Number of usable footprints: {len(data.time)}', verbose)
+    # conditioning & sampling variables (pretrain)
+    pretrain['maxwind'] = pretrain.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat']) # anomaly
+    pretrain['label'] = (0 * pretrain['maxwind']).astype(int) # zero indicates normal climate data
+    pretrain['season'] = pretrain['time.season']
+    pretrain['time'] = (pretrain['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
+    pretrain = pretrain.sel(channel=channels)
 
-    if u10_max is not None:
-        print_if_verbose(f'Only taking footprints with max u10 anomaly less than {u10_max}', verbose)
-        data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
-        time_subset = data.where(data.maxima < u10_max, drop=True).time
-        data = data.sel(time=time_subset)
-        print_if_verbose(f'Number of usable footprints: {len(data.time)}', verbose)
+    if verbose:
+        print("\nData summary:\n-------------")
+        print("{:,.0f} samples from storm dataset".format(data.sizes['time']))
+        print("{:,.0f} samples from normal climate dataset".format(pretrain.sizes['time']))
 
-    if ntrain < 1:
-        ntrain = int(ntrain * data.time.size)
-        print_if_verbose(f'Number of training samples: {ntrain}', verbose)
+    # train/test split
+    if isinstance(train_size, float):
+        n = data['time'].size
+        train_size = int(train_size * n)
 
-    X = tf.image.resize(data.anomaly, image_shape)
-    U = tf.image.resize(data[uniform], image_shape)
-    M = tf.image.resize(data.medians, image_shape)
-    z = data.storm_rp.values
-    params = data.params.values
-    
-    if padding_mode is not None:
-        paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
-        U = tf.pad(U, paddings, mode=padding_mode)
+    dynamic_vars = [var for var in data.data_vars if 'time' in data[var].dims]
+    static_vars = [var for var in data.data_vars if 'time' not in data[var].dims]
 
-    # training is on most recent data
-    train_u = U[-ntrain:, ...]
-    test_u = U[:-ntrain, ...]
-    train_x = X[-ntrain:, ...]
-    test_x = X[:-ntrain, ...]
-    train_m = M[-ntrain:, ...]
-    test_m = M[:-ntrain, ...]
-    train_z = z[-ntrain:]
-    test_z = z[:-ntrain]
+    train_dates = np.random.choice(data['time'].data, train_size, replace=False)
+    train= xr.merge([
+        data[dynamic_vars].sel(time=train_dates),
+        data[static_vars]
+    ])
+    valid = xr.merge([
+        data[dynamic_vars].sel(time=data.time[~data.time.isin(train_dates)]),
+        data[static_vars]
+    ])
 
-    if gumbel_marginals:
-        train_u = gumbel(train_u)
-        test_u = gumbel(test_u)
+    #  get metadata before batching and resampling
+    metadata['train'] = train[['uniform', 'anomaly', 'medians', 'params']]
+    metadata['valid'] = valid[['uniform', 'anomaly', 'medians', 'params']]
 
-    if numpy:
-        train_u = train_u.numpy()
-        test_u = test_u.numpy()
-        train_x = train_x.numpy()
-        test_x = test_x.numpy()
-        train_m = train_m.numpy()
-        test_m = test_m.numpy()
+    # try concatenating with training data
+    train = xr.concat([train, pretrain], dim='time', data_vars="minimal")
+    labels = da.unique(train['label'].data).astype(int).compute().tolist()
+    metadata['labels'] = labels
+    metadata['paddings'] = PADDINGS
 
-    # replace nans with zeros
-    train_u = tf.where(tf.math.is_nan(train_u), tf.zeros_like(train_u), train_u)
-    test_u = tf.where(tf.math.is_nan(test_u), tf.zeros_like(test_u), test_u)
-    train_mask = tf.where(tf.math.is_nan(train_u))
-    test_mask = tf.where(tf.math.is_nan(test_u))
+    def sample_dict(data):
+        samples = {
+            'uniform': data['uniform'].data.astype(np.float32),
+            'condition': data[condition].data.astype(np.float32),
+            'label': data['label'].data.astype(int),
+            'season': encode_strings(data, "season"),
+            'days_since_epoch': data['time']
+            }
+        return samples
 
-    # return a dictionary to keep it tidy
-    training = {'train_u': train_u, 'test_u': test_u, 'train_x': train_x, 'test_x': test_x,
-                'train_m': train_m, 'test_m': test_m, 'train_z': train_z, 'test_z': test_z,
-                'params': params, 'train_mask': train_mask, 'test_mask': test_mask}
-    return training
+    train = Dataset.from_tensor_slices(sample_dict(train)).shuffle(10_000)
+    valid = Dataset.from_tensor_slices(sample_dict(valid)).shuffle(500)
+
+    # manual under/oversampling
+    split_train = [train.filter(lambda sample: sample['label']==label) for label in labels]
+    target_dist = list(label_ratios.values())
+    train = tf.data.Dataset.sample_from_datasets(split_train, target_dist)
+
+    #  Define transformations
+    def gumbel(uniform, eps=1e-6):
+        tf.debugging.Assert(tf.less_equal(tf.reduce_max(uniform), 1.), [uniform])
+        tf.debugging.Assert(tf.greater_equal(tf.reduce_min(uniform), 0.), [uniform])
+        uniform = tf.clip_by_value(uniform, eps, 1-eps)
+        return -tf.math.log(-tf.math.log(uniform))
+
+    def transforms(sample):
+        uniform = sample['uniform']
+        uniform = tf.image.resize(uniform, image_shape)
+        if gumbel:
+            uniform = gumbel(uniform)
+        if padding_mode is not None:
+            paddings = PADDINGS
+            uniform = tf.pad(uniform, paddings, mode=padding_mode)
+        sample['uniform'] = uniform
+        return sample
+
+    train = train.map(transforms)
+    valid = valid.map(transforms)
+
+    # pipeline methods
+    train = train.shuffle(10_000)
+    train = train.repeat()
+    train = train.batch(batch_size)
+    train = train.prefetch(tf.data.AUTOTUNE)
+
+    valid = valid.batch(batch_size, drop_remainder=True)
+    valid = valid.prefetch(tf.data.AUTOTUNE)
+
+    end = time.time()
+    print('\nTime taken to load datasets: {:.2f} seconds.\n'.format(end - start))
+    return train, valid, metadata
 
 
-def load_pretraining(datadir, ntrain, padding_mode='constant', image_shape=(18, 22),
-                  numpy=False, gumbel_marginals=True, channels=['u10', 'tp'],
-                  uniform='uniform', u10_min=None, verbose=True):
-    """
-    Load the hazGAN training data from the data.nc file.
+# %%
+if __name__ == "__main__":
+    print('Testing io.py...')
+    env = Env()
+    env.read_env(recurse=True)
+    datadir = env.str("TRAINDIR")
 
-    Parameters:
-    ----------
-    datadir : str
-        Directory where the data.nc file is stored.
-    ntrain : int
-        Number of training samples.
-    padding_mode : {'constant', 'reflect', 'symmetric', None}, default 'constant'
-        Padding mode for the uniform-transformed marginals.
-    image_shape : tuple, default=(18, 22)
-        Shape of the image data.
-    numpy : bool, default False
-        Whether to return numpy arrays or tensors.
-    gumbel_marginals : bool, default False
-        Whether to use Gumbel-transformed marginals.
-    channels : list, default ['u10', 'tp']
-        List of channels to use.
-    uniform : {'uniform', 'uniform'}, default 'uniform'
-        What type of uniform-transformed marginals to use. 'uniform' comes from
-        the ECDF and 'uniform_semi' comes from the semiparametric CDF of Heffernan
-        and Tawn  (2004).
-    """
-    data = xr.open_dataset(os.path.join(datadir, "data_pretrain.nc"))
-    outliers = process_outliers(datadir, verbose)
-    if outliers is not None:
-        time_no_outlier = data.where(~data.time.isin(outliers), drop=True).time
-        data = data.sel(time=time_no_outlier)
-    data = data.sel(channel=channels)
-    print_if_verbose(f"Dataset has {len(data.time):,} footprints.", verbose)
+    train, valid, metadata = load_data(datadir)
 
-    if u10_min is not None:
-        print('Only taking footprints with max u10 anomaly greater than', u10_min)
-        data['maxima'] = data.sel(channel='u10').anomaly.max(dim=['lat', 'lon'])
-        time_subset = data.where(data.maxima >= u10_min, drop=True).time
-        data = data.sel(time=time_subset)
-        print_if_verbose(f'Number of usable footprints: {len(data.time)}', verbose)
-        print_if_verbose(f'Number of training samples: {ntrain}', verbose)
+    def benchmark(dataset, num_epochs=2):
+        start_time = time.perf_counter()
+        for epoch_num in range(num_epochs):
+            for i in range(10):
+                batch = next(iter(dataset))
+        print("10 epoch execution time:", time.perf_counter() - start_time)
 
-    X = tf.image.resize(data['anomaly'], image_shape)
-    U = tf.image.resize(data[uniform], image_shape)
-    
-    if padding_mode is not None:
-        paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
-        U = tf.pad(U, paddings, mode=padding_mode)
+    benchmark(train)
+    benchmark(valid)
 
-    # # training on random sample from dataset
-    if ntrain < 1:
-        ntrain = int(ntrain * data.time.size)
-        # print('Number of training samples:', ntrain)
-    
-    train_idx = tf.random.shuffle(tf.range(tf.shape(data.time)[0]))[:ntrain]
-    train_mask = tf.scatter_nd(tf.expand_dims(train_idx, 1), 
-                            tf.ones(ntrain, dtype=bool), 
-                            tf.shape(data.time))
-    train_u = tf.boolean_mask(U, train_mask)
-    test_u = tf.boolean_mask(U, tf.logical_not(train_mask))
-    train_x = tf.boolean_mask(X, train_mask)
-    test_x = tf.boolean_mask(X, tf.logical_not(train_mask))
+    print("param shapes: {}".format(metadata['train']['params']))
 
-    # TEMP: temporarily make sure don't have way more test than train data
-    if tf.shape(test_u)[0] > tf.shape(train_u)[0]:
-        print("Warning: More test than train data, truncating test data.")
-        test_u = test_u[:tf.shape(train_u)[0], ...]
-        test_x = test_x[:tf.shape(train_u)[0], ...]
+    # train.save(os.path.join(datadir, 'train_dataset'))
+    # valid.save(os.path.join(datadir, 'valid_dataset'))
+# %%
+# TODO: Make a class to handle train, valid, and metadata
+if False:
+    import json
+    class MetaDataset(Dataset):
+        
+        def __init__(self, datadir:str, condition="maxwind",
+                    label_ratios={'pre':1/3, 7: 1/3, 20:1/3},
+                    train_size=0.8, channels=['u10', 'tp'],
+                    image_shape=(18, 22), padding_mode='reflect',
+                    gumbel=True, batch_size=16, **kwargs):
+            super().__init__(**kwargs)
+            self.datasets = []
+            self.datadir = datadir
+            self.condition = condition
+            self.label_ratios = label_ratios,
+            self.train_size = train_size
+            self.channels = channels
+            self.image_shape = image_shape
+            self.padding_mode = padding_mode
+            self.gumbel = gumbel
+            self.batch_size = {}
 
-    if gumbel_marginals:
-        train_u = gumbel(train_u)
-        test_u = gumbel(test_u)
+            self.kwargs = {}
+            self.metadata = {}
 
-    # replace nans with zeros
-    train_u = tf.where(tf.math.is_nan(train_u), tf.zeros_like(train_u), train_u)
-    test_u = tf.where(tf.math.is_nan(test_u), tf.zeros_like(test_u), test_u)
-    train_mask = tf.where(tf.math.is_nan(train_u))
-    test_mask = tf.where(tf.math.is_nan(test_u))
+        def __len__():
+            pass
 
-    # return a dictionary to keep it tidy
-    training = {'train_u': train_u, 'test_u': test_u, 'train_x': train_x, 'test_x': test_x,
-                'train_mask': train_mask, 'test_mask': test_mask}
-    return training
+        def load(self):
+            self.train = super().load(os.path.join(datadir, 'train'))
+            self.valid = super().load(os.path.join(datadir, 'valid'))
+            # self.metadata = 
 
-# ----------------------------END-------------------------------------
+        def save(self):
+            self.train.save(os.path.join(self.datadir, "train"))
+            self.train.save(os.path.join(self.datadir, "valid"))
+            with open(os.path.join(self.dir, 'metadata.json'), 'wb') as fp:
+                json.dumps(self.metadata, fp)
+
+
+
