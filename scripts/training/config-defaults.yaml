@@ -69,7 +69,7 @@ normalize_generator:
   desc: Whether to batch normalise generator blocks.
   value: True
 normalize_critic:
-  desc: Whether to layer normalise critic blocks
+  desc: Whether to layer normalise critic blocks. NB this matters for conditioning.
   value: True
 
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028

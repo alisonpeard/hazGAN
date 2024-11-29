@@ -8,6 +8,7 @@ References:
 # %%
 import sys
 import warnings
+import functools
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
@@ -166,6 +167,7 @@ def define_critic(config, nchannels=2):
 
 
 class WGANGP(keras.Model):
+    """Wasserstein GAN with gradient penalty."""
     def __init__(self, config, nchannels=2, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.critic = define_critic(config, nchannels)
@@ -183,7 +185,7 @@ class WGANGP(keras.Model):
             self.inv = inv_gumbel
         else:
             self.inv = lambda x: x # will make serialising etc. difficult
-        self.augment = lambda x: DiffAugment(x, config['augment_policy'])
+        self.augment = functools.partial(DiffAugment, policy=config['augment_policy'])
         self.seed = config['seed']
 
         # stateful metrics
