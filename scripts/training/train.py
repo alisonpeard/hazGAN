@@ -2,6 +2,11 @@
 For conditional training (no constants yet).
 """
 # %%
+RUN_EAGERLY = True
+MIN_CHI_RMSE = 1000.
+MEMORY_GROWTH = True
+
+
 import os
 import sys
 import yaml
@@ -11,19 +16,16 @@ from environs import Env
 import numpy as np
 import tensorflow as tf
 
+if MEMORY_GROWTH:
+    tf.config.experimental.set_memory_growth(tf.config.list_physical_devices('GPU')[0], True)
+tf.keras.backend.clear_session()
+
 import hazGAN as hazzy
 from hazGAN import plots
 from hazGAN import WandbMetricsLogger
 
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
-tf.keras.backend.clear_session()
-# ? add memory growth ?
-
-RUN_EAGERLY = False
-MIN_CHI_RMSE = 1000.
-
-# globals
 global datadir
 global rundir
 global imdir
@@ -179,6 +181,7 @@ def main(config, verbose=True):
 
     # callbacks
     image_count = hazzy.CountImagesSeen(config['batch_size'])
+    image_logger = hazzy.ImageLogger()
     wandb_logger = WandbMetricsLogger()
 
     # train
@@ -187,7 +190,7 @@ def main(config, verbose=True):
     history = cgan.fit(train, epochs=config['epochs'],
                        steps_per_epoch=steps_per_epoch,
                        validation_data=valid,
-                       callbacks=[image_count, wandb_logger])
+                       callbacks=[image_count, wandb_logger, image_logger])
     
     evaluate_results(train, valid, config, history.history, cgan, metadata)
 

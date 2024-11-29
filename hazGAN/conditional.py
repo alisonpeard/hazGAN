@@ -205,20 +205,20 @@ class WGANGP(keras.Model):
 
 
     def call(self, condition, label, nsamples=5,
-             latent_vectors=None, temp=1., offset=0, seed=None) -> tf.Tensor:
+             noise=None, temp=1., offset=0, seed=None) -> tf.Tensor:
         """Return uniformly distributed samples from the generator."""
-        if latent_vectors is None:
-            latent_vectors = self.latent_space_distn(
+        if noise is None:
+            noise = self.latent_space_distn(
                 (nsamples, self.latent_dim),
                 temperature=temp,
                 offset=offset,
                 seed=seed
                 )
         else:
-            n = latent_vectors.shape[0]
+            n = noise.shape[0]
             assert n == nsamples, f"Latent vector must be same length ({n}) as requested number of samples ({nsamples})."
 
-        raw = self.generator([latent_vectors, condition, label], training=False)
+        raw = self.generator([noise, condition, label], training=False)
         return self.inv(raw)
     
 
@@ -245,8 +245,8 @@ class WGANGP(keras.Model):
     def train_critic(self, data, condition, label, batch_size) -> None:
         """Train critic with gradient penalty."""
         print("\nTracing critic...")
-        random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
-        fake_data = self.generator([random_latent_vectors, condition, label], training=False)
+        random_noise = self.latent_space_distn((batch_size, self.latent_dim))
+        fake_data = self.generator([random_noise, condition, label], training=False)
 
         with tf.GradientTape() as tape:
             score_real = self.critic([self.augment(data), condition, label])
@@ -290,10 +290,10 @@ class WGANGP(keras.Model):
         """https://www.tensorflow.org/guide/function#conditionals
         """
         print("\nTracing generator...\n")
-        random_latent_vectors = self.latent_space_distn((batch_size, self.latent_dim))
+        random_noise = self.latent_space_distn((batch_size, self.latent_dim))
         
         with tf.GradientTape() as tape:
-            generated_data = self.generator([random_latent_vectors, condition, label])
+            generated_data = self.generator([random_noise, condition, label])
             score = self.critic([self.augment(generated_data), condition, label], training=False)
             generator_loss = -tf.reduce_mean(score)
             condition_penalty = tf.reduce_mean(tf.square(tf.reduce_max(generated_data[..., 0], axis=[1, 2]) - condition))

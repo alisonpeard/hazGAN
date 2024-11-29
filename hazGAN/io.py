@@ -10,6 +10,7 @@ from numbers import Number
 import numpy as np
 import pandas as pd
 import xarray as xr
+import dask.array as da
 import tensorflow as tf
 from tensorflow.data import Dataset
 
@@ -30,7 +31,7 @@ def process_outliers(datadir, verbose=True) -> Union[list[np.datetime64], None]:
         print_if_verbose("Loading file containing outliers...", verbose)
         outliers = pd.read_csv(outlier_file, index_col=[0])
         outliers = pd.to_datetime(outliers['time']).to_list()
-        outliers = [np.datetime64(date) for date in outliers]
+        outliers = np.array([np.datetime64(date) for date in outliers])
         return outliers
     else:
         print_if_verbose("No outlier file found.", verbose)
@@ -87,23 +88,34 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
 
     print("\nLoading training data (hang on)...")
     start = time.time() # time data loading
-    data = xr.open_dataset(os.path.join(datadir, 'data.nc'))
-    pretrain = xr.open_dataset(os.path.join(datadir, 'data_pretrain.nc'))
+    data = xr.open_dataset(os.path.join(datadir, 'data.nc')) # , engine='zarr'
+    pretrain = xr.open_dataset(
+        os.path.join(datadir, 'data_pretrain.nc'),
+        chunks={'time': 1000}
+        )
 
-    def select_no_broadcast(data, selection):
-        """Too hardcoded to put outside function."""
-        dynamic_vars = [var for var in data.data_vars if 'time' in data[var].dims]
-        static_vars = [var for var in data.data_vars if 'time' not in data[var].dims]
-        data = xr.merge([
-            data[dynamic_vars].sel(time=selection),
-            data[static_vars]
-        ])
-        return data
+    # def select_no_broadcast(data, selection):
+    #     """Too hardcoded to place outside load_data function."""
+    #     dynamic_vars = [var for var in data.data_vars if 'time' in data[var].dims]
+    #     static_vars = [var for var in data.data_vars if 'time' not in data[var].dims]
+    #     data = xr.merge([
+    #         data[dynamic_vars].sel(time=selection),
+    #         data[static_vars]
+    #     ])
+    #     return data
+
+    def filter_dataset(dataset, outliers):
+        mask = ~np.isin(dataset.time.values, outliers)
+        return dataset.isel(time=mask)
 
     outliers = process_outliers(datadir)
     if outliers is not None:
-        data = select_no_broadcast(data, data.time[~data.time.isin(outliers)])
-        pretrain = pretrain.where(~pretrain['time'].isin(outliers), drop=True)
+        data = filter_dataset(data, outliers)
+        pretrain = filter_dataset(pretrain, outliers)
+        print("Pretrain shape: {}".format(pretrain['uniform'].data.shape))
+        print("Train shape: {}".format(data['uniform'].data.shape))
+
+    print("\nData loaded. Processing data...\n")
     
     metadata = {} # start collecting metadata
 
@@ -124,8 +136,8 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
 
     if verbose:
         print("\nData summary:\n-------------")
-        print("{:,.0f} samples from storm dataset".format(data['time'].size))
-        print("{:,.0f} samples from normal climate dataset".format(pretrain['time'].size))
+        print("{:,.0f} samples from storm dataset".format(data.dims['time']))
+        print("{:,.0f} samples from normal climate dataset".format(pretrain.dims['time']))
 
     # train/test split
     if isinstance(train_size, float):
@@ -151,7 +163,8 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
 
     # try concatenating with training data
     train = xr.concat([train, pretrain], dim='time', data_vars="minimal")
-    labels = list(np.unique(train['label'].data).astype(int))
+    labels = da.unique(train['label'].data).astype(int).compute().tolist()
+
     metadata['labels'] = labels
     metadata['paddings'] = PADDINGS
 

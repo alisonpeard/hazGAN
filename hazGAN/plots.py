@@ -15,6 +15,10 @@ from .extreme_value_theory import (
     # get_extremal_coeffs     # old, might not need
 )
 
+hist_kwargs = {"bins": 50, "color": "lightgrey", "edgecolor": "black", "alpha": 0.7}
+save_kwargs = {"dpi": 300, "bbox_inches": "tight", "pad_inches": 0.1}
+
+
 # plots for training script
 def log_image_to_wandb(fig, name:str, dir:str, **kwargs):
     import wandb

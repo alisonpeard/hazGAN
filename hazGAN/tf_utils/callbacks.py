@@ -205,23 +205,25 @@ class CrossEntropy(Callback):
         logs["g_loss_test"] = g_loss_test
 
 
-class ChannelVisualiser(Callback):
-    def __init__(self, frequency=1, channel=0, runname='untitled-run',
-                 imdir='.', conditions=None, labels=None):
+class ImageLogger(Callback):
+    def __init__(self, frequency=1, channel=0, nsamples=3,
+                 conditions=None, labels=None, noise=None):
         super().__init__()
         self.frequency = frequency
-        # self.generated_images = []
-        self.runname = runname
         self.channel = channel
-        self.imdir = imdir
 
         if conditions is None:
-            conditions = np.linspace(20, 60, 64)
+            conditions = np.linspace(20, 60, nsamples)
         if labels is None:
-            labels = np.array([2] * 64)
+            labels = np.array([2] * nsamples)
+        if noise is None:
+            noise = self.model.latent_space_distn(
+                (nsamples, self.model.latent_dim)
+                )
 
         self.conditions = conditions
         self.labels = labels
+        self.noise = noise
 
         print("Warning: resolution hard-coded as 18x22 for ChannelVisualiser callback.")
 
@@ -232,37 +234,16 @@ class ChannelVisualiser(Callback):
 
             condition = tf.constant(self.conditions, dtype=tf.float32)
             labels = tf.constant(self.labels, dtype=tf.int32)
-            generated_data = unpad(self.model(condition, labels, nsamples=64))
+            noise = tf.constant(self.noise, dtype=tf.float32)
+
+            generated_data = unpad(self.model(condition, labels, nsamples=64, noise=noise))
             generated_data = generated_data.numpy()
-            
-            vmin = generated_data.min()
-            vmax = generated_data.max()
 
-            fig, axs = plt.subplots(6, 6, sharex=True, sharey=True,
-                                    gridspec_kw={'hspace': 0, 'wspace': 0}
-                                    )
-            for i, ax in enumerate(axs.flat):
-                im = ax.imshow(
-                    generated_data[i, ..., self.channel],
-                    vmin=vmin,
-                    vmax=vmax,
-                    cmap='Spectral_r'
-                    )
-                ax.set_xticks([])
-                ax.set_yticks([])
-                ax.invert_yaxis()
-                ax.axis('off')
-            fig.suptitle(f"Samples for {self.runname} at epoch {epoch}")
-            fig.colorbar(im, ax=list(axs.flat))
-            log_image_to_wandb(fig, f"samples", self.imdir)
-            # return fig
-            fig.show()
+            generated_images = tf.clip_by_value(generated_data * 127.5 + 127.5, 0, 255)
+            generated_images = tf.cast(generated_images, tf.uint8)
+            wandb_images = [wandb.Image(img) for img in generated_images.numpy()]
 
-
-def log_image_to_wandb(fig, name:str, dir:str, **figkwargs):
-    if wandb.run is not None:
-        impath = os.path.join(dir, f"{name}.png")
-        fig.savefig(impath, **figkwargs)
-        wandb.log({name: wandb.Image(impath)})
-    else:
-        print("Not logging figure, wandb not intialised.")
+            wandb.log({
+            "generated_images": wandb_images,
+            "epoch": epoch
+            })
