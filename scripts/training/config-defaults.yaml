@@ -1,11 +1,13 @@
-# training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
+# training settings -- defaults from Gulrajani et al. 2017 (CIFAR-10 model)
 epochs:
   desc: Number of epochs to train for
   value: 20
-train_size:
+train:
+  desc: Size of training dataset, int or float
   value: 0.8 # 840 # 50
-batch_size:
-  value: 128 # for GPU constraints
+batch:
+  desc: Size of batch, int
+  value: 128 # for GPU memory constraints
 channels:
   desc: Which channels to model, subsets of ['u10', 'tp', 'mslp']
   value: ['u10', 'mslp']
@@ -16,7 +18,7 @@ label_ratios:
     '7': 0.3333333
     '20': 0.3333333
 augment_policy:
-  desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
+  desc: Augmentation policies (https://arxiv.org/pdf/2006.10738), ['color,translation,cutout', '']
   value: 'color,translation,cutout'
 embedding_depth:
   desc: How many channels to project the label to

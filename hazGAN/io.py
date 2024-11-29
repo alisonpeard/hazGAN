@@ -16,7 +16,7 @@ from tensorflow.data import Dataset
 
 
 PADDINGS = tf.constant([[1, 1], [1, 1], [0, 0]])
-
+SHUFFLE_BUFFER = 50_000
 
 def print_if_verbose(string:str, verbose=True) -> None:
     """Self-explanatory"""
@@ -105,8 +105,6 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
         pretrain = filter_dataset(pretrain, outliers)
         print("Pretrain shape: {}".format(pretrain['uniform'].data.shape))
         print("Train shape: {}".format(data['uniform'].data.shape))
-
-    print("\nData loaded. Processing data...\n")
     
     metadata = {} # start collecting metadata
 
@@ -168,8 +166,8 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
             }
         return samples
 
-    train = Dataset.from_tensor_slices(sample_dict(train)).shuffle(10_000)
-    valid = Dataset.from_tensor_slices(sample_dict(valid)).shuffle(500)
+    train = Dataset.from_tensor_slices(sample_dict(train))
+    valid = Dataset.from_tensor_slices(sample_dict(valid))
 
     # manual under/oversampling
     split_train = [train.filter(lambda sample: sample['label']==label) for label in labels]
@@ -198,11 +196,12 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     valid = valid.map(transforms)
 
     # pipeline methods
-    train = train.shuffle(10_000)
+    train = train.shuffle(SHUFFLE_BUFFER)
     train = train.repeat()
     train = train.batch(batch_size)
     train = train.prefetch(tf.data.AUTOTUNE)
 
+    valid = valid.shuffle(500)
     valid = valid.batch(batch_size, drop_remainder=True)
     valid = valid.prefetch(tf.data.AUTOTUNE)
 

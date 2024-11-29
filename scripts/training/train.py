@@ -156,8 +156,8 @@ def main(config, verbose=True):
     train, valid, metadata = hazzy.load_data(
         datadir,
         label_ratios=config['label_ratios'], 
-        batch_size=config['batch_size'],
-        train_size=config['train_size'],
+        batch_size=config['batch'],
+        train_size=config['train'],
         channels=config['channels'],
         gumbel=config['gumbel']
         )
@@ -165,14 +165,14 @@ def main(config, verbose=True):
     config = update_config(config, 'nconditions', len(metadata['labels']))
 
     # number of epochs calculations (1 step == 1 batch)
-    steps_per_epoch = 5 if dry_run else 200_000 // config['batch_size'] # good rule of thumb
+    steps_per_epoch = 5 if dry_run else 200_000 // config['batch'] # good rule of thumb
     total_steps = config['epochs'] * steps_per_epoch
-    images_per_epoch = steps_per_epoch * config['batch_size']
-    total_images = total_steps * config['batch_size']
+    images_per_epoch = steps_per_epoch * config['batch']
+    total_images = total_steps * config['batche']
 
     if verbose:
         print("Training summary:\n-----------------")
-        print("Batch size: {:,.0f}".format(config['batch_size']))
+        print("Batch size: {:,.0f}".format(config['batch']))
         print("Steps per epoch: {:,.0f}".format(steps_per_epoch))
         print("Total steps: {:,.0f}".format(total_steps))
         print("Images per epoch: {:,.0f}".format(images_per_epoch))
@@ -180,7 +180,7 @@ def main(config, verbose=True):
         print("Total number of training images: {:,.0f}\n".format(total_images))
 
     # callbacks
-    image_count = hazzy.CountImagesSeen(config['batch_size'])
+    image_count = hazzy.CountImagesSeen(config['batch'])
     image_logger = hazzy.ImageLogger()
     wandb_logger = WandbMetricsLogger()
 

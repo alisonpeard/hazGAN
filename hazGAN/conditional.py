@@ -106,7 +106,7 @@ def define_generator(config, nchannels=2):
     drop1 = layers.Dropout(config['dropout'])(lrelu1)
     bn1 = normalise(drop1)
 
-    # 2nd deconvolution block, 6 x 8 x 512 -> 14 x 18 x 256
+    # 2nd deconvolution block, 6 x 8 x 512 -> 9 x 10 x 256
     conv2 = wrappers.Conv2DTranspose(config["g_layers"][2], (3, 4), 1, use_bias=False)(bn1)
     lrelu2 = layers.LeakyReLU(config['lrelu'])(conv2)
     drop2 = layers.Dropout(config['dropout'])(lrelu2)
