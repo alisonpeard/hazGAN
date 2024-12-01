@@ -25,7 +25,7 @@ class Dense(layers.Dense):
 
 class Conv2D(layers.Conv2D):
     """Wrapper for Conv2D with orthogonal initialization."""
-    def __init__(self, filters, kernel_size, stride, padding, initializer=ortho_initializer, **kwargs):
+    def __init__(self, filters, kernel_size, stride=1, padding="valid", initializer=ortho_initializer, **kwargs):
         super(Conv2D, self).__init__(filters, kernel_size, stride, padding,
                                           kernel_initializer=initializer,
                                           **kwargs)
@@ -33,9 +33,9 @@ class Conv2D(layers.Conv2D):
 
 class Conv2DTranspose(layers.Conv2DTranspose):
     """Wrapper for Conv2D with orthogonal initialization."""
-    def __init__(self, filters, kernel_size, stride, initializer=ortho_initializer, **kwargs):
+    def __init__(self, filters, kernel_size, stride=1, padding="valid", initializer=ortho_initializer, **kwargs):
         super(Conv2DTranspose, self).__init__(filters, kernel_size, stride,
-                                          kernel_initializer=initializer,
+                                          padding=padding, kernel_initializer=initializer,
                                           **kwargs)
         
 

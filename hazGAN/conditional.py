@@ -20,7 +20,7 @@ from inspect import signature
 
 from .extreme_value_theory import chi_loss, inv_gumbel
 from .tensorflow import DiffAugment
-from .tensorflow import wrappers
+from .tensorflow import wrappers, blocks
 
 # %%
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
@@ -75,13 +75,7 @@ def printv(message, verbose):
 def define_generator(config, nchannels=2):
     """
     >>> generator = define_generator(config)
-    """
-    def normalise(x):
-        if config['normalize_generator']:
-            return layers.BatchNormalization(axis=-1)(x)
-        else:
-            return x
-    
+    """    
     # input
     z = tf.keras.Input(shape=(config['latent_dims'],), name='noise_input', dtype='float32')
     condition = tf.keras.Input(shape=(1,), name='condition', dtype='float32')
@@ -98,23 +92,19 @@ def define_generator(config, nchannels=2):
     fc = layers.Reshape((5, 5, int(nchannels * config["g_layers"][0])))(fc)
     lrelu0 = layers.LeakyReLU(config['lrelu'])(fc)
     drop0 = layers.Dropout(config['dropout'])(lrelu0)
-    bn0 = normalise(drop0)
+    bn0 = layers.BatchNormalization(axis=-1)(drop0)
     
     # 1st deconvolution block, 5 x 5 x 1024 -> 7 x 7 x 512
-    conv1 = wrappers.Conv2DTranspose(config["g_layers"][1], 3, 1, use_bias=False)(bn0)
-    lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
-    drop1 = layers.Dropout(config['dropout'])(lrelu1)
-    bn1 = normalise(drop1)
+    skip0 = blocks.UpResidual(config["g_layers"][1], (3,3), 1, use_bias=False,
+        dropout=config['dropout'], lrelu=config['lrelu'])(bn0)
 
     # 2nd deconvolution block, 6 x 8 x 512 -> 9 x 10 x 256
-    conv2 = wrappers.Conv2DTranspose(config["g_layers"][2], (3, 4), 1, use_bias=False)(bn1)
-    lrelu2 = layers.LeakyReLU(config['lrelu'])(conv2)
-    drop2 = layers.Dropout(config['dropout'])(lrelu2)
-    bn2 = normalise(drop2)
+    skip1 = blocks.UpResidual(config['g_layers'][2], (3,4), 1, use_bias=False,
+        dropout=config['dropout'], lrelu=config['lrelu'])(skip0)
 
     # Output layer, 17 x 21 x 128 -> 20 x 24 x nchannels, resizing not inverse conv
-    conv3 = layers.Resizing(20, 24, interpolation=config['interpolation'])(bn2)
-    score = wrappers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same')(conv3)
+    resized = layers.Resizing(20, 24, interpolation=config['interpolation'])(skip1)
+    score = blocks.UpResidual(nchannels, (4, 6), 1, padding="same")(resized)
     o = score if config['gumbel'] else tf.keras.activations.sigmoid(score) # NOTE: check
     return tf.keras.Model([z, condition, label], o, name="generator")
 
@@ -141,26 +131,21 @@ def define_critic(config, nchannels=2):
 
     concatenated = layers.concatenate([x, condition_projected, label_embedded])
 
-    # 1st hidden layer 9x10x64
-    conv1 = wrappers.Conv2D(config["d_layers"][0], (4, 5), (2, 2), "valid")(concatenated)
-    lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
-    drop1 = layers.Dropout(config['dropout'])(lrelu1)
-    drop1 = normalise(drop1)
+    # 1st hidden layer 9 x 10 x 64
+    skip1 = blocks.DownResidual(config["d_layers"][0], (4, 5), (2, 2), "valid",
+                                lrelu=config['lrelu'], dropout=config['dropout'])(concatenated)
 
-    # 2nd hidden layer 7x7x128
-    conv1 = wrappers.Conv2D(config["d_layers"][1], (3, 4), (1, 1), "valid")(drop1)
-    lrelu2 = layers.LeakyReLU(config['lrelu'])(conv1)
-    drop2 = layers.Dropout(config['dropout'])(lrelu2)
-    drop2 = normalise(drop2)
+    # 2nd hidden layer 7 x 7 x 128
+    skip2 = blocks.DownResidual(config["d_layers"][1], (3, 4), (1, 1), "valid",
+                                lrelu=config['lrelu'], dropout=config['dropout'])(skip1)
+
 
     # 3rd hidden layer 5x5x256
-    conv2 = wrappers.Conv2D(config["d_layers"][2], (3, 3), (1, 1), "valid")(drop2)
-    lrelu3 = layers.LeakyReLU(config['lrelu'])(conv2)
-    drop3 = layers.Dropout(config['dropout'])(lrelu3)
-    drop3 = normalise(drop3)
+    skip3 = blocks.DownResidual(config["d_layers"][2], (3, 3), (1, 1), "valid",
+                                lrelu=config['lrelu'], dropout=config['dropout'])(skip2)
 
     # fully connected 1x1
-    flat = layers.Reshape((-1, 5 * 5 * config["d_layers"][2]))(drop3)
+    flat = layers.Reshape((-1, 5 * 5 * config["d_layers"][2]))(skip3)
     score = wrappers.Dense(1)(flat) #? sigmoid might smooth training by constraining?, S did similar, caused nans
     out = layers.Reshape((1,))(score)
     return tf.keras.Model([x, condition, label], out, name="critic")

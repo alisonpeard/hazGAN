@@ -1,11 +1,10 @@
 """
-For conditional training (no constants yet).
+For conditional training (no static constants yet).
 """
 # %%
 RUN_EAGERLY = False
 MIN_CHI_RMSE = 1000.
 MEMORY_GROWTH = True
-
 
 import os
 import sys
@@ -168,7 +167,7 @@ def main(config, verbose=True):
     steps_per_epoch = 5 if dry_run else 200_000 // config['batch'] # good rule of thumb
     total_steps = config['epochs'] * steps_per_epoch
     images_per_epoch = steps_per_epoch * config['batch']
-    total_images = total_steps * config['batche']
+    total_images = total_steps * config['batch']
 
     if verbose:
         print("Training summary:\n-----------------")
