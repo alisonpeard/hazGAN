@@ -12,7 +12,7 @@
 # 2. Metal compatibility: https://pypi.org/project/tensorflow-metal/
 # 3. https://developer.apple.com/metal/tensorflow-plugin/
 
-name: hazGAN
+name: hazGAN2
 channels:
     - apple
     - conda-forge
@@ -26,7 +26,6 @@ dependencies:
     - pyyaml
     - h5py
     - tensorflow-deps
-    - numpy
     - pandas
     - geopandas
     - fiona
@@ -37,18 +36,18 @@ dependencies:
     - netcdf4
     - shapely>=2.0
     - scipy
-    - scikit-learn
+    - scikit-learncd
     - matplotlib
     - cartopy # for basemaps
     - seaborn
     - pyarrow>=10.0.1
     - pip:
-        - tensorflow-macos
+        - tensorflow==2.16.1 # -macos
         - tensorflow-metal
+        - keras==3.0.5 # try next 02-12-2024
         - environs
         - bottleneck
         - wandb==0.16.6 # stable May 2024
-        # - cdsapi        # copernicus climate data store API
         - pytest
         - -e ..
-        - -e /Users/alison/Documents/DPhil/utilities # optional
+        # - -e /Users/alison/Documents/DPhil/utilities # needs update

@@ -5,16 +5,18 @@ For conditional training (no constants yet).
 RUN_EAGERLY = False
 MIN_CHI_RMSE = 1000.
 MEMORY_GROWTH = True
-
+LOGDIR = '_logs/' # $ tensorboard --logdir=_logs/
 
 import os
 import sys
 import yaml
+import time
 import argparse
 import wandb
 from environs import Env
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.callbacks import TensorBoard
 
 if MEMORY_GROWTH:
     tf.config.experimental.set_memory_growth(tf.config.list_physical_devices('GPU')[0], True)
@@ -32,6 +34,13 @@ global imdir
 global runname
 global force_cpu
 
+
+# system notify 
+def notify(title, subtitle, message):
+    os.system("""
+                osascript -e 'display notification "{}" with title "{}" subtitle "{}" beep'
+                """.format(message, title, subtitle))
+        
 
 def check_interactive(sys):
     """Useful check for VS code."""
@@ -97,7 +106,6 @@ def evaluate_results(train,
     """Make some key figures to view results."""
     #! This should work ok but only generated samples are filtered by label
     final_chi_rmse = history['chi_rmse'][-1]
-    print(f"\nFinished training!\n")
     if final_chi_rmse <= MIN_CHI_RMSE:
         save_config(rundir, config)
         print("Gathering labels and conditions...")
@@ -153,47 +161,61 @@ def evaluate_results(train,
 
 def main(config, verbose=True):
     # load data
-    train, valid, metadata = hazzy.load_data(
-        datadir,
-        label_ratios=config['label_ratios'], 
-        batch_size=config['batch_size'],
-        train_size=config['train_size'],
-        channels=config['channels'],
-        gumbel=config['gumbel']
-        )
+    with tf.device(device):
+        train, valid, metadata = hazzy.load_data(
+            datadir,
+            label_ratios=config['label_ratios'], 
+            batch_size=config['batch_size'],
+            train_size=config['train_size'],
+            channels=config['channels'],
+            gumbel=config['gumbel']
+            )
+        train = train.prefetch(tf.data.AUTOTUNE)
+        valid = valid.prefetch(tf.data.AUTOTUNE)
     
-    config = update_config(config, 'nconditions', len(metadata['labels']))
+        config = update_config(config, 'nconditions', len(metadata['labels']))
 
-    # number of epochs calculations (1 step == 1 batch)
-    steps_per_epoch = 5 if dry_run else 200_000 // config['batch_size'] # good rule of thumb
-    total_steps = config['epochs'] * steps_per_epoch
-    images_per_epoch = steps_per_epoch * config['batch_size']
-    total_images = total_steps * config['batch_size']
+        # number of epochs calculations (1 step == 1 batch)
+        steps_per_epoch = 5 if dry_run else 200_000 // config['batch_size'] # good rule of thumb
+        total_steps = config['epochs'] * steps_per_epoch
+        images_per_epoch = steps_per_epoch * config['batch_size']
+        total_images = total_steps * config['batch_size']
 
-    if verbose:
-        print("Training summary:\n-----------------")
-        print("Batch size: {:,.0f}".format(config['batch_size']))
-        print("Steps per epoch: {:,.0f}".format(steps_per_epoch))
-        print("Total steps: {:,.0f}".format(total_steps))
-        print("Images per epoch: {:,.0f}".format(images_per_epoch))
-        print("Total number of epochs: {:,.0f}".format(config['epochs']))
-        print("Total number of training images: {:,.0f}\n".format(total_images))
+        if verbose:
+            print("Training summary:\n-----------------")
+            print("Batch size: {:,.0f}".format(config['batch_size']))
+            print("Steps per epoch: {:,.0f}".format(steps_per_epoch))
+            print("Total steps: {:,.0f}".format(total_steps))
+            print("Images per epoch: {:,.0f}".format(images_per_epoch))
+            print("Total number of epochs: {:,.0f}".format(config['epochs']))
+            print("Total number of training images: {:,.0f}\n".format(total_images))
 
-    # callbacks
-    image_count = hazzy.CountImagesSeen(config['batch_size'])
-    image_logger = hazzy.ImageLogger()
-    wandb_logger = WandbMetricsLogger()
+        # callbacks
+        image_count = hazzy.CountImagesSeen(config['batch_size'])
+        image_logger = hazzy.ImageLogger()
+        wandb_logger = WandbMetricsLogger()
+        # tensorboard_callback = TensorBoard(log_dir=LOGDIR, histogram_freq=1)
 
-    # train
-    tf.config.run_functions_eagerly(RUN_EAGERLY) #for debugging
-    cgan = hazzy.conditional.compile_wgan(config, nchannels=len(config['channels']))
-    history = cgan.fit(train, epochs=config['epochs'],
-                       steps_per_epoch=steps_per_epoch,
-                       validation_data=valid,
-                       callbacks=[image_count, wandb_logger, image_logger])
-    
-    evaluate_results(train, valid, config, history.history, cgan, metadata)
-
+        # train
+        tf.config.run_functions_eagerly(RUN_EAGERLY) # for debugging
+        # tf.config.experimental.set_device_policy('warn') # more output
+        tf.debugging.set_log_device_placement(True)
+        # tf.debugging.enable_check_numerics()
+        # tf.profiler.experimental.start('logdir') # graph logging
+        model = hazzy.conditional.compile_wgan(config, nchannels=len(config['channels']))
+        start = time.time()
+        print("\nTraining...\n")
+        try:
+            history = model.fit(train, epochs=config['epochs'],
+                            steps_per_epoch=steps_per_epoch,
+                            validation_data=valid,
+                            callbacks=[image_count, wandb_logger, image_logger])
+        except Exception as e:
+            time_to_error = time.time() - start
+            print(f"Error after {time_to_error:.2f} seconds: {e}")
+        # tf.profiler.experimental.stop()
+    print("\nFinished! Training time: {:.2f} seconds\n".format(time.time() - start))
+    evaluate_results(train, valid, config, history.history, model, metadata)
     return history.history
 
 
@@ -249,11 +271,6 @@ if __name__ == "__main__":
     # train
     history = main(config)
 
-    # system notify 
-    def notify(title, subtitle, message):
-        os.system("""
-                    osascript -e 'display notification "{}" with title "{}" subtitle "{}" beep'
-                    """.format(message, title, subtitle))
     try:
         notify("Process finished", "Python script", "Finished making pretraining data")
     except Exception as e:

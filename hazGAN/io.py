@@ -201,10 +201,8 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     train = train.shuffle(10_000)
     train = train.repeat()
     train = train.batch(batch_size)
-    train = train.prefetch(tf.data.AUTOTUNE)
 
     valid = valid.batch(batch_size, drop_remainder=True)
-    valid = valid.prefetch(tf.data.AUTOTUNE)
 
     end = time.time()
     print('\nTime taken to load datasets: {:.2f} seconds.\n'.format(end - start))

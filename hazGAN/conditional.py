@@ -260,7 +260,19 @@ class WGANGP(keras.Model):
 
 
     def train_critic(self, data, condition, label, batch_size) -> None:
-        """Train critic with gradient penalty."""
+        """Train critic with gradient penalty.
+        
+        Debugging:
+            >> concrete_fn = self.train_step.get_concrete_function(dict(
+                uniform=tf.TensorSpec(shape=(None,20,24,2)),
+                condition=tf.TensorSpec(shape=(None,)),
+                label=tf.TensorSpec(shape=(None,))
+                ))
+            >> print(self.train_step.pretty_printed_concrete_signatures())
+            >> graph = concrete_fn.graph
+            >> for node in graph.as_graph_def().node:
+                    print(f'{node.input} -> {node.name}')
+        """
         print("\nTracing critic...")
         random_noise = self.latent_space_distn((batch_size, self.latent_dim))
         fake_data = self.generator([random_noise, condition, label], training=False)
