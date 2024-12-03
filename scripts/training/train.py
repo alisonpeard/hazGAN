@@ -13,6 +13,7 @@ import yaml
 import time
 import argparse
 import wandb
+from wandb import AlertLevel
 from environs import Env
 import numpy as np
 import tensorflow as tf
@@ -28,6 +29,7 @@ from hazGAN import WandbMetricsLogger
 
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
+global run
 global datadir
 global rundir
 global imdir
@@ -212,8 +214,10 @@ def main(config, verbose=True):
                             callbacks=[image_count, wandb_logger, image_logger])
         except Exception as e:
             time_to_error = time.time() - start
+            run.alert(title="Error", text=f"Error after {time_to_error:.2f} seconds: {e}", level=AlertLevel.ERROR)
             print(f"Error after {time_to_error:.2f} seconds: {e}")
         # tf.profiler.experimental.stop()
+
     print("\nFinished! Training time: {:.2f} seconds\n".format(time.time() - start))
     evaluate_results(train, valid, config, history.history, model, metadata)
     return history.history
@@ -250,7 +254,7 @@ if __name__ == "__main__":
         config = update_config(config, 'epochs', 2)
         runname = "dry-run"
     else:
-        wandb.init(allow_val_change=True)  # saves snapshot of code as artifact
+        run = wandb.init(allow_val_change=True)  # saves snapshot of code as artifact
         runname = wandb.run.name
         config = wandb.config
     
@@ -270,6 +274,7 @@ if __name__ == "__main__":
 
     # train
     history = main(config)
+    run.alert(title="Finished", text=f"Finished training", level=AlertLevel.INFO)
 
     try:
         notify("Process finished", "Python script", "Finished making pretraining data")
