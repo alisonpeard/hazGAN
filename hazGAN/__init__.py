@@ -1,9 +1,8 @@
 from .utils import *
-from .plots import *
+from .plot import *
 from .io import *
-from .defaults import *
-from .extreme_value_theory import *
 from .tensorflow import *
+from .extreme_value_theory import *
 from . import conditional
 
 __version__ = "2.02"

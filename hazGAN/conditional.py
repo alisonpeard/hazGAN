@@ -6,16 +6,13 @@ References:
 ..[2] Harris (2022) - application
 """
 # %%
-import sys
 import warnings
 import functools
-import numpy as np
 import tensorflow as tf
-import tensorflow.keras.backend as K
 from tensorflow import keras
 from tensorflow.keras import optimizers
 from tensorflow.keras import layers
-from tensorflow.keras.optimizers.schedules import ExponentialDecay
+# from tensorflow.keras.optimizers.schedules import ExponentialDecay # will use again
 from inspect import signature
 
 from .extreme_value_theory import chi_loss, inv_gumbel
@@ -29,7 +26,11 @@ def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
     O = tf.constant(offset, dtype=tf.float32)
     U = tf.random.uniform(shape, minval=0, maxval=1, seed=seed)
     return O - T * tf.math.log(-tf.math.log(U + eps) + eps)
-tf.random.gumbel = sample_gumbel
+
+
+def initialise_variables():
+    """Initialise mutable Tensorflow objects."""
+    tf.random.gumbel = sample_gumbel
 
 
 def get_optimizer_kwargs(optimizer):
@@ -55,6 +56,7 @@ def process_optimizer_kwargs(config):
 
 
 def compile_wgan(config, nchannels=2):
+    initialise_variables()
     kwargs = process_optimizer_kwargs(config)
     optimizer = getattr(optimizers, config['optimizer'])
     critic_optimizer = optimizer(**kwargs)
@@ -168,6 +170,16 @@ def define_critic(config, nchannels=2):
 
 class WGANGP(keras.Model):
     """Wasserstein GAN with gradient penalty."""
+
+    # this should improve memory usage
+    __slots__ = ['critic', 'generator', 'latent_dim', 'lambda_gp', 'lambda_condition',
+                    'config', 'latent_space_distn', 'trainable_vars', 'inv', 'augment',
+                    'seed', 'chi_rmse_tracker', 'generator_loss_tracker', 'critic_loss_tracker',
+                    'value_function_tracker', 'critic_real_tracker', 'critic_fake_tracker',
+                    'critic_valid_tracker', 'images_seen', 'critic_steps', 'generator_steps',
+                    'critic_grad_norm', 'generator_grad_norm', 'critic_grad_norms',
+                    'generator_grad_norms']
+
     def __init__(self, config, nchannels=2, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.critic = define_critic(config, nchannels)
@@ -407,7 +419,7 @@ class WGANGP(keras.Model):
         if tf.executing_eagerly():
             print(f"\nBatch mean:", tf.math.reduce_mean(data))
             print(f"Batch std:", tf.math.reduce_std(data))
-        
+    
         return metrics
 
     @property
