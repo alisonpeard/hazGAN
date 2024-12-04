@@ -4,8 +4,9 @@ For conditional training (no constants yet).
 # %%
 RUN_EAGERLY = False
 MIN_CHI_RMSE = 1000.
-MEMORY_GROWTH = True
-LOGDIR = '_logs/' # $ tensorboard --logdir=_logs/
+RESTRICT_MEMORY = True
+MEMORY_GROWTH = False
+LOG_DEVICE_PLACEMENT = False
 
 import os
 import sys
@@ -14,18 +15,18 @@ import time
 import argparse
 import wandb
 from wandb import AlertLevel
+
 from environs import Env
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.callbacks import TensorBoard
-
-if MEMORY_GROWTH:
-    tf.config.experimental.set_memory_growth(tf.config.list_physical_devices('GPU')[0], True)
-tf.keras.backend.clear_session()
 
 import hazGAN as hazzy
-from hazGAN import plots
-from hazGAN import WandbMetricsLogger
+from hazGAN import plot
+from hazGAN.tensorflow.callbacks import WandbMetricsLogger, CountImagesSeen, ImageLogger
+
+tf.keras.backend.clear_session()
+tf.debugging.set_log_device_placement(LOG_DEVICE_PLACEMENT)
+tf.config.run_functions_eagerly(RUN_EAGERLY) # for debugging
 
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
@@ -37,12 +38,11 @@ global runname
 global force_cpu
 
 
-# system notify 
 def notify(title, subtitle, message):
     os.system("""
                 osascript -e 'display notification "{}" with title "{}" subtitle "{}" beep'
                 """.format(message, title, subtitle))
-        
+
 
 def check_interactive(sys):
     """Useful check for VS code."""
@@ -55,17 +55,30 @@ def check_interactive(sys):
 
 
 def config_tf_devices():
-    """Use GPU if available"""
-    gpus = tf.config.list_logical_devices("GPU")
-    gpu_names = [x.name for x in gpus]
-    if (len(gpu_names) == 0) or force_cpu:
+    """Use GPU if available and set memory configuration."""
+    gpus = tf.config.list_physical_devices("GPU")
+    if (not gpus) or force_cpu:
         print("No GPU found, using CPU")
         cpus = tf.config.list_logical_devices("CPU")
-        cpu_names = [x.name for x in cpus]
-        return cpu_names[0]
+        device = cpus[0].device_type
+        print(f"Using CPU: {device}")
     else:
-        print(f"Using GPU: {gpu_names[0]}")
-        return gpu_names[0]
+        try:
+            if RESTRICT_MEMORY:
+                for gpu in gpus:
+                    tf.config.set_logical_device_configuration(
+                        gpu,
+                        [tf.config.LogicalDeviceConfiguration(memory_limit=1024)]
+                    )
+            elif MEMORY_GROWTH:
+                for gpu in gpus:
+                    tf.config.experimental.set_memory_growth(gpu, True)
+        except Exception as e:
+            raise e
+        
+        device = gpus[0].device_type
+        print(f"Using GPU: {device}")
+    return device
 
 
 def update_config(config, key, value):
@@ -147,11 +160,11 @@ def evaluate_results(train,
         print("params.shape: {}".format(params.shape))
 
         print("\nGenerating figures...")
-        plots.figure_one(fake_u, train_u, valid_u, imdir)
-        plots.figure_two(fake_u, train_u, valid_u, imdir)
-        plots.figure_three(fake_u, train_u, imdir)                  # gumbel
-        plots.figure_four(fake_u, train_u, train_x, params, imdir)  # full-scale
-        plots.figure_five(fake_u, train_u, imdir)                   # augmented    
+        plot.figure_one(fake_u, train_u, valid_u, imdir)
+        plot.figure_two(fake_u, train_u, valid_u, imdir)
+        plot.figure_three(fake_u, train_u, imdir)                  # gumbel
+        plot.figure_four(fake_u, train_u, train_x, params, imdir)  # full-scale
+        plot.figure_five(fake_u, train_u, imdir)                   # augmented    
         export_sample(fake_u)
     else:
         print("Chi score too high, deleting run directory")
@@ -193,30 +206,20 @@ def main(config, verbose=True):
             print("Total number of training images: {:,.0f}\n".format(total_images))
 
         # callbacks
-        image_count = hazzy.CountImagesSeen(config['batch_size'])
-        image_logger = hazzy.ImageLogger()
+        image_count = CountImagesSeen(config['batch_size'])
+        image_logger = ImageLogger()
         wandb_logger = WandbMetricsLogger()
-        # tensorboard_callback = TensorBoard(log_dir=LOGDIR, histogram_freq=1)
 
         # train
-        tf.config.run_functions_eagerly(RUN_EAGERLY) # for debugging
-        # tf.config.experimental.set_device_policy('warn') # more output
-        tf.debugging.set_log_device_placement(True)
-        # tf.debugging.enable_check_numerics()
-        # tf.profiler.experimental.start('logdir') # graph logging
         model = hazzy.conditional.compile_wgan(config, nchannels=len(config['channels']))
+        if run:
+            run.alert(title="Training", text=f"Training started", level=AlertLevel.INFO)
         start = time.time()
         print("\nTraining...\n")
-        try:
-            history = model.fit(train, epochs=config['epochs'],
-                            steps_per_epoch=steps_per_epoch,
-                            validation_data=valid,
-                            callbacks=[image_count, wandb_logger, image_logger])
-        except Exception as e:
-            time_to_error = time.time() - start
-            run.alert(title="Error", text=f"Error after {time_to_error:.2f} seconds: {e}", level=AlertLevel.ERROR)
-            print(f"Error after {time_to_error:.2f} seconds: {e}")
-        # tf.profiler.experimental.stop()
+        history = model.fit(train, epochs=config['epochs'],
+                        steps_per_epoch=steps_per_epoch,
+                        validation_data=valid,
+                        callbacks=[image_count, wandb_logger, image_logger])
 
     print("\nFinished! Training time: {:.2f} seconds\n".format(time.time() - start))
     evaluate_results(train, valid, config, history.history, model, metadata)
@@ -251,7 +254,8 @@ if __name__ == "__main__":
         with open(os.path.join(os.path.dirname(__file__), "config-defaults.yaml"), 'r') as stream:
             config = yaml.safe_load(stream)
         config = {key: value['value'] for key, value in config.items()}
-        config = update_config(config, 'epochs', 2)
+        run = None
+        config = update_config(config, 'epochs', 10)
         runname = "dry-run"
     else:
         run = wandb.init(allow_val_change=True)  # saves snapshot of code as artifact
@@ -274,7 +278,8 @@ if __name__ == "__main__":
 
     # train
     history = main(config)
-    run.alert(title="Finished", text=f"Finished training", level=AlertLevel.INFO)
+    if run:
+        run.alert(title="Finished", text=f"Finished training", level=AlertLevel.INFO)
 
     try:
         notify("Process finished", "Python script", "Finished making pretraining data")

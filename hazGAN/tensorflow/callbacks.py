@@ -10,7 +10,7 @@ from IPython.display import clear_output
 from ..extreme_value_theory import chi_loss, inv_gumbel, pairwise_extremal_coeffs, chi2metric
 from ..utils import unpad
 from ..extreme_value_theory.peak_over_threshold import inv_probability_integral_transform
-from ..plots import figure_three
+from ..plot import figure_three 
 
 
 class WandbMetricsLogger(Callback):

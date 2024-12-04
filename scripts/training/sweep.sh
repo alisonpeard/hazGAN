@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=sweepGAN
-#SBATCH --output=sbatch/sweep_%A_%a.out
-#SBATCH --error=sbatch/sweep_%A_%a.err
+#SBATCH --output=logs/sweep_%A_%a.out
+#SBATCH --error=logs/sweep_%A_%a.err
 #SBATCH --array=1-20%1
 #SBATCH --partition=GPU
 #SBATCH --gres=gpu:3080ti:1
