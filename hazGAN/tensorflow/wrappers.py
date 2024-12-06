@@ -5,6 +5,7 @@ from keras import initializers
 
 
 ortho_initializer = initializers.Orthogonal
+henorm_initializer = initializers.HeNormal # best for LeakyReLU and matches data
 normal_initializer = initializers.RandomNormal # mean=0.0, stddev=0.02
 uniform_initializer = initializers.RandomUniform
 
@@ -19,13 +20,13 @@ class Embedding(layers.Embedding):
 
 class Dense(layers.Dense):
     """Wrapper for Dense with orthogonal initialization."""
-    def __init__(self, filters, initializer=ortho_initializer, *args, **kwargs):
+    def __init__(self, filters, initializer=henorm_initializer, *args, **kwargs):
         super(Dense, self).__init__(filters, kernel_initializer=initializer(), *args, **kwargs)
 
 
 class Conv2D(layers.Conv2D):
     """Wrapper for Conv2D with orthogonal initialization."""
-    def __init__(self, filters, kernel_size, stride, padding, initializer=ortho_initializer, **kwargs):
+    def __init__(self, filters, kernel_size, stride, padding, initializer=henorm_initializer, **kwargs):
         super(Conv2D, self).__init__(filters, kernel_size, stride, padding,
                                           kernel_initializer=initializer(),
                                           **kwargs)
@@ -33,7 +34,7 @@ class Conv2D(layers.Conv2D):
 
 class Conv2DTranspose(layers.Conv2DTranspose):
     """Wrapper for Conv2D with orthogonal initialization."""
-    def __init__(self, filters, kernel_size, stride, initializer=ortho_initializer, **kwargs):
+    def __init__(self, filters, kernel_size, stride, initializer=henorm_initializer, **kwargs):
         super(Conv2DTranspose, self).__init__(filters, kernel_size, stride,
                                           kernel_initializer=initializer(),
                                           **kwargs)
@@ -41,7 +42,7 @@ class Conv2DTranspose(layers.Conv2DTranspose):
 
 class BatchNormalization(layers.BatchNormalization):
     """Wrapper for BatchNormalization with orthogonal initialization."""
-    def __init__(self, initializer=normal_initializer, *args, **kwargs):
+    def __init__(self, initializer=henorm_initializer, *args, **kwargs):
         super(BatchNormalization, self).__init__(gamma_initializer=initializer(),
                                                  *args, **kwargs)
 # %%
