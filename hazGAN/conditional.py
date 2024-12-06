@@ -143,6 +143,8 @@ def define_critic(config, nchannels=2):
     if config['condition']:
         condition = tf.keras.Input(shape=(1,), name='condition')
         condition_projected = wrappers.Dense(config['embedding_depth'] * 20 * 24)(condition)
+        condition_projected = layers.LeakyReLU(config['lrelu'])(condition_projected)
+        condition_projected = wrappers.Dense(config['embedding_depth'] * 20 * 24)(condition_projected)
         condition_projected = layers.Reshape((20, 24, config['embedding_depth']))(condition_projected)
         inputs.append(condition_projected)
     if config['labels']:
@@ -217,6 +219,7 @@ class WGANGP(keras.Model):
         self.critic_real_tracker = keras.metrics.Mean(name="critic_real")
         self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
         self.critic_valid_tracker = keras.metrics.Mean(name="critic_valid")
+        self.gradient_penalty_tracker = keras.metrics.Mean(name="gradient_penalty")
 
         # training statistics # ? setting dtype=tf.int32 fails ?
         self.images_seen = keras.metrics.Sum(name="images_seen")
@@ -323,6 +326,7 @@ class WGANGP(keras.Model):
         self.value_function_tracker.update_state(-critic_loss)
         self.critic_real_tracker.update_state(tf.reduce_mean(score_real))
         self.critic_fake_tracker.update_state(tf.reduce_mean(score_fake))
+        self.gradient_penalty_tracker.update_state(gradient_penalty)
 
         self.critic_steps.update_state(tf.constant(1, dtype=tf.int32))
 
@@ -387,7 +391,8 @@ class WGANGP(keras.Model):
             "critic_loss": self.critic_loss_tracker.result(),
             "value_function": -self.value_function_tracker.result(),
             'critic_real': self.critic_real_tracker.result(),
-            'critic_fake': self.critic_fake_tracker.result()
+            'critic_fake': self.critic_fake_tracker.result(),
+            'gradient_penalty': self.gradient_penalty_tracker.result()
         }
 
         # train generator
