@@ -18,6 +18,12 @@ label_ratios:
 augment_policy:
   desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
   value: 'color,translation,cutout'
+condition:
+  desc: Whether to use conditioning, bool
+  value: True
+labels:
+  desc: Whether to use labels, bool
+  value: True
 embedding_depth:
   desc: How many channels to project the label to
   value: 32
