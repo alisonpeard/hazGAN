@@ -22,19 +22,6 @@ def print_if_verbose(string:str, verbose=True) -> None:
     if verbose:
         print(string)
 
-def process_outliers(datadir, verbose=True) -> Union[list[np.datetime64], None]:
-    """Identify wind bombs using Frobernius inner product (find code)"""
-    outlier_file = os.path.join(datadir, 'outliers.csv')
-    if os.path.isfile(outlier_file):
-        print_if_verbose("Loading file containing outliers...", verbose)
-        outliers = pd.read_csv(outlier_file, index_col=[0])
-        outliers = pd.to_datetime(outliers['time']).to_list()
-        outliers = np.array([np.datetime64(date) for date in outliers])
-        return outliers
-    else:
-        print_if_verbose("No outlier file found.", verbose)
-        return None
-    
 
 def encode_strings(ds:xr.Dataset, variable:str) -> tf.Tensor:
     """One-hot encode a string variable"""
@@ -94,17 +81,8 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
         )
     pretrain = pretrain.transpose("time", "lat", "lon", "channel")
 
-    def filter_dataset(dataset, outliers):
-        mask = ~np.isin(dataset.time.values, outliers)
-        return dataset.isel(time=mask)
-
-    outliers = process_outliers(datadir)
-    if outliers is not None:
-        data = filter_dataset(data, outliers)
-        pretrain = filter_dataset(pretrain, outliers)
-        print("Pretrain shape: {}".format(pretrain['uniform'].data.shape))
-        print("Train shape: {}".format(data['uniform'].data.shape))
-
+    print("Pretrain shape: {}".format(pretrain['uniform'].data.shape))
+    print("Train shape: {}".format(data['uniform'].data.shape))
     print("\nData loaded. Processing data...\n")
     
     metadata = {} # start collecting metadata

@@ -10,6 +10,7 @@ Input files:
 Output files:
 -------------
     - data.nc
+    - (outlier_template.npy)
 """
 # %%
 import os
@@ -37,7 +38,66 @@ hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k'}
 
 CHANNELS = ["u10", "tp", 'mslp']
 RESOLUTION = (22, 18)
-VISUALISATIONS = False
+VISUALISATIONS = True
+THRESHOLD = 0.75 # rough manual bisection for this
+
+
+def frobenius(test:np.ndarray, template:np.ndarray) -> float:
+    """Calculate the Frobenius norm (similarity) of two matrices."""
+    similarity = np.sum(template * test) / (np.linalg.norm(template) * np.linalg.norm(test))
+    return similarity
+
+
+def process_outliers(ds:xr.Dataset, threshold:float=THRESHOLD,
+                     datadir:str='.', visuals:bool=VISUALISATIONS) -> xr.Dataset:
+    """Remove "wind bomb" outliers from data
+    
+    Args:
+    -----
+    ds: xr.Dataset
+        The dataset to process
+    threshold: float
+        The threshold for the Frobenius norm similarity between the template and the test matrix.
+    """
+    ds = ds.copy()
+    ds['maxwind'] = ds.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat'])
+
+    sorting = ds.sel(channel='u10')['maxwind'].argsort()
+
+    if visuals:
+        fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+        ds['anomaly'].isel(channel=0, time=sorting[-1]).plot(ax=axs[0])
+        axs[0].set_title('Largest sample before filtering.')
+
+    if not os.path.exists(os.path.join(datadir, "outlier_template.npy")):
+        print('Creating outlier template.')
+        template = ds['anomaly'].isel(channel=0, time=sorting[-1]).data # this has a "wind bomb"
+        np.save(os.path.join(datadir, "outlier_template.npy"), template)    
+    else:
+        print('Loading outlier template.')
+        template = np.load(os.path.join(datadir, "outlier_template.npy"))
+
+    similarities = [] * ds['time'].data.size
+    for i in range(ds['time'].data.size):
+        test_matrix = ds['anomaly'].isel(channel=0, time=i).data
+        similarity = frobenius(test_matrix, template)
+        similarities.append(similarity)
+    similarities = np.array(similarities)
+
+    print(f'{sum(similarities > threshold)} ERA5 "wind bombs" detected in dataset for threshold {threshold}.')
+    mask = similarities <= threshold 
+
+    ds_filtered = ds.sel(time=mask)
+    sorting = ds_filtered.sel(channel='u10')['maxwind'].argsort().data
+    ds_filtered = ds_filtered.isel(time=sorting[-60000:]) # 60,000 like MNIST
+    sorting = ds_filtered.sel(channel='u10')['maxwind'].argsort().data # again
+
+    if visuals:
+        ds_filtered['anomaly'].isel(channel=0, time=sorting[-1]).plot(ax=axs[1])
+        axs[1].set_title('Largest sample after filtering.')
+
+    print("Returning 60,000 largest filtered samples.")
+    return ds_filtered
 
 
 def main(datadir):
@@ -184,6 +244,9 @@ def main(datadir):
     ds.attrs['git branch'] = subprocess.Popen(["git", "branch", "--show-current"], stdout=subprocess.PIPE).communicate()[0].decode('UTF-8')
     ds.attrs['project'] = 'hazGAN'
     ds.attrs['note'] = "Fixed interpolation: [0, 1] --> (0, 1)."
+
+    # remove outliers
+    ds = process_outliers(ds, THRESHOLD, datadir=datadir, visuals=VISUALISATIONS)
 
     # save
     ds.to_netcdf(os.path.join(datadir, "data.nc"))
