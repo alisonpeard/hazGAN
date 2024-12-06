@@ -84,16 +84,21 @@ def define_generator(config, nchannels=2):
         else:
             return x
     
-    # input
+    # flexible input processing
     z = tf.keras.Input(shape=(config['latent_dims'],), name='noise_input', dtype='float32')
-    condition = tf.keras.Input(shape=(1,), name='condition', dtype='float32')
-    label = tf.keras.Input(shape=(1,), name="label", dtype='int32')
-
-    # resize label and condition
-    label_embedded = wrappers.Embedding(config['nconditions'], config['embedding_depth'])(label)
-    label_embedded = layers.Reshape((config['embedding_depth'],))(label_embedded)
-    condition_projected = wrappers.Dense(config['embedding_depth'], input_shape=(1,))(condition)
-    concatenated = layers.concatenate([z, condition_projected, label_embedded])
+    inputs = [z] #TODO: list accumulation may not work as expected with AutoGraph
+    if config['condition']:
+        condition = tf.keras.Input(shape=(1,), name='condition', dtype='float32')
+        condition_projected = wrappers.Dense(config['embedding_depth'], input_shape=(1,))(condition)
+        condition_projected = layers.LeakyReLU(config['lrelu'])(condition_projected)
+        condition_projected = wrappers.Dense(config['embedding_depth'])(condition_projected) # add complexity
+        inputs.append(condition_projected) # is this okay in AutoGraph?
+    if config['labels']:
+        label = tf.keras.Input(shape=(1,), name="label", dtype='int32')
+        label_embedded = wrappers.Embedding(config['nconditions'], config['embedding_depth'])(label)
+        label_embedded = layers.Reshape((config['embedding_depth'],))(label_embedded)
+        inputs.append(label_embedded)
+    concatenated = layers.concatenate(inputs)
 
     # Fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
     fc = wrappers.Dense(config["g_layers"][0] * 5 * 5 * nchannels, use_bias=False)(concatenated)
@@ -125,23 +130,27 @@ def define_critic(config, nchannels=2):
     """
     >>> critic = define_critic()
     """
+
     def normalise(x):
         if config['normalize_critic']:
             return layers.LayerNormalization(axis=-1)(x)
         else:
             return x
-    # inputs
+        
+    # flexible input processsing
     x = tf.keras.Input(shape=(20, 24, nchannels), name='samples')
-    condition = tf.keras.Input(shape=(1,), name='condition')
-    label = tf.keras.Input(shape=(1,), name='label')
-
-    label_embedded = wrappers.Embedding(config['nconditions'], config['embedding_depth'] * 20 * 24)(label)
-    label_embedded = layers.Reshape((20, 24, config['embedding_depth']))(label_embedded)
-
-    condition_projected = wrappers.Dense(config['embedding_depth'] * 20 * 24)(condition)
-    condition_projected = layers.Reshape((20, 24, config['embedding_depth']))(condition_projected)
-
-    concatenated = layers.concatenate([x, condition_projected, label_embedded])
+    inputs = [x]
+    if config['condition']:
+        condition = tf.keras.Input(shape=(1,), name='condition')
+        condition_projected = wrappers.Dense(config['embedding_depth'] * 20 * 24)(condition)
+        condition_projected = layers.Reshape((20, 24, config['embedding_depth']))(condition_projected)
+        inputs.append(condition_projected)
+    if config['labels']:
+        label = tf.keras.Input(shape=(1,), name='label')
+        label_embedded = wrappers.Embedding(config['nconditions'], config['embedding_depth'] * 20 * 24)(label)
+        label_embedded = layers.Reshape((20, 24, config['embedding_depth']))(label_embedded)
+        inputs.append(label_embedded)
+    concatenated = layers.concatenate(inputs)
 
     # 1st hidden layer 9x10x64
     conv1 = wrappers.Conv2D(config["d_layers"][0], (4, 5), (2, 2), "valid")(concatenated)
