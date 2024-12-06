@@ -3,7 +3,6 @@ For conditional training (no constants yet).
 """
 # %%
 RUN_EAGERLY = False
-MIN_CHI_RMSE = 1000.
 RESTRICT_MEMORY = True
 MEMORY_GROWTH = False
 LOG_DEVICE_PLACEMENT = False
@@ -121,54 +120,51 @@ def evaluate_results(train,
     """Make some key figures to view results."""
     #! This should work ok but only generated samples are filtered by label
     final_chi_rmse = history['chi_rmse'][-1]
-    if final_chi_rmse <= MIN_CHI_RMSE:
-        save_config(rundir, config)
-        print("Gathering labels and conditions...")
-        biggest_label = metadata['labels'][-1]
-        train_extreme = train.take(1000).unbatch().filter(lambda sample: sample['label']==biggest_label)
-        # valid_extreme = valid.unbatch().filter(lambda sample: sample['label']==biggest_label)
-        condition = np.array(list(x['condition'] for x in train_extreme.as_numpy_iterator()))
-        
-        #! very crude condition interpolation to get 1000 realistic conditions
-        x = np.linspace(0, 100, 1000)
-        xp = np.linspace(0, 100, len(condition))
-        fp = sorted(condition)
-        condition = np.interp(x, xp, fp)
-        label = np.tile(biggest_label, 1000)
-        print("\nConditioning on 1000 {:.2f} - {:.2f} max wind percentiles".format(condition.min(), condition.max()))
-        print("Conditioning on label: {}".format(label[0]))
 
-        print("\nGenerating samples...")
-        paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]]) # different for arrays and datasets
-        fake_u = hazzy.unpad(model(condition, label, nsamples=1000), paddings=paddings).numpy()
+    save_config(rundir, config)
+    print("Gathering labels and conditions...")
+    biggest_label = metadata['labels'][-1]
+    train_extreme = train.take(1000).unbatch().filter(lambda sample: sample['label']==biggest_label)
+    # valid_extreme = valid.unbatch().filter(lambda sample: sample['label']==biggest_label)
+    condition = np.array(list(x['condition'] for x in train_extreme.as_numpy_iterator()))
+    
+    #! very crude condition interpolation to get 1000 realistic conditions
+    x = np.linspace(0, 100, 1000)
+    xp = np.linspace(0, 100, len(condition))
+    fp = sorted(condition)
+    condition = np.interp(x, xp, fp)
+    label = np.tile(biggest_label, 1000)
+    print("\nConditioning on 1000 {:.2f} - {:.2f} max wind percentiles".format(condition.min(), condition.max()))
+    print("Conditioning on label: {}".format(label[0]))
 
-        #TODO: inverse transform train_u to make sure that's working
-        # train_u = np.array(list(x['uniform'] for x in train_extreme.as_numpy_iterator()))
-        # valid_u = np.array(list(x['uniform'] for x in valid_extreme.as_numpy_iterator()))
-        # train_u = hazzy.unpad(train_u, paddings=paddings).numpy()
-        # valid_u = hazzy.unpad(valid_u, paddings=paddings).numpy()
+    print("\nGenerating samples...")
+    paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]]) # different for arrays and datasets
+    fake_u = hazzy.unpad(model(condition, label, nsamples=1000), paddings=paddings).numpy()
 
-        print("\nGathering validation data...")
-        train_u = metadata['train']['uniform'].data
-        train_x = metadata['train']['anomaly'].data
-        valid_u = metadata['valid']['uniform'].data
-        params = metadata['train']['params'].data
-        
-        print("\nValidation data shapes:\n----------------------")
-        print("train_u.shape: {}".format(train_u.shape))
-        print("fake_u.shape: {}".format(fake_u.shape))
-        print("params.shape: {}".format(params.shape))
+    #TODO: inverse transform train_u to make sure that's working
+    # train_u = np.array(list(x['uniform'] for x in train_extreme.as_numpy_iterator()))
+    # valid_u = np.array(list(x['uniform'] for x in valid_extreme.as_numpy_iterator()))
+    # train_u = hazzy.unpad(train_u, paddings=paddings).numpy()
+    # valid_u = hazzy.unpad(valid_u, paddings=paddings).numpy()
 
-        print("\nGenerating figures...")
-        plot.figure_one(fake_u, train_u, valid_u, imdir)
-        plot.figure_two(fake_u, train_u, valid_u, imdir)
-        plot.figure_three(fake_u, train_u, imdir)                  # gumbel
-        plot.figure_four(fake_u, train_u, train_x, params, imdir)  # full-scale
-        plot.figure_five(fake_u, train_u, imdir)                   # augmented    
-        export_sample(fake_u)
-    else:
-        print("Chi score too high, deleting run directory")
-        os.system(f"rm -r {rundir}")
+    print("\nGathering validation data...")
+    train_u = metadata['train']['uniform'].data
+    train_x = metadata['train']['anomaly'].data
+    valid_u = metadata['valid']['uniform'].data
+    params = metadata['train']['params'].data
+    
+    print("\nValidation data shapes:\n----------------------")
+    print("train_u.shape: {}".format(train_u.shape))
+    print("fake_u.shape: {}".format(fake_u.shape))
+    print("params.shape: {}".format(params.shape))
+
+    print("\nGenerating figures...")
+    plot.figure_one(fake_u, train_u, valid_u, imdir)
+    plot.figure_two(fake_u, train_u, valid_u, imdir)
+    plot.figure_three(fake_u, train_u, imdir)                  # gumbel
+    plot.figure_four(fake_u, train_u, train_x, params, imdir)  # full-scale
+    plot.figure_five(fake_u, train_u, imdir)                   # augmented    
+    export_sample(fake_u)
     
     print("\nResults:\n--------")
     print(f"final_chi_rmse: {final_chi_rmse:.4f}")
@@ -255,7 +251,7 @@ if __name__ == "__main__":
             config = yaml.safe_load(stream)
         config = {key: value['value'] for key, value in config.items()}
         run = None
-        config = update_config(config, 'epochs', 10)
+        config = update_config(config, 'epochs', 5)
         runname = "dry-run"
     else:
         wandb.init(allow_val_change=True, settings=wandb.Settings(_service_wait=300))  # saves snapshot of code as artifact

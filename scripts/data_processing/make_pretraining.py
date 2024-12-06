@@ -6,7 +6,8 @@ Create a pre-training dataset for the GAN as follows:
     2. Deseasonalise using monthly medians
     4. Transform to uniform using the empirical from the storm data (since
         that's the data we are trying to supplement).
-    5. Save as a new xarray dataset.
+    5. Remove "wind bombs" from the data using a Frobenius norm similarity threshold.
+    6. Save as a new xarray dataset.
 
 Not implemented:
 ----------------
@@ -16,11 +17,10 @@ Not implemented:
 Input files:
 -----------
     - data_1950_2022.nc | source: scripts/data_processing/process_resampled.py
-    - data.nc | source: scripts/data_processing/make_training.py
+    - data.nc | source: scripts/data_processing/make_training.py (run first)
 Output files:
 ------------
     - data_pretrain.nc
-
 """
 # %%
 import os
@@ -34,19 +34,21 @@ import subprocess, os
 
 from hazGAN import sliding_windows
 
+from make_training import process_outliers # borrow this function
 
 RESOLUTION = (22, 18)
-VISUALISATIONS = False
+VISUALISATIONS = True
 WINDOWS = [2, 5, 8, 10, 12, 15, 20]
+THRESHOLD = 0.85 # rough manual bisection for this
 
 
-def notify(title, subtitle, message):
+def notify(title, subtitle, message) -> None:
     os.system("""
             osascript -e 'display notification "{}" with title "{}" subtitle "{}" beep'
             """.format(message, title, subtitle))
 
 
-def marginal_ecdf(x, xp, up):
+def marginal_ecdf(x, xp, up) -> np.ndarray:
     x_sorted = np.sort(x.copy())
     xp_sorted = np.sort(xp.copy())
     up_sorted = np.sort(up.copy())
@@ -54,7 +56,7 @@ def marginal_ecdf(x, xp, up):
     return u
 
 
-def ecdf(ds, ds_train, index='time'):
+def ecdf(ds, ds_train, index='time') -> xr.DataArray:
     """""
     Interpolate the empirical CDF of the training data onto the pretraining data.
 
@@ -79,6 +81,7 @@ def ecdf(ds, ds_train, index='time'):
 def main(datadir):
     # load the data
     ds = xr.open_dataset(os.path.join(datadir, "data_1950_2022.nc"))
+    ds_train = xr.open_dataset(os.path.join(datadir, "data.nc"))
     u10 = ds.u10.values.flatten()
 
     if VISUALISATIONS:
@@ -86,7 +89,6 @@ def main(datadir):
         plt.yscale('log')
 
         # look at event duration histograms to select window length(s)
-        ds_train = xr.open_dataset(os.path.join(datadir, "data.nc"))
         ds_train['duration'].plot.hist()
     
     # deseasonalise (with monthly medians)
@@ -160,7 +162,10 @@ def main(datadir):
         ds.isel(time=100, channel=0).anomaly.plot.contourf(ax=axs[1, 0], levels=20, cmap='Spectral_r')
         ds.isel(time=100, channel=0).uniform.plot.contourf(ax=axs[1, 1], levels=20, cmap='Spectral_r')
 
-    # Save to netCDF and NumPy
+    # process outliers
+    ds = process_outliers(ds, THRESHOLD, visuals=VISUALISATIONS)
+
+    # save to netCDF and NumPy
     ds.to_netcdf(os.path.join(datadir, "data_pretrain.nc"))
     np.savez(os.path.join(datadir, "data_pretrain.npz"), data=X)
     notify("Process finished", "Python script", "Finished making pretraining data")
@@ -172,3 +177,4 @@ if __name__ == "__main__":
     env.read_env(recurse=True)
     datadir = env.str("TRAINDIR")
     main(datadir)
+# %%
