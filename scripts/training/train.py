@@ -250,7 +250,7 @@ if __name__ == "__main__":
         config = update_config(config, 'epochs', 2)
         runname = "dry-run"
     else:
-        wandb.init(allow_val_change=True)  # saves snapshot of code as artifact
+        wandb.init(allow_val_change=True, settings=wandb.Settings(_service_wait=300))  # saves snapshot of code as artifact
         runname = wandb.run.name
         config = wandb.config
     

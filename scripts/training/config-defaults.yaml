@@ -1,7 +1,7 @@
 # training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
 epochs:
   desc: Number of epochs to train for
-  value: 20
+  value: 100
 train_size:
   value: 0.8 # 840 # 50
 batch_size:
@@ -75,7 +75,7 @@ normalize_critic:
 # Adam parameters https://doi.org/10.48550/arXiv.1704.00028
 learning_rate:
   desc: Gulrajani et al. 2017 use 0.0001 (Appendix B)
-  value: 0.0003
+  value: 0.001
 beta_1:
   desc: Gulrajani et al. 2017 use 0.5, [0, 0.5]
   value: 0.5
@@ -93,4 +93,4 @@ ema_momentum:
   value: 0.999
 ema_overwrite_frequency:
   desc: How often [batches] to overwrite weights with ema
-  value: 1
+  value: 2
