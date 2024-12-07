@@ -6,6 +6,6 @@
 #SBATCH --error=sbatch_dump/era5_%A_%a.err
 #SBATCH --array=0-9
 #SBATCH --partition=Short
-#SBATCH --time=06:00:00
+#SBATCH --time=00:30:00
 
-python request_era5_yearly__soge.py $SLURM_ARRAY_TASK_ID
+python get_era5.py $SLURM_ARRAY_TASK_ID
