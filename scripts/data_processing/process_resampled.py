@@ -1,13 +1,20 @@
 """
 Environment: hazGAN
 
-Process ERA5 data daily maximum wind speed at 10m and minimum MSLP.
+Need to go back to this once I have found the source of the NaNs.
+
+Process ERA5 data daily variables with the following aggregations:
+    - sqrt(u10^2 + v10^2): maximum
+    - mslp: minimum
+    - tp: sum
+
 Remove wind bombs using a similarity metric based on Frobenius norm.
 
 Input:
 ------
-    - resampled ERA5 data (netcdf) of form <datadir>/era5/bay_of_bengal__monthly/resampled/*bangladesh*.nc
-        (resampled using resample-era5.py script)
+    - resampled ERA5 data (netcdf) of form
+        <datadir>/era5/bay_of_bengal__monthly/resampled/<resolution>*bangladesh*.nc
+        (resampled using resample_era5.py script)
 
 Output:
 -------
@@ -16,33 +23,26 @@ Output:
 """
 # %%
 import os
-from tqdm import tqdm
 os.environ["USE_PYGEOS"] = "0"
-import glob
+from glob import glob
 from time import time
 import numpy as np
 import pandas as pd
 import xarray as xr
 from environs import Env
-from joblib import Parallel, delayed, cpu_count
 from collections import Counter
 import matplotlib.pyplot as plt
 
 VISUALS = True
 VIEW = 5
-THRESHOLD = 0.98 # human does bisection algorithm
-
-
-# def rescale(x:np.ndarray) -> np.ndarray:
-#     return (x - x.min() / (x.max() - x.min()))
-
-
-# def frobenius(test:np.ndarray, template:np.ndarray) -> float:
-#     similarity = np.sum(template * test) / (np.linalg.norm(template) * np.linalg.norm(test))
-#     return similarity
+THRESHOLD = 0.98 # human-implemented bisection algorithm
 
 
 def rescale(x:np.ndarray) -> np.ndarray:
+    return (x - x.min() / (x.max() - x.min()))
+
+
+def rescale_vector(x:np.ndarray) -> np.ndarray:
     return (x - x.min(axis=(1, 2), keepdims=True)) / (x.max(axis=(1, 2), keepdims=True) - x.min(axis=(1, 2), keepdims=True))
 
 
@@ -54,45 +54,11 @@ def frobenius(test:np.ndarray, template:np.ndarray) -> np.ndarray:
 
 
 def get_similarities(ds:xr.Dataset, template:np.ndarray) -> np.ndarray:
-    """
-    Parallel processing approach using joblib
-
-    Note the new return_as argument here, which requires joblib >= 1.3
-    
-    Parameters:
-    -----------
-    ds : xarray.Dataset
-        Input dataset, usually ~20,000 time steps and 18x22 grid
-    rescale_func : callable
-        Function to rescale matrices
-    frobenius_func : callable
-        Function to calculate Frobenius similarity
-    
-    Returns:
-    --------
-    np.ndarray
-        Array of similarities
-    """
-    from multiprocessing.shared_memory import SharedMemory
 
     template = rescale(template)
     tensor = ds['u10'].data
-    tensor = rescale(tensor)
+    tensor = rescale_vector(tensor)
     similarities = frobenius(tensor, template)
-
-    print("template type {}".format(type(template).__name__))
-    print("tensor type {}".format(type(tensor).__name__))
-
-    # if parallel:
-    #     cpus = cpu_count() - 1
-    #     memory = SharedMemory(create=True, size=tensor.nbytes)
-    #     tensor = np.ndarray(tensor.shape, dtype=tensor.dtype, buffer=memory.buf)
-    #     with Parallel(n_jobs=cpus, prefer='threads') as parallel_executor:
-    #         similarities = parallel_executor(
-    #             delayed(frobenius)(matrix, template) for matrix in tqdm(tensor)
-    #         )
-    # else:
-    #     similarities = [frobenius(rescale(matrix), template) for matrix in tqdm(tensor)]
     
     return similarities # np.array(similarities)
 
@@ -103,7 +69,7 @@ if __name__ == "__main__":
     env.read_env(recurse=True)
     source_dir = env.str("ERA5DIR")
     target_dir = env.str("TRAINDIR")
-    files = glob.glob(os.path.join(source_dir, "resampled", "18x22", f"*bangladesh*.nc"))
+    files = glob(os.path.join(source_dir, "resampled", "18x22", f"*bangladesh*.nc"))
     start = time()
 
     # load data
@@ -122,8 +88,8 @@ if __name__ == "__main__":
     missing_year_counts = Counter([d.year for d in sorted(missing_dates)])
     print("\nMissing years:\n--------------")
     print('\n'.join([f"{k}: {v} days" for k, v in missing_year_counts.items()]))
-    
-    #  resample to daily maxima
+
+    # resample to daily maxima
     ds = ds.dropna(dim='time', how='all')
     h, w = ds.dims['lat'], ds.dims['lon']
     grid = np.arange(0, h * w, 1).reshape(h, w)
@@ -132,11 +98,7 @@ if __name__ == "__main__":
     )
     ds['grid'] = grid
 
-    # ----Save to netcdf-----
-    year0 = ds['time'].dt.year.values.min()
-    yearn = ds['time'].dt.year.values.max()
-
-    # %% ----Remove outliers data-----
+    # ----Remove "wind bombs"-----
     ds['maxwind'] = ds['u10'].max(dim=['lat', 'lon'])
     ds = ds.sortby('maxwind', ascending=False)
 
@@ -153,15 +115,12 @@ if __name__ == "__main__":
     print("Processing data for wind bombs...")
     template = ds.isel(time=0).u10.data
     similarities = get_similarities(ds, template)
-
-    end = time()
-    print("Finished processing similarities")
-    print(f"Processing time: {end - start:.2f} seconds")
-    # %%
-    order = np.argsort(similarities)
-    ds_ordered = ds.isel(time=order).copy()
+    similarities = similarities.compute()
 
     if VISUALS:
+        order = np.argsort(similarities)[::-1]
+        ds_ordered = ds.isel(time=order).copy()
+
         fig, axs = plt.subplots(VIEW, VIEW)
         for i, ax in enumerate(axs.ravel()):
             ds_ordered.isel(time=i).u10.plot(ax=ax, add_colorbar=False)
@@ -171,10 +130,10 @@ if __name__ == "__main__":
             ax.set_title('')
         fig.suptitle(f'{VIEW*VIEW} winds most similar to wind bomb template')
 
-    # %%
+    # remove wind bombs
     nbombs = sum(similarities > THRESHOLD)
     print(f'{nbombs} ERA5 "wind bombs" detected in dataset for threshold {THRESHOLD}.')
-    mask = similarities <= THRESHOLD
+    mask = (similarities <= THRESHOLD)
     ds_filtered = ds.isel(time=mask)
     ds_filtered = ds_filtered.sortby('maxwind', ascending=False)
 
@@ -188,13 +147,19 @@ if __name__ == "__main__":
             ax.set_title('')
             fig.suptitle(f'{VIEW*VIEW} most extreme winds after filtering')
 
-    # %% ----Save to netcdf-----
-    ds.to_netcdf(os.path.join(target_dir, f"data_{year0}_{yearn}.nc"))
-    print(f"Script time: {end - start:.2f} seconds")
-    # %% ---- Visualise -----
+    # ----save to netcdf-----
+    year0 = ds_filtered['time'].dt.year.values.min()
+    yearn = ds_filtered['time'].dt.year.values.max()
+    ds_filtered.to_netcdf(os.path.join(target_dir, f"data_{year0}_{yearn}.nc"))
+
+    end = time()
+    print(f"Processing time: {end - start:.2f} seconds")
+
+    # final visualisation
     if VISUALS:
         t0 = 0
-        fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+        fig, axs = plt.subplots(1, 3, figsize=(10, 4))
         ds.isel(time=t0).u10.plot(ax=axs[0])
         ds.isel(time=t0).msl.plot(ax=axs[1])
-    # %%
+        ds.isel(time=t0).tp.plot(ax=axs[2])
+# %%
