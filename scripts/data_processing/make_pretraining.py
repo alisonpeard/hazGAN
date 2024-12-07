@@ -163,7 +163,7 @@ def main(datadir):
         ds.isel(time=100, channel=0).uniform.plot.contourf(ax=axs[1, 1], levels=20, cmap='Spectral_r')
 
     # process outliers
-    ds = process_outliers(ds, THRESHOLD, visuals=VISUALISATIONS)
+    # ds = process_outliers(ds, THRESHOLD, visuals=VISUALISATIONS)
 
     # save to netCDF and NumPy
     ds.to_netcdf(os.path.join(datadir, "data_pretrain.nc"))
@@ -177,4 +177,5 @@ if __name__ == "__main__":
     env.read_env(recurse=True)
     datadir = env.str("TRAINDIR")
     main(datadir)
+
 # %%

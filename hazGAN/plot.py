@@ -164,7 +164,7 @@ def figure_three(fake_u:np.array, train_u:np.array, imdir:str, channel=0,
 
 def figure_four(fake_u, train_u, train_x, params, imdir:str,
                 channel=0, cmap="Spectral_r", levels=20) -> None:
-    """Plot the 32 most extreme train and generated percentiles."""
+    """Plot the 32 most extreme train and generated anomalies."""
     # prep data to plot
     fake = POT.inv_probability_integral_transform(fake_u, train_u, train_x, params)
     real = POT.inv_probability_integral_transform(train_u, train_u, train_x, params)

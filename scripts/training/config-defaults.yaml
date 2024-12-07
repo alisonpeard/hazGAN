@@ -12,9 +12,9 @@ channels:
 label_ratios:
   desc: Dataset representation, by value
   value:
-    pre: 0.3333333
-    '7': 0.3333333
-    '20': 0.3333333
+    pre: 0.1
+    '7': 0.4
+    '20': 0.5
 augment_policy:
   desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
   value: 'color,translation,cutout'

@@ -246,7 +246,7 @@ def main(datadir):
     ds.attrs['note'] = "Fixed interpolation: [0, 1] --> (0, 1)."
 
     # remove outliers
-    ds = process_outliers(ds, THRESHOLD, datadir=datadir, visuals=VISUALISATIONS)
+    # ds = process_outliers(ds, THRESHOLD, datadir=datadir, visuals=VISUALISATIONS)
 
     # save
     ds.to_netcdf(os.path.join(datadir, "data.nc"))

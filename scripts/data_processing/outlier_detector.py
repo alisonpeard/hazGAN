@@ -18,6 +18,7 @@ import xarray as xr
 from environs import Env
 import matplotlib.pyplot as plt
 
+THRESHOLD = 0.8 # to start
 
 def frobenius(test:np.ndarray, template:np.ndarray) -> float:
     similarity = np.sum(template * test) / (np.linalg.norm(template) * np.linalg.norm(test))

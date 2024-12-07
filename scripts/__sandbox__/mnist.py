@@ -30,6 +30,8 @@ for i, ax in enumerate(axs.flat):
     ax.set_title('')
 fig.suptitle('400 largest samples')
 
+# %%
+!say done
 # %%
 fig, axs = plt.subplots(10, 10, figsize=(20, 20), sharex=True, sharey=True)
 for i, ax in enumerate(axs.flat):
@@ -41,7 +43,7 @@ fig.suptitle('100 smallest samples')
 
 print(ds.uniform.data.shape)
 # %% get into 28 x 28 [-1, 1] format for training in MNIST-DCGAN example
-x = ds_filtered.uniform.data.transpose(2, 0, 1)
+x = ds.uniform.data.transpose(2, 0, 1)
 x = x[:, ::-1, :, np.newaxis]
 x = (x - 0.5 * x.max()) / (0.5 * x.max())
 x = tf.image.resize(x, (28, 28)).numpy().astype('float32')
