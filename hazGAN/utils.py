@@ -3,6 +3,7 @@ import os
 import numpy as np
 import tensorflow as tf
 
+
 def notify(title, subtitle, message):
     """Display OSX system notification with title and subtitle."""
     os.system("""
@@ -15,6 +16,7 @@ KNOWN_OUTLIERS = np.array([
     '1952-05-09T00:00:00.000000000',
     '1995-05-02T00:00:00.000000000'
     ], dtype='datetime64[ns]')
+
 
 def diff(x, d=1):
     """Difference a (time series) array."""
@@ -33,8 +35,10 @@ def translate_indices_r(i, j, dims=(18, 22)):
     return x
 
 
-def unpad(tensor, paddings=tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])):
+def unpad(tensor, paddings=None):
     """Mine: remove Tensor paddings"""
+    if paddings is None:
+        paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]])
     tensor = tf.convert_to_tensor(tensor)  # incase its a np.array
     unpaddings = [
         (

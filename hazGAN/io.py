@@ -3,6 +3,7 @@ Improved input-output methods to flexibly load from pretraining and training set
 """
 # %%
 import os
+import gc
 import time
 from typing import Union
 from environs import Env
@@ -13,16 +14,13 @@ import xarray as xr
 import dask.array as da
 import tensorflow as tf
 from tensorflow.data import Dataset
-
-
-PADDINGS = tf.constant([[1, 1], [1, 1], [0, 0]])
+from .constants import PADDINGS
 
 
 def print_if_verbose(string:str, verbose=True) -> None:
     """Self-explanatory"""
     if verbose:
         print(string)
-
 
 def process_outliers(datadir, verbose=True) -> Union[list[np.datetime64], None]:
     """Identify wind bombs using Frobernius inner product (find code)"""
@@ -85,6 +83,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
         Dict with useful metadata
     """
     assert condition in ['maxwind', 'time.season', 'label']
+    gc.disable() # slight speed up
 
     print("\nLoading training data (hang on)...")
     start = time.time() # time data loading
@@ -156,7 +155,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     train = xr.concat([train, pretrain], dim='time', data_vars="minimal")
     labels = da.unique(train['label'].data).astype(int).compute().tolist()
     metadata['labels'] = labels
-    metadata['paddings'] = PADDINGS
+    metadata['paddings'] = PADDINGS()
 
     def sample_dict(data):
         samples = {
@@ -189,7 +188,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
         if gumbel:
             uniform = gumbel(uniform)
         if padding_mode is not None:
-            paddings = PADDINGS
+            paddings = PADDINGS()
             uniform = tf.pad(uniform, paddings, mode=padding_mode)
         sample['uniform'] = uniform
         return sample
@@ -206,6 +205,8 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
 
     end = time.time()
     print('\nTime taken to load datasets: {:.2f} seconds.\n'.format(end - start))
+    gc.enable()
+    gc.collect()
     return train, valid, metadata
 
 

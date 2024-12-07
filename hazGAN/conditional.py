@@ -6,16 +6,13 @@ References:
 ..[2] Harris (2022) - application
 """
 # %%
-import sys
 import warnings
 import functools
-import numpy as np
 import tensorflow as tf
-import tensorflow.keras.backend as K
 from tensorflow import keras
 from tensorflow.keras import optimizers
 from tensorflow.keras import layers
-from tensorflow.keras.optimizers.schedules import ExponentialDecay
+# from tensorflow.keras.optimizers.schedules import ExponentialDecay # will use again
 from inspect import signature
 
 from .extreme_value_theory import chi_loss, inv_gumbel
@@ -29,7 +26,11 @@ def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
     O = tf.constant(offset, dtype=tf.float32)
     U = tf.random.uniform(shape, minval=0, maxval=1, seed=seed)
     return O - T * tf.math.log(-tf.math.log(U + eps) + eps)
-tf.random.gumbel = sample_gumbel
+
+
+def initialise_variables():
+    """Initialise mutable Tensorflow objects."""
+    tf.random.gumbel = sample_gumbel
 
 
 def get_optimizer_kwargs(optimizer):
@@ -55,6 +56,7 @@ def process_optimizer_kwargs(config):
 
 
 def compile_wgan(config, nchannels=2):
+    initialise_variables()
     kwargs = process_optimizer_kwargs(config)
     optimizer = getattr(optimizers, config['optimizer'])
     critic_optimizer = optimizer(**kwargs)
@@ -82,16 +84,21 @@ def define_generator(config, nchannels=2):
         else:
             return x
     
-    # input
+    # flexible input processing
     z = tf.keras.Input(shape=(config['latent_dims'],), name='noise_input', dtype='float32')
-    condition = tf.keras.Input(shape=(1,), name='condition', dtype='float32')
-    label = tf.keras.Input(shape=(1,), name="label", dtype='int32')
-
-    # resize label and condition
-    label_embedded = wrappers.Embedding(config['nconditions'], config['embedding_depth'])(label)
-    label_embedded = layers.Reshape((config['embedding_depth'],))(label_embedded)
-    condition_projected = wrappers.Dense(config['embedding_depth'], input_shape=(1,))(condition)
-    concatenated = layers.concatenate([z, condition_projected, label_embedded])
+    inputs = [z] #TODO: list accumulation may not work as expected with AutoGraph
+    if config['condition']:
+        condition = tf.keras.Input(shape=(1,), name='condition', dtype='float32')
+        condition_projected = wrappers.Dense(config['embedding_depth'], input_shape=(1,))(condition)
+        condition_projected = layers.LeakyReLU(config['lrelu'])(condition_projected)
+        condition_projected = wrappers.Dense(config['embedding_depth'])(condition_projected) # add complexity
+        inputs.append(condition_projected) # is this okay in AutoGraph?
+    if config['labels']:
+        label = tf.keras.Input(shape=(1,), name="label", dtype='int32')
+        label_embedded = wrappers.Embedding(config['nconditions'], config['embedding_depth'])(label)
+        label_embedded = layers.Reshape((config['embedding_depth'],))(label_embedded)
+        inputs.append(label_embedded)
+    concatenated = layers.concatenate(inputs)
 
     # Fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
     fc = wrappers.Dense(config["g_layers"][0] * 5 * 5 * nchannels, use_bias=False)(concatenated)
@@ -123,23 +130,27 @@ def define_critic(config, nchannels=2):
     """
     >>> critic = define_critic()
     """
+
     def normalise(x):
         if config['normalize_critic']:
             return layers.LayerNormalization(axis=-1)(x)
         else:
             return x
-    # inputs
+        
+    # flexible input processsing
     x = tf.keras.Input(shape=(20, 24, nchannels), name='samples')
-    condition = tf.keras.Input(shape=(1,), name='condition')
-    label = tf.keras.Input(shape=(1,), name='label')
-
-    label_embedded = wrappers.Embedding(config['nconditions'], config['embedding_depth'] * 20 * 24)(label)
-    label_embedded = layers.Reshape((20, 24, config['embedding_depth']))(label_embedded)
-
-    condition_projected = wrappers.Dense(config['embedding_depth'] * 20 * 24)(condition)
-    condition_projected = layers.Reshape((20, 24, config['embedding_depth']))(condition_projected)
-
-    concatenated = layers.concatenate([x, condition_projected, label_embedded])
+    inputs = [x]
+    if config['condition']:
+        condition = tf.keras.Input(shape=(1,), name='condition')
+        condition_projected = wrappers.Dense(config['embedding_depth'] * 20 * 24)(condition)
+        condition_projected = layers.Reshape((20, 24, config['embedding_depth']))(condition_projected)
+        inputs.append(condition_projected)
+    if config['labels']:
+        label = tf.keras.Input(shape=(1,), name='label')
+        label_embedded = wrappers.Embedding(config['nconditions'], config['embedding_depth'] * 20 * 24)(label)
+        label_embedded = layers.Reshape((20, 24, config['embedding_depth']))(label_embedded)
+        inputs.append(label_embedded)
+    concatenated = layers.concatenate(inputs)
 
     # 1st hidden layer 9x10x64
     conv1 = wrappers.Conv2D(config["d_layers"][0], (4, 5), (2, 2), "valid")(concatenated)
@@ -168,6 +179,16 @@ def define_critic(config, nchannels=2):
 
 class WGANGP(keras.Model):
     """Wasserstein GAN with gradient penalty."""
+
+    # this should improve memory usage
+    __slots__ = ['critic', 'generator', 'latent_dim', 'lambda_gp', 'lambda_condition',
+                    'config', 'latent_space_distn', 'trainable_vars', 'inv', 'augment',
+                    'seed', 'chi_rmse_tracker', 'generator_loss_tracker', 'critic_loss_tracker',
+                    'value_function_tracker', 'critic_real_tracker', 'critic_fake_tracker',
+                    'critic_valid_tracker', 'images_seen', 'critic_steps', 'generator_steps',
+                    'critic_grad_norm', 'generator_grad_norm', 'critic_grad_norms',
+                    'generator_grad_norms']
+
     def __init__(self, config, nchannels=2, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.critic = define_critic(config, nchannels)
@@ -407,7 +428,7 @@ class WGANGP(keras.Model):
         if tf.executing_eagerly():
             print(f"\nBatch mean:", tf.math.reduce_mean(data))
             print(f"Batch std:", tf.math.reduce_std(data))
-        
+    
         return metrics
 
     @property
