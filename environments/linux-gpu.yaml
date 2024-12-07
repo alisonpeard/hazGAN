@@ -9,6 +9,7 @@ dependencies:
     - pandas
     - geopandas
     - xarray
+    - gdal==3.6.2  # newer versions don't seem to support netCDF ¯\_(ツ)_/¯
     - hdf5
     - netcdf4
     - scipy
@@ -23,8 +24,6 @@ dependencies:
     - pip:
         - environs
         - tensorflow[and-cuda]
-        - tensorflow-probability
-        - tf-keras
         - tensorrt           # for NVIDIA GPU -- gives error installing on cluster unless on GPU
         - wandb==0.16.6      # stable May 2024
         - -e ..

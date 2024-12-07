@@ -1,5 +1,9 @@
+"""
+srun -p Short --pty python resample_era5.py -y 1984 --redo
+"""
 # %%
 import os
+from environs import Env
 import numpy as np
 import xarray as xr
 from tqdm import tqdm
@@ -10,20 +14,22 @@ print('Hello!')
 parser = argparse.ArgumentParser(description='Resample ERA5 data')
 parser.add_argument('-y', '--year', type=int, help='Year to resample')
 parser.add_argument('-r', '--resolution', type=int, nargs=2, default=[22, 18], help='Resolution of output data (lon, lat)')
-parser.add_argument('-redo', action='store_true', default=False, help='Redo resampling')
+parser.add_argument('--redo', action='store_true', default=False, help='Redo resampling')
 args = parser.parse_args()
 year = args.year
 res = args.resolution
 redo = args.redo
 
 # set up directories
-HOME = '/soge-home/'  # if connecting from cluster
-source_dir = os.path.join(HOME,'projects/mistral/alison/hazGAN/bay_of_bengal__daily/original')
-target_dir = os.path.join(HOME,'projects/mistral/alison/hazGAN/bay_of_bengal__daily/resampled')
-target_dir = os.path.join(target_dir, f"res_{res[1]}x{res[0]}")
+env = Env()
+env.read_env(recurse=True)
+datadir = env.str("ERA5DIR")
+source_dir = os.path.join(datadir,'original')
+target_dir = os.path.join(datadir,'resampled')
+target_dir = os.path.join(target_dir, f"{res[1]}x{res[0]}")
 os.makedirs(target_dir, exist_ok=True)
-
 os.chdir(source_dir)
+
 files = os.listdir(source_dir)
 vars = ['u10', 'v10', 'msl', 'tp']
 methods = ['max', 'max', 'min', 'sum']
@@ -43,12 +49,19 @@ for file_long in (pbar := tqdm(files)):
         continue
 
     pbar.set_description(f'Resampling {file_long}')
-    ds_orig = xr.open_dataset(os.path.join(source_dir, f"{file}.nc"))
+    ds_orig = xr.open_dataset(f"{file}.nc") #os.path.join(source_dir, f"{file}.nc")
+
+    # pretty print ds_orig summary
+    print(ds_orig)
+
+
     times = ds_orig.time.values
     resampled_datasets = []
     for var, method in zip(vars, methods):
-        command = f'gdalwarp -t_srs EPSG:4326 -ts {res[0]} {res[1]} -r {method} -overwrite -of netCDF NETCDF:\\"{file}.nc\\":{var} ../resampled/res_{res[1]}x{res[0]}/{file}_{var}.nc'
+        command = f'gdalwarp -t_srs EPSG:4326 -ts {res[0]} {res[1]} -r {method} -overwrite -of netCDF "NETCDF:{file}.nc:{var}" ../resampled/{res[1]}x{res[0]}/{file}_{var}.nc'
+        print("Submitting command:", command)
         os.system(command) # use GDAL to resample
+
         ds_var = xr.open_dataset(os.path.join(target_dir, f"{file}_{var}.nc"))
         bands = [var for var in ds_var.data_vars if 'Band' in var]
         ds_var = ds_var[bands].to_array('time', name=var).to_dataset().assign_coords(time=times)

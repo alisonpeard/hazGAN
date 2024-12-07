@@ -68,14 +68,14 @@ if __name__ == '__main__':
     data_resampled = data_resampled.chunk(chunk_size)
     output_file = os.path.join(target_dir, f'bangladesh_{year}.nc')
     print(f"Saving data to {output_file} ...")
-    data_resampled.to_netcdf(output_file)
+    data_resampled.to_netcdf(output_file, engine='netcdf4')
     print(f"Saved. File size: {os.path.getsize(output_file) / 1e6:.2f} MB.")
 
     data.close()
     data_resampled.close()
 
     # load and test time encoding
-    data = xr.open_dataset(output_file, decode_times=False)
+    data = xr.open_dataset(output_file, decode_times=False, engine='netcdf4')
     times = data.isel(time=slice(0, 4)).time.data
     print(f"Time encoding: {times[0]}, {times[1]}, ...")
     print(f"Encoding metadata:")

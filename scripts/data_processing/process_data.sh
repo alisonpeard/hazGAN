@@ -1,0 +1,1 @@
+srun -p Short --pty python resample_era5.py --year 1984

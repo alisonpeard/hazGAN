@@ -32,6 +32,7 @@ dependencies:
     - xarray
     - xagg
     - rioxarray
+    - gdal==3.6.3
     - hdf5
     - netcdf4
     - shapely>=2.0
