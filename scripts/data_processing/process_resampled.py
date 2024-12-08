@@ -155,11 +155,11 @@ if __name__ == "__main__":
     end = time()
     print(f"Processing time: {end - start:.2f} seconds")
 
-    # final visualisation
+    # %%final visualisation
     if VISUALS:
         t0 = 0
-        fig, axs = plt.subplots(1, 3, figsize=(10, 4))
-        ds.isel(time=t0).u10.plot(ax=axs[0])
-        ds.isel(time=t0).msl.plot(ax=axs[1])
-        ds.isel(time=t0).tp.plot(ax=axs[2])
+        fig, axs = plt.subplots(1, 3, figsize=(18, 4))
+        ds_filtered.isel(time=t0).u10.plot.contourf(ax=axs[0], levels=20, cmap="Spectral_r")
+        ds_filtered.isel(time=t0).msl.plot.contourf(ax=axs[1], levels=20, cmap="Spectral")
+        ds_filtered.isel(time=t0).tp.plot.contourf(ax=axs[2], levels=20, cmap="PuBu")
 # %%
