@@ -12,18 +12,17 @@ Remove wind bombs using a similarity metric based on Frobenius norm.
 
 Input:
 ------
-    - resampled ERA5 data (netcdf) of form
-        <datadir>/era5/bay_of_bengal__monthly/resampled/<resolution>*bangladesh*.nc
-        (resampled using resample_era5.py script)
+- resampled ERA5 data (netcdf) of form
+    <datadir>/era5/bay_of_bengal__daily/resampled/<resolution>*bangladesh*.nc
+    (resampled using resample_era5.py script)
 
 Output:
 -------
-    - netcdf file of processed data (max wind speed, min MSLP) in <target_dir>/training/res_<>x<>/data_{year0}_{yearn}.nc
-    - parquet file of processed data in target_dir/training/res_<>x<>/data_{year0}_{yearn}.parquet
+- netcdf file of processed data (max wind speed, min MSLP) in <target_dir>/training/res_<>x<>/data_{year0}_{yearn}.nc
+- parquet file of processed data in target_dir/training/res_<>x<>/data_{year0}_{yearn}.parquet
 """
 # %%
 import os
-os.environ["USE_PYGEOS"] = "0"
 from glob import glob
 from time import time
 import numpy as np
@@ -33,34 +32,12 @@ from environs import Env
 from collections import Counter
 import matplotlib.pyplot as plt
 
+from hazGAN.utils import get_similarities
+os.environ["USE_PYGEOS"] = "0"
+
 VISUALS = True
-VIEW = 5
-THRESHOLD = 0.98 # human-implemented bisection algorithm
-
-
-def rescale(x:np.ndarray) -> np.ndarray:
-    return (x - x.min() / (x.max() - x.min()))
-
-
-def rescale_vector(x:np.ndarray) -> np.ndarray:
-    return (x - x.min(axis=(1, 2), keepdims=True)) / (x.max(axis=(1, 2), keepdims=True) - x.min(axis=(1, 2), keepdims=True))
-
-
-def frobenius(test:np.ndarray, template:np.ndarray) -> np.ndarray:
-    sum_ = np.sum(template * test, axis=(1, 2))
-    norms = np.linalg.norm(template) * np.linalg.norm(test, axis=(1, 2))
-    similarities = sum_ / norms
-    return similarities
-
-
-def get_similarities(ds:xr.Dataset, template:np.ndarray) -> np.ndarray:
-
-    template = rescale(template)
-    tensor = ds['u10'].data
-    tensor = rescale_vector(tensor)
-    similarities = frobenius(tensor, template)
-    
-    return similarities # np.array(similarities)
+VIEW = 4
+THRESHOLD = 0.82 # human-implemented bisection algorithm
 
 
 if __name__ == "__main__":
@@ -76,7 +53,7 @@ if __name__ == "__main__":
     ds = xr.open_mfdataset(files, chunks={"time": "500MB"}, engine="netcdf4")
     ds["u10"] = np.sqrt(ds["u10"] ** 2 + ds["v10"] ** 2)
     ds = ds.drop_vars(["v10"])
-    print("Number of days of data: {}".format(ds.dims['time']))
+    print("Number of days of data: {:,}".format(ds.dims['time']))
     print("Number of years found: {}".format(len(np.unique(ds['time.year'].data))))
 
     # check for missing dates
@@ -86,8 +63,10 @@ if __name__ == "__main__":
     ds_dates = ds['time'].dt.date.data
     missing_dates = set(all_dates) - set(ds_dates)
     missing_year_counts = Counter([d.year for d in sorted(missing_dates)])
-    print("\nMissing years:\n--------------")
-    print('\n'.join([f"{k}: {v} days" for k, v in missing_year_counts.items()]))
+
+    if len(missing_dates) > 0:
+        print("\nMissing years:\n--------------")
+        print('\n'.join([f"{k}: {v} days" for k, v in missing_year_counts.items()]))
 
     # resample to daily maxima
     ds = ds.dropna(dim='time', how='all')
@@ -98,64 +77,71 @@ if __name__ == "__main__":
     )
     ds['grid'] = grid
 
-    # ----Remove "wind bombs"-----
+    # %%----Remove "wind bombs"-----
     ds['maxwind'] = ds['u10'].max(dim=['lat', 'lon'])
     ds = ds.sortby('maxwind', ascending=False)
 
     if VISUALS:
-        fig, axs = plt.subplots(VIEW, VIEW)
+        fig, axs = plt.subplots(VIEW, VIEW, figsize=(20, 20))
         for i, ax in enumerate(axs.ravel()):
             ds.isel(time=i).u10.plot(ax=ax, add_colorbar=False)
             ax.axis('off')
             ax.set_xlabel('')
             ax.set_ylabel('')
             ax.set_title('')
-        fig.suptitle(f'{VIEW*VIEW} most extreme wind fields')
+        fig.suptitle(f'{VIEW*VIEW} most extreme wind fields', fontsize=24, y=.95)
 
     print("Processing data for wind bombs...")
     template = ds.isel(time=0).u10.data
     similarities = get_similarities(ds, template)
     similarities = similarities.compute()
+    ds['similarities'] = xr.DataArray(similarities, dims='time')
 
+    # 
     if VISUALS:
-        order = np.argsort(similarities)[::-1]
-        ds_ordered = ds.isel(time=order).copy()
+        ds_ordered = ds.sortby('similarities', ascending=False)
 
-        fig, axs = plt.subplots(VIEW, VIEW)
+        fig, axs = plt.subplots(VIEW, VIEW, figsize=(20, 20))
         for i, ax in enumerate(axs.ravel()):
             ds_ordered.isel(time=i).u10.plot(ax=ax, add_colorbar=False)
             ax.axis('off')
             ax.set_xlabel('')
             ax.set_ylabel('')
-            ax.set_title('')
-        fig.suptitle(f'{VIEW*VIEW} winds most similar to wind bomb template')
+            date = ds_ordered.isel(time=i)['time.date'].data.item()
+            similarity = ds_ordered.isel(time=i)['similarities'].data.item()
+            ax.set_title("{:.2%}: {}".format(similarity, date))
+
+        fig.suptitle(
+            f'{VIEW*VIEW} winds most similar to wind bomb template', fontsize=24, y=.95
+            )
 
     # remove wind bombs
-    nbombs = sum(similarities > THRESHOLD)
+    nbombs = sum(similarities >= THRESHOLD)
     print(f'{nbombs} ERA5 "wind bombs" detected in dataset for threshold {THRESHOLD}.')
     mask = (similarities <= THRESHOLD)
     ds_filtered = ds.isel(time=mask)
     ds_filtered = ds_filtered.sortby('maxwind', ascending=False)
 
     if VISUALS:
-        fig, axs = plt.subplots(VIEW, VIEW)
+        fig, axs = plt.subplots(VIEW, VIEW, figsize=(20, 20))
         for i, ax in enumerate(axs.ravel()):
             ds_filtered.isel(time=i).u10.plot(ax=ax, add_colorbar=False)
             ax.axis('off')
             ax.set_xlabel('')
             ax.set_ylabel('')
             ax.set_title('')
-            fig.suptitle(f'{VIEW*VIEW} most extreme winds after filtering')
+            fig.suptitle(f'{VIEW*VIEW} most extreme winds after filtering', fontsize=24, y=0.95)
 
     # ----save to netcdf-----
     year0 = ds_filtered['time'].dt.year.values.min()
     yearn = ds_filtered['time'].dt.year.values.max()
+    np.save(os.path.join(target_dir, "windbomb.npy"), template.compute())
     ds_filtered.to_netcdf(os.path.join(target_dir, f"data_{year0}_{yearn}.nc"))
 
     end = time()
     print(f"Processing time: {end - start:.2f} seconds")
 
-    # %%final visualisation
+    # final visualisation
     if VISUALS:
         t0 = 0
         fig, axs = plt.subplots(1, 3, figsize=(18, 4))

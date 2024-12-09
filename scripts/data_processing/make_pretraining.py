@@ -41,6 +41,9 @@ VISUALISATIONS = True
 WINDOWS = [2, 5, 8, 10, 12, 15, 20]
 THRESHOLD = 0.85 # rough manual bisection for this
 
+INFILES = ['data_1940_2022.nc', 'data.nc']
+OUTFILES = ['data_pretrain.nc', 'data_pretrain.npz']
+
 
 def notify(title, subtitle, message) -> None:
     os.system("""
@@ -80,8 +83,8 @@ def ecdf(ds, ds_train, index='time') -> xr.DataArray:
 
 def main(datadir):
     # load the data
-    ds = xr.open_dataset(os.path.join(datadir, "data_1950_2022.nc"))
-    ds_train = xr.open_dataset(os.path.join(datadir, "data.nc"))
+    ds = xr.open_dataset(os.path.join(datadir, INFILES[0]))
+    ds_train = xr.open_dataset(os.path.join(datadir, INFILES[1]))
     u10 = ds.u10.values.flatten()
 
     if VISUALISATIONS:
@@ -166,8 +169,8 @@ def main(datadir):
     # ds = process_outliers(ds, THRESHOLD, visuals=VISUALISATIONS)
 
     # save to netCDF and NumPy
-    ds.to_netcdf(os.path.join(datadir, "data_pretrain.nc"))
-    np.savez(os.path.join(datadir, "data_pretrain.npz"), data=X)
+    ds.to_netcdf(os.path.join(datadir, OUTFILES[0]))
+    np.savez(os.path.join(datadir, OUTFILES[1]), data=X)
     notify("Process finished", "Python script", "Finished making pretraining data")
     ds.close()
 

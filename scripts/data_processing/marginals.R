@@ -1,113 +1,114 @@
-"Identify events and fit GPD to marginal exceedances.
+"Identify events and fit to marginals.
 
-Add event metadata such as return period and frequency.
+Includes event metadata such as return period and frequency. Only fit ECDF and 
+GPD to 1940-2021 data. Keep 2022 as a holdout test set.
+
+Best run in VS code.
 
 Files:
 -----
-- input: data_1940_2022.nc
-- output:
-  - event_data.parquet
-  - fitted_data.parquet
-  - monthly_medians.csv
+- input:
+  - data_1940_2022.nc
 
-TODO:
------
-- train-test split
+- output:
+  - storms.parquet
+  - metadata.parquet
+  - medians.csv
+
+To do:
+------
+- train-test split before ECDF & GPD fit (nearly there)
 - convert to Python!
 
-LAST RUN: 06-12-2024
+LAST RUN: 08-12-2024
 "
+#%%######### START #############################################################
 rm(list = ls())
-library(eva)
 library(arrow)
 library(lubridate)
 library(dplyr)
 require(ggplot2)
-library(extRemes)
 library(CFtime)
 library(tidync)
 
+# set up env (depends if running or sourcing script)
+try(setwd(getSrcDirectory(function(){})[1]))
+try(setwd(dirname(rstudioapi::getActiveDocumentContext()$path)))
 source("utils.R")
 readRenviron("../../.env")
 
-FILENAME <- 'data_1940_2022.nc'
-WD <- Sys.getenv("TRAINDIR")
-RFUNC <- max # https://doi.org/10.1111/rssb.12498
-TEST.YEAR <- 2022 # exclude from GPD fit
-VISUALS <- TRUE
-Q <- 0.8
+FILENAME   <- "data_1940_2022.nc"     # nolint
+WD         <- Sys.getenv("TRAINDIR")  # nolint
+RFUNC      <- max                     # nolint, https://doi.org/10.1111/rssb.12498
+TEST.YEARS <- c(2022)                 # nolint, exclude from ecdf + gpd fitting
+VISUALS    <- TRUE                    # nolint
+Q          <- 0.8                     # nolint
 
-########### LOAD AND STANDARDISE DATA ##########################################
-src <- tidync(paste0(WD, '/', FILENAME))
+#%%######### LOAD AND STANDARDISE DATA #########################################
+src <- tidync(paste0(WD, "/", FILENAME))
 daily <- src %>% hyper_tibble(force = TRUE)
-coords <- src %>% activate('grid') %>% hyper_tibble(force = TRUE)
-daily <- left_join(daily, coords, by=c('lon', 'lat'))
+coords <- src %>% activate("grid") %>% hyper_tibble(force = TRUE)
+daily <- left_join(daily, coords, by = c("lon", "lat"))
 rm(coords)
 
 daily$msl <- -daily$msl # negate pressure so maximizing all vars
-daily = daily[,c('grid', 'time', 'u10', 'msl', 'tp')]
+daily <- daily[, c("grid", "time", "u10", "msl", "tp")]
 
 daily$time <- as.Date(CFtimestamp(
   CFtime("days since 1940-01-01", "gregorian", daily$time)
-  ))
+))
 
-medians <- monthly.medians(daily, 'u10')
-medians$mslp <- monthly.medians(daily, 'msl')$msl
-medians$tp <- monthly.medians(daily, 'tp')$tp
+medians <- monthly_medians(daily, "u10")
+medians$mslp <- monthly_medians(daily, "msl")$msl
+medians$tp <- monthly_medians(daily, "tp")$tp
 
-daily$u10 <- standardise.by.month(daily, 'u10')
-daily$msl <- standardise.by.month(daily, 'msl')
-daily$tp <- standardise.by.month(daily, 'tp')
+daily$u10 <- standardise_by_month(daily, "u10")
+daily$msl <- standardise_by_month(daily, "msl")
+daily$tp <- standardise_by_month(daily, "tp")
 
-########### EXTRACT AND TRANSFORM STORMS #######################################
-# identify storms by max wind speeds
-metadata <- storm.extractor(daily, 'u10', RFUNC)
+#%%######## EXTRACT AND TRANSFORM STORMS #######################################
+metadata <- storm_extractor(daily, "u10", RFUNC)
 
 # fit to marginal data
-daily <- daily[daily$time %in% times,]
-storms.wind <- gpd.transformer(daily, 'u10', Q)
-storms.mslp <- gpd.transformer(daily, 'msl', Q)
-storms.tp   <- gpd.transformer(daily, 'tp', Q)
+storms_wind <- gpd_transformer(daily, metadata, "u10", Q)
+storms_mslp <- gpd_transformer(daily, metadata, "msl", Q)
+storms_tp   <- gpd_transformer(daily, metadata, "tp", Q)
 
-renamer <- function(df, var){
+renamer <- function(df, var) {
   df <- df %>%
-    rename_with(~ paste0(., '.', var), -c(grid, storm, storm.rp, variable))
-  df <- df %>% rename_with(~ var, variable)
+    rename_with(~ paste0(., ".", var),
+                -c("grid", "storm", "storm.rp", "variable"))
+  df <- df %>% rename_with(~ var, "variable")
   return(df)
 }
-renamer(storms.wind, 'u10')
 
-storms.wind <- renamer(storms.wind, 'u10')
-storms.mslp <- renamer(storms.mslp, 'mslp')
-storms.tp   <- renamer(storms.tp, 'tp')
+storms_wind <- renamer(storms_wind, "u10")
+storms_mslp <- renamer(storms_mslp, "mslp")
+storms_tp   <- renamer(storms_tp, "tp")
 
-storms <- storms.wind %>%
-  inner_join(storms.mslp, by = c('grid', 'storm', 'storm.rp')) %>%
-  inner_join(storms.tp, by = c('grid', 'storm', 'storm.rp'))
+storms <- storms_wind %>%
+  inner_join(storms_mslp, by = c("grid", "storm", "storm.rp")) %>%
+  inner_join(storms_tp, by = c("grid", "storm", "storm.rp"))
 
-storms$thresh.q <- Q # approx. extremeness measure
+storms$thresh.q <- Q # keep track of threshold used
 
 ########### SAVE RESULTS #######################################################
-write.csv(medians, paste0(WD, '/', 'medians.csv'), row.names=FALSE)
-write_parquet(metadata, paste0(WD, '/', 'storms_metadata.parquet'))
-write_parquet(storms, paste0(WD, '/', 'storms.parquet'))
+write.csv(medians, paste0(WD, "/", "medians.csv"), row.names = FALSE)
+write_parquet(metadata, paste0(WD, "/", "storms_metadata.parquet"))
+write_parquet(storms, paste0(WD, "/", "storms.parquet"))
 
-cat("\nSaved as:", paste0(WD, '/', 'storms.parquet'))
+cat("\nSaved as:", paste0(WD, "/", "storms.parquet"))
 print(paste0(length(unique(storms$storm)), " events processed."))
 
 ########### FIGURES ############################################################
-if(VISUALS){
-  GRIDCELL <- 15
-  gridcell <- storms[storms$grid == GRIDCELL,]
-  par(mfrow=c(2, 2))
-  acf(gridcell$u10, main="U10 cluster maxima ACF")
-  pacf(gridcell$u10, main="U10 cluster maxima PACF")
-  acf(gridcell$msl, main="MSLP cluster maxima ACF")
-  pacf(gridcell$msl, main="MSLP cluster maxima PACF")
+if (VISUALS) {
+  GRIDCELL <- 15 # nolint
+  gridcell <- storms[storms$grid == GRIDCELL, ]
+  par(mfrow = c(2, 2))
+  acf(gridcell$u10, main = "U10 cluster maxima ACF")
+  pacf(gridcell$u10, main = "U10 cluster maxima PACF")
+  acf(gridcell$mslp, main = "MSLP cluster maxima ACF")
+  pacf(gridcell$mslp, main = "MSLP cluster maxima PACF")
 }
 
-print(occurrence.rate)
-missing.days <- (nyears * 365) - length(unique(daily$time))
-missing.years <- missing.days / 365
-
-########### END ################################################################
+########### END ###############################################################

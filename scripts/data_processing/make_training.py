@@ -3,14 +3,13 @@ Process the GPD-fitted marginals to make training dataset for the GAN.
 
 Input files:
 ------------
-    - data_1950_2022.nc | source: scripts/data_processing/process_resampled.py
-    - fitted_data.parquet | source: scripts/data_processing/marginals.R
-    - event_data.parquet |  source: scripts/data_processing/marginals.R
-    - monthly_medians.csv | source: scripts/data_processing/marginals.R
+    - data_1940_2022.nc        | source: scripts/data_processing/process_resampled.py
+    - storms.parquet           | source: scripts/data_processing/marginals.R
+    - storms_metadata.parquet  | source: scripts/data_processing/marginals.R
+    - medians.csv              | source: scripts/data_processing/marginals.R
 Output files:
 -------------
     - data.nc
-    - (outlier_template.npy)
 """
 # %%
 import os
@@ -40,6 +39,11 @@ CHANNELS = ["u10", "tp", 'mslp']
 RESOLUTION = (22, 18)
 VISUALISATIONS = True
 THRESHOLD = 0.75 # rough manual bisection for this
+PROCESS_OUTLIERS = True
+
+# for snakemake in future
+INFILES = ['data_1940_2022.nc', 'storms.parquet', 'storms_metadata.parquet', 'medians.csv']
+OUTFILES = ['data.nc']
 
 
 def frobenius(test:np.ndarray, template:np.ndarray) -> float:
@@ -69,13 +73,13 @@ def process_outliers(ds:xr.Dataset, threshold:float=THRESHOLD,
         ds['anomaly'].isel(channel=0, time=sorting[-1]).plot(ax=axs[0])
         axs[0].set_title('Largest sample before filtering.')
 
-    if not os.path.exists(os.path.join(datadir, "outlier_template.npy")):
+    if not os.path.exists(os.path.join(datadir, "windbomb.npy")):
         print('Creating outlier template.')
         template = ds['anomaly'].isel(channel=0, time=sorting[-1]).data # this has a "wind bomb"
-        np.save(os.path.join(datadir, "outlier_template.npy"), template)    
+        np.save(os.path.join(datadir, "windbomb.npy"), template)    
     else:
         print('Loading outlier template.')
-        template = np.load(os.path.join(datadir, "outlier_template.npy"))
+        template = np.load(os.path.join(datadir, "windbomb.npy"))
 
     similarities = [] * ds['time'].data.size
     for i in range(ds['time'].data.size):
@@ -102,19 +106,19 @@ def process_outliers(ds:xr.Dataset, threshold:float=THRESHOLD,
 
 def main(datadir):
     # load coordinates
-    coords = xr.open_dataset(os.path.join(datadir, 'data_1950_2022.nc'))
+    coords = xr.open_dataset(os.path.join(datadir, INFILES[0]))
     coords = coords['grid'].to_dataframe().reset_index()
-    coords = gpd.GeoDataFrame(coords, geometry=gpd.points_from_xy(coords['longitude'], coords['latitude'])).set_crs("EPSG:4326")
+    coords = gpd.GeoDataFrame(coords, geometry=gpd.points_from_xy(coords['lon'], coords['lat'])).set_crs("EPSG:4326")
 
     # load GPD-fitted data                                                                                                        
-    df = pd.read_parquet(os.path.join(datadir, f"fitted_data.parquet"))
+    df = pd.read_parquet(os.path.join(datadir, INFILES[1]))
     df = df.merge(coords, on="grid")
     df.columns = [col.replace(".", "_") for col in df.columns]
     df = df.rename(columns={"msl": "mslp"})
     df['day_of_storm'] = df.groupby('storm')['time_u10'].rank('dense')
 
     #  add event sizes
-    events = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))
+    events = pd.read_parquet(os.path.join(datadir, INFILES[2]))
     rate = events['lambda'][0]
     events = events[["storm", "storm.size", "lambda"]].groupby("storm").mean()
     events = events.to_dict()["storm.size"]
@@ -122,7 +126,7 @@ def main(datadir):
     gdf = gpd.GeoDataFrame(df, geometry="geometry").set_crs("EPSG:4326")
 
     # load event time data
-    events = pd.read_parquet(os.path.join(datadir, "event_data.parquet"))
+    events = pd.read_parquet(os.path.join(datadir, INFILES[2]))
     times = pd.to_datetime(events[['storm', 'time']].groupby('storm').first()['time'].reset_index(drop=True))
 
     # Check fit quality and that it looks right
@@ -164,7 +168,7 @@ def main(datadir):
     assert gdf[['ecdf_u10', 'ecdf_tp', 'ecdf_mslp']].min().min() >= 0, "ECDF values should be between 0 and 1"
 
     # merge in monthly medians
-    monthly_medians = pd.read_csv(os.path.join(datadir, "monthly_medians.csv"), index_col="month")
+    monthly_medians = pd.read_csv(os.path.join(datadir, INFILES[3]), index_col="month")
     assert monthly_medians.groupby(['month', 'grid']).count().max().max() == 1, "Monthly medians not unique"
     monthly_medians = monthly_medians.groupby(["month", "grid"]).mean().reset_index()
 
@@ -175,22 +179,22 @@ def main(datadir):
         assert n == len(gdf), "Merge failed"
         del gdf[f'month_{var}']
 
-    # use latitude and longitude columns to label grid points in (i,j) format
-    gdf["latitude"] = gdf["geometry"].apply(lambda x: x.y)
-    gdf["longitude"] = gdf["geometry"].apply(lambda x: x.x)
-    gdf = gdf.sort_values(["latitude", "longitude", "storm"], ascending=[True, True, True])
+    # use lat and lon columns to label grid points in (i,j) format
+    gdf["lat"] = gdf["geometry"].apply(lambda x: x.y)
+    gdf["lon"] = gdf["geometry"].apply(lambda x: x.x)
+    gdf = gdf.sort_values(["lat", "lon", "storm"], ascending=[True, True, True])
 
     #  make netcdf file
     nchannels = len(CHANNELS)
     T = gdf["storm"].nunique()
-    nx = gdf["longitude"].nunique()
-    ny = gdf["latitude"].nunique()
+    nx = gdf["lon"].nunique()
+    ny = gdf["lat"].nunique()
 
     # make training tensors
-    gdf = gdf.sort_values(["storm", "latitude", "longitude"], ascending=[True, True, True]) # [T, i, j, channel]
+    gdf = gdf.sort_values(["storm", "lat", "lon"], ascending=[True, True, True]) # [T, i, j, channel]
     grid = gdf["grid"].unique().reshape([ny, nx])
-    lat = gdf["latitude"].unique()
-    lon = gdf["longitude"].unique()
+    lat = gdf["lat"].unique()
+    lon = gdf["lon"].unique()
     X = gdf[CHANNELS].values.reshape([T, ny, nx, nchannels])
     D = gdf[["day_of_storm"]].values.reshape([T, ny, nx])
     U = gdf[[f"ecdf_{c}" for c in CHANNELS]].values.reshape([T, ny, nx, nchannels])
@@ -209,7 +213,7 @@ def main(datadir):
     else:
         gpd_params = ["thresh", "scale", "shape"]
 
-    gdf_params = (gdf[[*gpd_params, "longitude", "latitude"]].groupby(["latitude", "longitude"]).mean().reset_index())
+    gdf_params = (gdf[[*gpd_params, "lon", "lat"]].groupby(["lat", "lon"]).mean().reset_index())
     thresh = np.array(gdf_params[[f"thresh_{var}" for var in CHANNELS]].values.reshape([ny, nx, nchannels]))
     scale = np.array(gdf_params[[f"scale_{var}" for var in CHANNELS]].values.reshape([ny, nx, nchannels]))
     shape = np.array(gdf_params[[f"shape_{var}" for var in CHANNELS]].values.reshape([ny, nx, nchannels]))
@@ -249,8 +253,8 @@ def main(datadir):
     # ds = process_outliers(ds, THRESHOLD, datadir=datadir, visuals=VISUALISATIONS)
 
     # save
-    ds.to_netcdf(os.path.join(datadir, "data.nc"))
-    print("Saved to", os.path.join(datadir, "data.nc"))
+    ds.to_netcdf(os.path.join(datadir, OUTFILES[0]))
+    print("Saved to", os.path.join(datadir, OUTFILES[0]))
 
     if VISUALISATIONS:
         # day of storm
@@ -319,4 +323,120 @@ if __name__ == "__main__":
     datadir = env.str("TRAINDIR")
     main(datadir)
 
+# %% MAKING TESTS
+# to add to pytest later
+# data_1940_2022 = xr.open_dataset(os.path.join(datadir, 'data_1940_2022.nc'))
+metadata = pd.read_parquet(os.path.join(datadir, "storms_metadata.parquet"))
+storms = pd.read_parquet(os.path.join(datadir, "storms.parquet"))
+data = xr.open_dataset(os.path.join(datadir, OUTFILES[0]))
+
+# %%
+# TEST 1: does data_1940_2022.nc match metadata – YES
+# TEST 2: does storms_metadata match storms.parquet - ?
+# TEST 3: does storms.parquet match data.nc – ?
+
+# %% TEST 2
+a = metadata[['time', 'u10']].copy()
+a['time'] = pd.to_datetime(a['time'])
+a = a.set_index('time', drop=True)
+a = a.sort_index()
+
+b = storms[['time.u10', 'u10']].copy()
+b.columns = ['time', 'u10']
+b['time'] = pd.to_datetime(b['time'])
+b = b.groupby('time').max()
+
+c = b.join(a, how='left', lsuffix='_b', rsuffix='_a')
+c['difference'] = c['u10_a'] - c['u10_b']
+assert c['difference'].sum() == 0
+
+# %%
+
+
+# %% THIS MORNING'S STUFF
+# %% ecdf of wind maxima
+from scipy.stats import rankdata
+data = xr.open_dataset(os.path.join(datadir, OUTFILES[0]))
+data = data.sel(time=slice('1940', '2021'))
+
+# %%
+for i in range(data.dims['channel']):
+    anomaly = data.isel(channel=i)['anomaly'].values
+    uniform = data.isel(channel=i)['uniform'].values
+
+    n, h, w = anomaly.shape
+    anomaly = anomaly.reshape(n, h*w)
+    uniform = uniform.reshape(n, h*w)
+
+    for gridcell in range(h*w):
+        x = sorted(anomaly[:, gridcell])
+        u = sorted(uniform[:, gridcell])
+        
+        x = rankdata(x) / (n + 1)
+        assert np.allclose(x, u, atol=1e-3), f"ECDFs for gridcell {gridcell} are not equal."
+
+    # n = len(anomaly)
+    # anomaly = so
+# %% test data.nc anomaly+medians matches original
+data = xr.open_dataset(os.path.join(datadir, 'data.nc'))
+original = xr.open_dataset(os.path.join(datadir, 'data_1940_2022.nc'))
+
+u10_train = (data['anomaly'] + data['medians']).isel(channel='u10')
+
+# %%
+original = original['maxwind'].to_dataframe('u10')
+
+# %% dev
+pd.set_option('display.max_colwidth', None)
+before = metadata.groupby('storm').apply(lambda x: pd.Series({
+    'u10': x['u10'].max(),
+    'time': x['time'][x['u10'].idxmax()],
+    'timelist': str(list(x['time'])),
+    'u10list': str(list(x['u10']))
+}))
+
+before['time'] = pd.to_datetime(before['time'])
+before = before.set_index('time', drop=True)
+
+u10 = data.sel(channel="u10")['anomaly']
+after = u10.max(dim=['lat', 'lon'])
+after = after.to_dataframe('u10').drop(columns=['channel'])
+after = after.sort_values('time')
+
+comparison = pd.concat([before, after], axis=1)
+comparison.iloc[[3],:]
+# %%
+# look at original data 1940-02-26 - 1940-03-27
+original = xr.open_dataset(os.path.join(datadir, 'data_1940_2022.nc'))
+original = original['maxwind'].to_dataframe('u10')
+original = original.reset_index()
+original['time'] = pd.to_datetime(original['time'])
+original = original.sort_values('time')
+original = original.set_index('time', drop=True)
+original.loc['1940-02-26':'1940-03-27']
+# %%
+
+start = pd.to_datetime('1940-02-26')
+end = pd.to_datetime('1940-03-27')
+original = original.sel(time=slice(start, end))
+original_df = original['u10'].max(dim=['lat', 'lon']).to_dataframe('u10')
+
+# %%
+comparison.columns = ['before', 'after']
+comparison['difference'] = comparison['after'] - comparison['before']
+assert comparison['difference'].sum() == 0, 'Storm maxima do not match.'
+
+# only 339 aligned at the moment
+comparison = comparison.reset_index()
+comparison['time'] = pd.to_datetime(comparison['time'])
+# comparison.sort_values(by='time')
+# comparison.groupby('time').agg(list)
+# comparison.groupby('time').agg(max) # choses number over nans
+comparison = comparison.groupby('time').agg(max) #? hope not losing any info
+comparison[comparison['difference'].isnull()] # shows misaligned dates
+num_misaligned_maxima = comparison['difference'].isnull().sum()
+assert num_misaligned_maxima == 0, "Found {} misaligned storm maxima".format(num_misaligned_maxima)
+
+# %%
+comparison
 # %%

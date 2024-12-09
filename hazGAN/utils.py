@@ -1,6 +1,7 @@
 """Helper functions for running evtGAN in TensorFlow."""
 import os
 import numpy as np
+import xarray as xr
 import tensorflow as tf
 
 
@@ -16,6 +17,39 @@ KNOWN_OUTLIERS = np.array([
     '1952-05-09T00:00:00.000000000',
     '1995-05-02T00:00:00.000000000'
     ], dtype='datetime64[ns]')
+
+TEST_YEAR = 2022
+
+def rescale(x:np.ndarray) -> np.ndarray:
+    return (x - x.min() / (x.max() - x.min()))
+
+
+def rescale_vector(x:np.ndarray) -> np.ndarray:
+    return (x - x.min(axis=(1, 2), keepdims=True)) / (x.max(axis=(1, 2), keepdims=True) - x.min(axis=(1, 2), keepdims=True))
+
+
+def frobenius(test:np.ndarray, template:np.ndarray) -> float:
+    sum_ = np.sum(template * test)
+    norms = np.linalg.norm(template) * np.linalg.norm(test)
+    similarities = sum_ / norms
+    return similarities
+
+
+def frobenius_vector(test:np.ndarray, template:np.ndarray) -> np.ndarray:
+    sum_ = np.sum(template * test, axis=(1, 2))
+    norms = np.linalg.norm(template) * np.linalg.norm(test, axis=(1, 2))
+    similarities = sum_ / norms
+    return similarities
+
+
+def get_similarities(ds:xr.Dataset, template:np.ndarray) -> np.ndarray:
+    """Get similarities between a template and dataset."""
+    template = rescale(template)
+    tensor = ds['u10'].data
+    tensor = rescale_vector(tensor)
+    similarities = frobenius_vector(tensor, template)
+    
+    return similarities # np.array(similarities)
 
 
 def diff(x, d=1):
