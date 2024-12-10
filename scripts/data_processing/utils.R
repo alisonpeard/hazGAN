@@ -1,3 +1,4 @@
+# remember to select source on save
 library(eva)
 library(extRemes)
 library(dplyr)
@@ -91,19 +92,19 @@ gridsearch <- function(series, var, qmin = 60, qmax = 99, rmax = 14) {
 storm_extractor <- function(daily, var, rfunc) {
   series <- aggregate(. ~ time, daily[, c("time", var)], rfunc)
 
-  # gridsearch run lengths and thresholds
+  # gridsearch run lengths and thresholds
   result <- gridsearch(series, var)
   r <- result$r
   q <- result$q
   p <- result$p
 
   thresh <- quantile(series[[var]], q)
-  print(paste0(
+  cat(paste0(
     "Final selection from gridsearch:\n",
     "Run length: ", r, "\n",
     "Quantile: : ", q, "\n",
     "Threshold: ", round(thresh, 4), "\n",
-    "P-value (H0:independent): ", round(p, 4)
+    "P-value (H0:independent): ", round(p, 4), "\n"
   ))
 
   # final declustering
@@ -115,7 +116,7 @@ storm_extractor <- function(daily, var, rfunc) {
 
   # storm stats
   storms <- metadata %>%
-    group_by("storm") %>%
+    group_by(storm) %>%
     mutate(storm.size = n()) %>%
     slice(which.max(variable)) %>%
     summarise(
@@ -126,13 +127,14 @@ storm_extractor <- function(daily, var, rfunc) {
 
   # Ljung-box again
   p <- Box.test(c(storms$variable), type = "Ljung")$p.value
-  print(paste0("Final Ljung-Box p-value: ", round(p, 4)))
+  cat(paste0("Final Ljung-Box p-value: ", round(p, 4), '\n'))
 
   # storm frequency
   m <- nrow(storms)
   nyears <- length(unique(year(daily$time)))
   lambda <- m / nyears
   metadata$lambda <- lambda
+  cat(paste0("Number of storms: ", m, '\n'))
 
   # assign return periods
   survival_prob <- 1 - (
@@ -168,7 +170,6 @@ gpd_transformer <- function(df, metadata, var, q) {
     gridcell <- left_join(gridcell,
                           metadata[, c("time", "storm", "storm.rp")],
                           by = c("time" = "time"))
-
     maxima <- gridcell %>%
       group_by(storm) %>%
       slice(which.max(get(var))) %>%
@@ -178,8 +179,15 @@ gpd_transformer <- function(df, metadata, var, q) {
         storm.rp = storm.rp,
         grid = grid
       )
+    
     train <- maxima[year(maxima$time) %ni% TEST.YEARS,]
     thresh <- quantile(train$variable, q)
+    
+    # dev start
+    if (i == 122) {
+      cat(paste0("\nMaxima u10 for gridcell ", i, ": ", max(train$variable), '\n'))
+    }
+    # dev end
 
     # validation
     excesses <- maxima$variable[maxima$variable >= thresh]
