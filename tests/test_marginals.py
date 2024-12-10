@@ -58,6 +58,7 @@ def storms():
     storms.columns = ['time', 'storm', 'grid', 'u10', 'ecdf']
     storms['storm'] = storms['storm'].astype(int)
     storms['grid'] = storms['grid'].astype(int) 
+    storms['time'] = pd.to_datetime(storms['time'])
     return storms
 
 
@@ -78,7 +79,6 @@ def test_storms_data_1940_2022_alignment(storms, data_1940_2022):
 
     intersection = data_in.join(data_out, how='right', lsuffix='_in', rsuffix='_out')
     assert np.isclose(intersection['u10_in'], intersection['u10_out']).all()
-
 
 
 @pytest.mark.parametrize('lag', [1])
@@ -110,15 +110,17 @@ def test_storm_extractor_autocorrelation(storms, lag, alpha=0.1):
 
 
 @pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300])
-def test_ecdf_makes_uniform(storms, cell, tol=0.01):
+def test_ecdf_gets_same_result(storms, cell, tol=0.01):
     """Test that applying ecdf function recovers the 'ecdf' column"""
+    from hazGAN.utils import TEST_YEAR
 
     def ecdf(x:pd.Series):
         n = len(x)
         x = x.rank(method="average").to_numpy()
         return x / (n + 1)
     
-    test = storms[storms['grid'] == cell].copy()
+    test = storms[storms['time'].dt.year != TEST_YEAR].copy()
+    test = test[test['grid'] == cell].copy()
     test['ecdf_test'] = ecdf(test['u10'])
     test['difference'] = test['ecdf'] - test['ecdf_test']
     assert np.isclose(test['difference'], 0, atol=tol).all()
