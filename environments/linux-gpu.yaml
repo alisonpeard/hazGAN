@@ -22,6 +22,7 @@ dependencies:
     - cudatoolkit
     - nvidia::cuda-nvcc # https://discuss.tensorflow.org/t/installation-instruction-on-website-are-incomplete/16146
     - pip:
+        - rpy2 # optional
         - environs
         - tensorflow[and-cuda]
         - tensorrt           # for NVIDIA GPU -- gives error installing on cluster unless on GPU

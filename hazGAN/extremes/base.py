@@ -9,19 +9,69 @@ import warnings
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 
 
-def rank(x):
-    if x.std() == 0:
-        ranked = np.array([len(x) / 2 + 0.5] * len(x))
-    else:
-        temp = x.argsort()
-        ranks = np.empty_like(temp)
-        ranks[temp] = np.arange(len(x))
-        ranked = ranks + 1
-    return ranked
+class Empirical(object):
+    """Empirical distribution object. Defaults to Weibull
+    
+    Attributes:
+    -----------
+    x : array-like
+        Data to fit empirical distribution to.
+    alpha : float, optional (default=0)
+        Determine plotting position type.
+    beta : float, optional (default=0)
+        Determine plotting position type.
+    """
+    def __init__(self, x, alpha=0, beta=0) -> None:
+        self.x = np.sort(np.asarray(x))
+        self.n = len(self.x)
+
+        if self.n < 1:
+            raise ValueError("'x' must have 1 or more non-missing values")
+        
+        self.alpha = alpha
+        self.beta = beta
+        self.cdf = self._cdf()
+        self.quantile = self._quantile()
 
 
-def ecdf(x):
-    return rank(x) / (len(x) + 1)
+    def _cdf(self) -> callable:
+        x = self.x
+        n = self.n
+
+        unique_vals, unique_indices = np.unique(x, return_inverse=True)
+        counts = np.bincount(unique_indices)
+        cumulative_counts = np.cumsum(counts)
+        ecdf_vals = (
+            (cumulative_counts - self.alpha) /
+            (n + 1 - self.alpha - self.beta) 
+        )
+
+        def interpolator(query_points):
+            indices = np.searchsorted(unique_vals, query_points, side='right') - 1
+            indices = np.clip(indices, 0, len(ecdf_vals) - 1)
+            return ecdf_vals[indices]
+
+        return interpolator
+    
+    def _quantile(self) -> callable:
+        """Empirical quantile function."""
+        x = sorted(self.x)
+        u = sorted(self.cdf(x))
+
+        def interpolator(query_points):
+            return np.interp(query_points, u, x)
+        
+        return interpolator
+
+
+def ecdf(x: np.ndarray) -> callable:
+    """Simple wrapper to mimic R ecdf."""
+    return Empirical(x).cdf
+
+
+def quantile(x: np.ndarray) -> callable:
+    """Simple wrapper to mimic R ecdf."""
+    return Empirical(x).quantile
 
 
 def frechet(uniform):

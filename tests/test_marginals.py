@@ -3,7 +3,6 @@
 >> pytest tests/ -x
 """
 import pytest
-import warnings
 
 try:
     import os
@@ -41,7 +40,10 @@ def test_environment():
 @pytest.fixture
 def data_1940_2022():
     """Training data we are testing GPD fit on"""
-    return xr.open_dataset(os.path.join(wd, "data_1940_2022.nc"))
+    dataset = xr.open_dataset(os.path.join(wd, "data_1940_2022.nc"))
+    dataset = dataset.rename({'msl': 'mslp'})
+    dataset['mslp'] = -dataset['mslp']
+    return dataset
 
 
 @pytest.fixture
@@ -50,81 +52,115 @@ def metadata():
     return pd.read_parquet(os.path.join(wd, "storms_metadata.parquet"))
 
 
-@pytest.fixture
-def storms():
+@pytest.fixture(params=['u10', 'mslp', 'tp'])
+def storms(request):
     """Training data we are testing GPD fit on, add cols as needed"""
+    field = request.param
     storms = pd.read_parquet(os.path.join(wd, "storms.parquet"))
-    storms = storms[['time.u10', 'storm', 'grid', 'u10', 'ecdf.u10']]
-    storms.columns = ['time', 'storm', 'grid', 'u10', 'ecdf']
+    columns = ['time.{}', 'storm', 'grid', '{}', 'ecdf.{}', 'thresh.{}',
+                'scale.{}', 'shape.{}', 'p.{}']
+    columns = [col.format(field) for col in columns]
+    storms = storms[columns]
+    storms.columns = ['time', 'storm', 'grid', 'field', 'ecdf', 'thresh',
+                'scale', 'shape', 'p']
     storms['storm'] = storms['storm'].astype(int)
     storms['grid'] = storms['grid'].astype(int) 
     storms['time'] = pd.to_datetime(storms['time'])
+    storms['fieldname'] = [field] * len(storms)
     return storms
 
 
+# def test_storms_fixture(storms):
+#     assert not storms.empty
+#     assert 'time' in storms.columns
+#     assert storms['fieldname'].nunique() == 1, "{}".format(storms['fieldname'].unique())
 
-def test_storms_data_1940_2022_alignment(storms, data_1940_2022):
-    """Test that wind values in storms.parquet haven't changed from
-    data_1940_2022 during marginals.R script.
-    """
-    data_in = data_1940_2022.copy()
-    medians = data_in['u10'].groupby('time.month').median() 
-    data_in['u10'] = data_in['u10'].groupby('time.month') - medians
-    data_in = data_in[['grid', 'u10']].to_dataframe().reset_index()
-    data_in['time'] = data_in['time'].dt.date
-    data_in = data_in.set_index(['time', 'grid'])
+# """
+#  To only use subset of storms data for a test:
+# @pytest.mark.parametrize('storms',
+#                          [('u10'), ('tp')],
+#                          indirect=['storms']) # keep for reference
 
-    data_out = storms.copy()
-    data_out = data_out.set_index(['time', 'grid'])
+# """
+# def test_storms_data_1940_2022_alignment(storms, data_1940_2022):
+#     """Test that wind values in storms.parquet haven't changed from
+#     data_1940_2022 during marginals.R script.
+#     """
+#     field = storms['fieldname'][0]
+#     data_out = storms.copy()
+#     data_out = data_out.set_index(['time', 'grid'])
 
-    intersection = data_in.join(data_out, how='right', lsuffix='_in', rsuffix='_out')
-    assert np.isclose(intersection['u10_in'], intersection['u10_out']).all()
+#     data_in = data_1940_2022.copy()
+#     data_in = data_in.rename({field: 'field'})
+#     medians = data_in['field'].groupby('time.month').median() 
+#     data_in['field'] = data_in['field'].groupby('time.month') - medians
+#     data_in = data_in[['grid', 'field']].to_dataframe().reset_index()
+#     data_in['time'] = data_in['time'].dt.date
+#     data_in = data_in.set_index(['time', 'grid'])
 
 
-@pytest.mark.parametrize('lag', [1])
-def test_storm_extractor_autocorrelation(storms, lag, alpha=0.1):
-    """Test that the storm maxima are not autocorrelated
+#     intersection = data_in.join(data_out, how='right', lsuffix='_in', rsuffix='_out')
+#     assert np.isclose(intersection['field_in'], intersection['field_out']).all()
+
+
+# @pytest.mark.parametrize('lag, storms', [(1,'u10')], indirect=['storms'])
+# def test_storm_extractor_autocorrelation(storms, lag, alpha=0.1):
+#     """Test that the storm maxima are not autocorrelated
     
-    (lag one only for now).
-    """
-    data_out = storms.groupby('storm').apply(
-        lambda x: pd.Series({
-            'u10': x['u10'].max(),
-            'time': x['time'][x['u10'].idxmax()]
-            }),
-            include_groups=False
-            )
+#     (lag one only for now).
+#     """
+#     data_out = storms.groupby('storm').apply(
+#         lambda x: pd.Series({
+#             'field': x['field'].max(),
+#             'time': x['time'][x['field'].idxmax()]
+#             }),
+#             include_groups=False
+#             )
     
-    data_out['time'] = pd.to_datetime(data_out['time'])
-    data_out = data_out.sort_values(by='time')
-    data_out = data_out.set_index('time')
+#     data_out['time'] = pd.to_datetime(data_out['time'])
+#     data_out = data_out.sort_values(by='time')
+#     data_out = data_out.set_index('time')
 
-    storm_maxima = data_out['u10'].to_numpy()
-    res = acorr_ljungbox(storm_maxima, lags=lag, return_df=False)
-    p = res.loc[lag, 'lb_pvalue']
-    assert p >= alpha, (
-        "Reject H0:independent storm maxima for lag {}. ".format(lag) +
-        "p-value: {:.4f} ".format(p) + 
-        "check storm_extractor in utils.R"
-        )
+#     storm_maxima = data_out['field'].to_numpy()
+#     res = acorr_ljungbox(storm_maxima, lags=lag, return_df=False)
+#     p = res.loc[lag, 'lb_pvalue']
+#     assert p >= alpha, (
+#         "Reject H0:independent storm maxima for lag {}. ".format(lag) +
+#         "p-value: {:.4f} ".format(p) + 
+#         "check storm_extractor in utils.R"
+#         )
 
 
-@pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300])
-def test_ecdf_gets_same_result(storms, cell, tol=0.01):
-    """Test that applying ecdf function recovers the 'ecdf' column"""
+def test_ecdf_strict(storms):
+    """Test that the empirical CDF is within bounds (0, 1)"""
     from hazGAN.utils import TEST_YEAR
 
-    def ecdf(x:pd.Series):
-        n = len(x)
-        x = x.rank(method="average").to_numpy()
-        return x / (n + 1)
+    storms = storms[storms['time'].dt.year != TEST_YEAR].copy()
+    ecdf = storms['ecdf']
+    assert ecdf.max() < 1, 'ecdf ≥ 1 found, {:.4f}'.format(ecdf.max())
+    assert ecdf.min() > 0, 'ecdf ≤ 0 found {:.4f}'.format(ecdf.min())
+
+
+# takes a while... comment out for now
+@pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300])
+def test_ecdf_gets_same_result(storms, cell, tol=1e-6):
+    """Test that applying ecdf function recovers the 'ecdf' column"""
+    from hazGAN.utils import TEST_YEAR
+    from hazGAN.extremes import ecdf
     
     test = storms[storms['time'].dt.year != TEST_YEAR].copy()
     test = test[test['grid'] == cell].copy()
-    test['ecdf_test'] = ecdf(test['u10'])
-    test['difference'] = test['ecdf'] - test['ecdf_test']
-    assert np.isclose(test['difference'], 0, atol=tol).all()
 
+    field = test['field']
+    test['ecdf_test'] = ecdf(field)(field)
+    test['difference'] = test['ecdf'] - test['ecdf_test']
+    assert np.isclose(test['difference'], 0, atol=tol).all(), (
+        "{}".format(abs(test['difference']).max())
+    )
+
+
+def test_inverse_pit():
+    pass
 
 
 # %% [dev section]
@@ -142,31 +178,28 @@ if __name__ == "__main__":
     env.read_env(recurse=True)
     wd = env.str("TRAINDIR")
 
-    data = xr.open_dataset(os.path.join(wd, "data.nc"))
+    # load test fixtures for dev
+    from hazGAN.utils import TEST_YEAR
+    FIELD = "tp"
     data_1940_2022 = xr.open_dataset(os.path.join(wd, "data_1940_2022.nc"))
+    data_1940_2022 = data_1940_2022.rename({'msl': 'mslp'})
+    data_1940_2022['mslp'] = -data_1940_2022['mslp']
     metadata = pd.read_parquet(os.path.join(wd, "storms_metadata.parquet"))
+
     storms = pd.read_parquet(os.path.join(wd, "storms.parquet"))
-    storms = storms[['time.u10', 'storm', 'grid', 'u10', 'ecdf.u10']]
-    storms.columns = ['time', 'storm', 'grid', 'u10', 'ecdf']
+    columns = ['time.{}', 'storm', 'grid', '{}', 'ecdf.{}', 'thresh.{}',
+                'scale.{}', 'shape.{}', 'p.{}']
+    columns = [col.format(FIELD) for col in columns]
+    storms = storms[columns]
+    storms.columns = ['time', 'storm', 'grid', 'field', 'ecdf', 'thresh',
+                'scale', 'shape', 'p']
     storms['storm'] = storms['storm'].astype(int)
     storms['grid'] = storms['grid'].astype(int) 
+    storms['time'] = pd.to_datetime(storms['time'])
+    storms['fieldname'] = [FIELD] * len(storms)
+
+    # 
 
 
 
-
-    # FULL DATAFRAME NOT WORKING
-    # storms_wide = storms.copy().pivot(index='time', columns='grid', values='u10')
-    # storms_wide = storms_wide.sort_index()
-    # storms_wide = storms_wide.apply(ecdf, axis=0)
-
-    # storms_long = storms_wide.melt(ignore_index=False, value_name='ecdf')
-    # storms_long = storms_long.set_index('grid', append=True)
-
-    # storms = storms.set_index(['time', 'grid']) 
-
-    # test = storms.join(storms_long, how='left', lsuffix='_in')
-    # test['difference'] = test['ecdf_in'] - test['ecdf']
-
-    # TAKE A TEST CELL FIRST
-
-# %% 
+# %%

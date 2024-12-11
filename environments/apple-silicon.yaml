@@ -43,6 +43,7 @@ dependencies:
     - seaborn
     - pyarrow>=10.0.1
     - pip:
+        - rpy2 # optional
         - tensorflow==2.16.1 # -macos
         - tensorflow-metal
         - keras==3.0.5 # try next 02-12-2024

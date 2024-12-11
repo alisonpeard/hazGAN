@@ -28,6 +28,7 @@ dependencies:
     - pyarrow>=10.0.1
     - dask
     - pip:
+        - rpy2 # optional
         - environs
         - tensorflow>=2.16 
         - tensorflow-probability
