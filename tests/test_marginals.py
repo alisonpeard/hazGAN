@@ -1,6 +1,13 @@
 """Test marginals.R script outputs are correct.
 
 >> pytest tests/ -x
+
+Notes:
+------
+To only use subset of storms data for a test:
+@pytest.mark.parametrize('storms',
+                         [('u10'), ('tp')],
+                         indirect=['storms']) # keep for reference
 """
 import pytest
 
@@ -75,13 +82,6 @@ def test_storms_fixture(storms):
     assert 'time' in storms.columns
     assert storms['fieldname'].nunique() == 1, "{}".format(storms['fieldname'].unique())
 
-"""
- To only use subset of storms data for a test:
-@pytest.mark.parametrize('storms',
-                         [('u10'), ('tp')],
-                         indirect=['storms']) # keep for reference
-
-"""
 
 def test_storms_data_1940_2022_alignment(storms, data_1940_2022):
     """Test that wind values in storms.parquet haven't changed from
@@ -143,7 +143,7 @@ def test_ecdf_strict(storms):
 
 
 # takes a while... comment out for now
-@pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300])
+@pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300, 302])
 def test_ecdf(storms, cell, tol=1e-6):
     """Test that applying ecdf function recovers the 'ecdf' column"""
     from hazGAN.utils import TEST_YEAR
@@ -178,20 +178,20 @@ def test_quantile(storms, cell, tol=1e-6):
     )
 
 
-@pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300])
+@pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300, 302])
 def test_gpd_params(storms, cell, tol=1e-6) -> None:
     """Check only one parameter set per grid cell."""
-    test = storms[storms['grid'] == cell].copy()
+    test  = storms[storms['grid'] == cell].copy()
     scale = test['scale']
     shape = test['shape']
-    loc = test['thresh']
+    loc   = test['thresh']
 
     assert np.isclose(scale.min(), scale.max(), atol=tol)
     assert np.isclose(shape.min(), shape.max(), atol=tol)
     assert np.isclose(loc.min(), loc.max(), atol=tol)
 
 
-@pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300])
+@pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300, 302])
 def test_semigpd(storms, cell, tol=1) -> None:
     """Test semi-parametric fit reasonable close"""
     from hazGAN.statistics import GenPareto
@@ -213,7 +213,6 @@ def test_semigpd(storms, cell, tol=1) -> None:
         " for {}".format(fieldname) +
         " in grid cell {}".format(cell)
     )
-
 
 
 # %% [dev section]
@@ -252,40 +251,6 @@ if __name__ == "__main__":
     storms['time'] = pd.to_datetime(storms['time'])
     storms['fieldname'] = [FIELD] * len(storms)
 
-    # %%
-    from hazGAN.statistics import Empirical, GenPareto
-
-    cell = 0
-    test  = storms[storms['grid'] == cell].copy()
-    field = test['field']
-    scale = test['scale'].iloc[0]
-    shape = test['shape'].iloc[0]
-    loc   = test['thresh'].iloc[0]
-
-    fit = GenPareto(field, loc, scale, shape)
-    field_u = fit.forward(field)
-    field_x = fit.inverse(field_u)
-    difference = field - field_x
-
-    test['field_u'] = field_u
-    test['field_x'] = field_x
-    test['difference'] = difference
-    
-    assert abs(test['difference']).sum() < 5e-3
-
-    fit = Empirical(field)
-    test['ecdf_test'] = fit.forward(field)
-    test['quantile'] = fit.inverse(test['ecdf'])
-    
-    test = test.sort_values(by='absdiff', ascending=False)
-
-    test[['fieldname', 'thresh', 'p', 'ecdf_test', 'ecdf', 'field_u', 'quantile', 'field', 'field_x', 'difference']].head(10)
-    # %%
-    test[['fieldname', 'thresh', 'p', 'ecdf', 'field_u', 'field', 'field_x', 'difference']].tail(10)
-
-    # %%
-
-    diffmax = abs(difference).max()
-    diff_idxmax = abs(difference).idxmax()
+    # %% add dev here
 
 # %%

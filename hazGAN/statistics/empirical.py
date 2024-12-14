@@ -2,23 +2,23 @@ import numpy as np
 from scipy.stats import genpareto
 
 # the following functions are simple wrappers for the classes below
-def ecdf(x:np.ndarray) -> callable:
+def ecdf(x:np.ndarray, *args, **kwargs) -> callable:
     """Simple wrapper to mimic R ecdf."""
     return Empirical(x).forward
 
 
-def quantile(x:np.ndarray) -> callable:
+def quantile(x:np.ndarray, *args, **kwargs) -> callable:
     """Simple wrapper to mimic R ecdf but for quantile function."""
     return Empirical(x).inverse
 
 
-def semiparametric_cdf(x, params) -> callable:
+def semiparametric_cdf(x, params, *args, **kwargs) -> callable:
     """Semi-parametric CDF."""
     loc, scale, shape = params
     return GenPareto(x, loc, scale, shape).forward
 
 
-def semiparametric_quantile(u, params) -> callable:
+def semiparametric_quantile(u, params, *args, **kwargs) -> callable:
     """Semi-parametric quantile."""
     loc, scale, shape = params
     return GenPareto(u, loc, scale, shape).inverse
@@ -76,6 +76,8 @@ class Empirical(object):
             (n + 1 - self.alpha - self.beta) 
         )
 
+        assert max(ecdf_vals) < 1, "ECDF values exceed 1."
+
         def interpolator(query_points):
             indices = np.searchsorted(unique_vals, query_points, side='right') - 1
             indices = np.clip(indices, 0, len(ecdf_vals) - 1)
@@ -120,29 +122,60 @@ class GenPareto(Empirical):
         loc_u = self.ecdf(self.loc)
 
         # parametric tail
-        tail_mask = x >= self.loc
+        tail_mask = x > self.loc
         tail_x = x[tail_mask]
 
         tail_fit = genpareto.cdf(tail_x, self.shape, loc=self.loc, scale=self.scale)
         tail_u = 1 - (1 - loc_u) * (1 - tail_fit)
         u[tail_mask] = tail_u
 
+        try:
+            assert np.isfinite(u).all(), "Non-finite values in CDF."
+            assert not np.isnan(u).any(), "NaN values in CDF."
+            assert (u >= 0).all(), "CDF values below 0."
+            assert (u < 1).all(), "CDF values ≥ 1."
+        
+        except AssertionError as e:
+            print(e)
+            print("x: ", min(x), max(x))
+            print("u: ", min(u), max(u))
+            print("loc: ", self.loc)
+            print("scale: ", self.scale)
+            print("shape: ", self.shape)
+            raise e
+
         return u
 
 
-    def _semiquantile(self, uniform) -> np.ndarray:
+    def _semiquantile(self, u) -> np.ndarray:
         # empirical base
-        x = self.quantile(uniform)
+        x = self.quantile(u)
 
         # parametric tail
         loc_u = self.ecdf(self.loc)
-        tail_mask = uniform >= loc_u
-        tail_u = uniform[tail_mask]
+        tail_mask = u > loc_u
+        tail_u = u[tail_mask]
 
         tail_u = 1 - ((1 - tail_u) / (1 - loc_u))
         tail_x = genpareto.ppf(tail_u, self.shape, loc=self.loc, scale=self.scale)
 
         x[tail_mask] = tail_x
+
+        try:
+            assert np.isfinite(x).all(), "Non-finite values in quantile function."
+            assert not np.isnan(x).any(), "NaN values in quantile function."
+            
+        except AssertionError as e:
+            print(e)
+            print("u: ", min(u), max(u))
+            print("x: ", min(x), max(x))
+            print("loc: ", self.loc)
+            print("scale: ", self.scale)
+            print("shape: ", self.shape)
+            print("tail_fit min: ", min(tail_x))
+            print("tail_fit max: ", max(tail_x))
+            print("multiplicative constant: ", 1 - ((1 - tail_u) / (1 - loc_u)))
+            raise e
 
         return x
     

@@ -217,7 +217,7 @@ def main(datadir):
     thresh = np.array(gdf_params[[f"thresh_{var}" for var in CHANNELS]].values.reshape([ny, nx, nchannels]))
     scale = np.array(gdf_params[[f"scale_{var}" for var in CHANNELS]].values.reshape([ny, nx, nchannels]))
     shape = np.array(gdf_params[[f"shape_{var}" for var in CHANNELS]].values.reshape([ny, nx, nchannels]))
-    params = np.stack([shape, thresh, scale], axis=-2)
+    params = np.stack([thresh, scale, shape], axis=-2)
 
     # make an xarray dataset for training
     ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'channel'], U),
@@ -232,7 +232,7 @@ def main(datadir):
                             'lon': (['lon'], lon),
                             'time': times,
                             'channel': CHANNELS,
-                            'param': ['shape', 'loc', 'scale']
+                            'param': ['loc', 'scale', 'shape']
                     },
                     attrs={'CRS': 'EPSG:4326',
                             'u10': '10m Wind Speed [ms-1]',
@@ -253,6 +253,7 @@ def main(datadir):
     # ds = process_outliers(ds, THRESHOLD, datadir=datadir, visuals=VISUALISATIONS)
 
     # save
+    print("Finished! Saving to netcdf...")
     ds.to_netcdf(os.path.join(datadir, OUTFILES[0]))
     print("Saved to", os.path.join(datadir, OUTFILES[0]))
 
@@ -327,8 +328,8 @@ if __name__ == "__main__":
 # to add to pytest later
 # data_1940_2022 = xr.open_dataset(os.path.join(datadir, 'data_1940_2022.nc'))
 metadata = pd.read_parquet(os.path.join(datadir, "storms_metadata.parquet"))
-storms = pd.read_parquet(os.path.join(datadir, "storms.parquet"))
-data = xr.open_dataset(os.path.join(datadir, OUTFILES[0]))
+storms   = pd.read_parquet(os.path.join(datadir, "storms.parquet"))
+data     = xr.open_dataset(os.path.join(datadir, OUTFILES[0]))
 
 # %%
 # TEST 1: does data_1940_2022.nc match metadata – YES
