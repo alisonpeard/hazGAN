@@ -7,9 +7,9 @@ from tensorflow.keras.callbacks import Callback
 from tensorflow.nn import sigmoid_cross_entropy_with_logits as cross_entropy
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
-from ..extremes import chi_loss, inv_gumbel, pairwise_extremal_coeffs, chi2metric
+from ..statistics import chi_loss, inv_gumbel, pairwise_extremal_coeffs, chi2metric
 from ..utils import unpad
-from ..extremes.peak_over_threshold import inv_probability_integral_transform
+from ..statistics.peak_over_threshold import inv_probability_integral_transform
 from ..plot import figure_three 
 
 

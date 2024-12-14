@@ -7,7 +7,7 @@ from scipy.stats import gaussian_kde
 import matplotlib as mpl
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from .constants import channel_labels
-from .extremes import (
+from .statistics import (
     POT,
     get_extremal_coeffs_nd,
     pairwise_extremal_coeffs,

@@ -15,7 +15,7 @@ from tensorflow.keras import layers
 # from tensorflow.keras.optimizers.schedules import ExponentialDecay # will use again
 from inspect import signature
 
-from .extremes import chi_loss, inv_gumbel
+from .statistics import chi_loss, inv_gumbel
 from .tensorflow import DiffAugment
 from .tensorflow import wrappers
 
