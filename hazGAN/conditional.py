@@ -122,7 +122,8 @@ def define_generator(config, nchannels=2):
     # Output layer, 17 x 21 x 128 -> 20 x 24 x nchannels, resizing not inverse conv
     conv3 = layers.Resizing(20, 24, interpolation=config['interpolation'])(bn2)
     score = wrappers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same')(conv3)
-    o = score if config['gumbel'] else tf.keras.activations.sigmoid(score) # NOTE: check
+    o = tf.keras.activations.sigmoid(score) # approximately uniform 
+    o = -tf.math.log(-tf.math.log(o)) if config['gumbel'] else o # approximate Gumbel distribution
     return tf.keras.Model([z, condition, label], o, name="generator")
 
 
