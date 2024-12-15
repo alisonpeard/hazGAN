@@ -100,15 +100,4 @@ write_parquet(storms, paste0(WD, "/", "storms.parquet"))
 cat("\nSaved as:", paste0(WD, "/", "storms.parquet"))
 print(paste0(length(unique(storms$storm)), " events processed."))
 
-########### FIGURES ############################################################
-if (VISUALS) {
-  GRIDCELL <- 15 # nolint
-  gridcell <- storms[storms$grid == GRIDCELL, ]
-  par(mfrow = c(2, 2))
-  acf(gridcell$u10, main = "U10 cluster maxima ACF")
-  pacf(gridcell$u10, main = "U10 cluster maxima PACF")
-  acf(gridcell$mslp, main = "MSLP cluster maxima ACF")
-  pacf(gridcell$mslp, main = "MSLP cluster maxima PACF")
-}
-
 ########### END ###############################################################

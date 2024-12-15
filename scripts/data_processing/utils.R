@@ -42,8 +42,17 @@ ecdf <- function(x) {
   attr(rval, "call") <- sys.call()
   rval
 }
-get_ecdf <- function(x) {
-  return(ecdf(x)(x))
+scdf <- function(train, loc, scale, shape){
+  calculator <- function(x){
+    u <- ecdf(train)(x)
+    pthresh <- ecdf(train)(loc)
+    tail_mask <- x > loc
+    x_tail <- x[tail_mask]
+    u_tail <- 1 - (1 - pthresh) * (1 - pgpd(x_tail, loc, scale, shape))
+    u[tail_mask] <- u_tail
+    return(u)
+  }
+  return(calculator)
 }
 progress_bar <- function(n, prefix = "", suffix = "") {
   pb <- utils::txtProgressBar(min = 0, max = n, style = 3)
@@ -210,19 +219,6 @@ gpd_transformer <- function(df, metadata, var, q) {
       maxima$scale  <- scale
       maxima$shape  <- shape
       maxima$p      <- fit$p.value
-      
-      scdf <- function(train, loc, scale, shape){
-        calculator <- function(x){
-          u <- ecdf(train)(x)
-          pthresh <- ecdf(train)(loc)
-          tail_mask <- x > loc
-          x_tail <- x[tail_mask]
-          u_tail <- 1 - (1 - pthresh) * (1 - pgpd(x_tail, loc, scale, shape))
-          u[tail_mask] <- u_tail
-          return(u)
-        }
-        return(calculator)
-      }
 
       # empirical cdf transform
       maxima$scdf <- scdf(train$variable, thresh,

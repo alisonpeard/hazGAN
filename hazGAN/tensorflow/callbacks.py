@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from IPython.display import clear_output
 from ..statistics import chi_loss, inv_gumbel, pairwise_extremal_coeffs, chi2metric
 from ..utils import unpad
-from ..statistics.peak_over_threshold import inv_probability_integral_transform
+from ..statistics import invPIT
 from ..plot import figure_three 
 
 

@@ -9,7 +9,7 @@ else:
     from .empirical import quantile, semiparametric_quantile
 
 
-def inv_probability_integral_transform(
+def invPIT(
         u:np.ndarray,
         x:np.ndarray,
         theta:np.ndarray=None,
@@ -24,15 +24,15 @@ def inv_probability_integral_transform(
         Uniform marginals with shape [n, h, w, c] or [n, h * w, c]
     x : np.ndarray
         Original data for quantile calculation
-    theta : np.ndarray, optional
+    theta : np.ndarray, optional (default = None)
         Parameters of fitted Generalized Pareto Distribution (GPD)
-    gumbel_margins : bool, default False
+    gumbel_margins : bool, optional (default = False)
         Whether to apply inverse Gumbel transform
     
     Returns
     -------
     np.ndarray
-        Transformed marginals with original shape
+        Transformed marginals with same shape as input u
     """
     u = inv_gumbel(u).numpy() if gumbel_margins else u
 
@@ -57,7 +57,7 @@ def inv_probability_integral_transform(
             "Uniform marginals must have dimensions [n, h, w, c] or [n, h * w, c]."
             )    
 
-    # vectorised numpy implementation
+    # vectorised numpy transform
     def transform(x, u, theta, i, c):
         x_i = x[:, i, c]
         u_i = u[:, i, c]
@@ -72,14 +72,14 @@ def inv_probability_integral_transform(
         transform(x, u, theta, i, channel)
         for i in range(hw) for channel in range(c) 
     ])
+
     quantiles = quantiles.T
     quantiles = quantiles.reshape(*original_shape)
+
     return quantiles
 
 
-# %% Unit tests
-
-# load data.nc
+# %% Developing tests
 if __name__ == "__main__":
     import os
     import pandas as pd
@@ -109,65 +109,3 @@ if __name__ == "__main__":
     data = data.sel(time=mask)
 
     # %% test alignment with cellwise
-    import numpy as np
-    from empirical import GenPareto, Empirical
-
-    def mape(x, y):
-        if np.isclose(x, 0).any():
-            x = x + 1e-6
-        return np.mean(np.abs((x - y) / x)) * 100
-
-    # %% big comparison of different fits
-    differences = []
-    for ds in [data, data_test]:
-        difference_dict = {}
-        for FIELD in ['u10', 'tp', 'mslp']:
-            maxdiffs_emp = []
-            maxdiffs_semi = []
-            maxdiffs_gpd = []
-            for CELL in range(1, 18*22):
-                test = data.sel(field=FIELD)
-                test = test.where(test['grid'] == CELL, drop=True)
-                test
-
-                # test GPD -> forward -> inverse
-                scale = test.sel(param='scale')['params'].data.item()
-                shape = test.sel(param='shape')['params'].data.item()
-                loc   = test.sel(param='loc')['params'].data.item()
-                x     = test['anomaly'].data.squeeze()
-
-                gpd_fit = GenPareto(x, loc, scale, shape)
-                fit  = Empirical(x)
-
-                # pure empirical
-                field_u = fit.forward(x)
-                field_x = fit.inverse(field_u)
-                difference = x - field_x
-                maxdiff = difference.max()
-                maxdiffs_emp.append(maxdiff)
-
-                # pure GPD
-                field_u = gpd_fit.forward(x)
-                field_x = gpd_fit.inverse(field_u)
-                difference = x - field_x
-                maxdiff = difference.max()
-                maxdiffs_gpd.append(maxdiff)
-
-                # empirical + GPD
-                field_u = fit.forward(x)
-                field_x = gpd_fit.inverse(field_u)
-                difference = x - field_x
-                maxdiff = difference.max()
-                maxdiffs_semi.append(maxdiff)
-            
-            difference_dict[FIELD] = {
-                'empirical': np.sum(maxdiffs_emp),
-                'gpd': np.sum(maxdiffs_gpd),
-                'semi': np.sum(maxdiffs_semi)
-                }
-        differences.append(difference_dict)
-    differences = {'train': differences[0], 'test': differences[1]}
-
-    # %%
-    reform = {(outerKey, innerKey): values for outerKey, innerDict in differences.items() for innerKey, values in innerDict.items()}
-    differences = pd.DataFrame(reform).T

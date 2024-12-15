@@ -94,4 +94,5 @@ if __name__ == "__main__":
     differences = {'train': differences[0], 'test': differences[1]}
     reform = {(outerKey, innerKey): values for outerKey, innerDict in differences.items() for innerKey, values in innerDict.items()}
     differences = pd.DataFrame(reform).T
+
 # %%
