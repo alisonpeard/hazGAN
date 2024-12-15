@@ -46,7 +46,7 @@ def test_environment():
 
 @pytest.fixture
 def data_1940_2022():
-    """Training data we are testing GPD fit on"""
+    """Training data we are testing GPD fit on."""
     dataset = xr.open_dataset(os.path.join(wd, "data_1940_2022.nc"))
     dataset = dataset.rename({'msl': 'mslp'})
     dataset['mslp'] = -dataset['mslp']
@@ -55,13 +55,13 @@ def data_1940_2022():
 
 @pytest.fixture
 def metadata():
-    """Training data we are testing GPD fit on"""
+    """Training data we are testing GPD fit on."""
     return pd.read_parquet(os.path.join(wd, "storms_metadata.parquet"))
 
 
 @pytest.fixture(params=['u10', 'mslp', 'tp'])
 def storms(request):
-    """Training data we are testing GPD fit on, add cols as needed"""
+    """Training data we are testing GPD fit on, add cols as needed."""
     field = request.param
     storms = pd.read_parquet(os.path.join(wd, "storms.parquet"))
     columns = ['time.{}', 'storm', 'grid', '{}', 'ecdf.{}', 'thresh.{}',
@@ -78,14 +78,15 @@ def storms(request):
 
 
 def test_storms_fixture(storms):
+    """Check storms loaded correctly."""
     assert not storms.empty
     assert 'time' in storms.columns
     assert storms['fieldname'].nunique() == 1, "{}".format(storms['fieldname'].unique())
 
 
-def test_storms_data_1940_2022_alignment(storms, data_1940_2022):
+def test_storms_data_1940_2022_alignment(data_1940_2022, storms):
     """Test that wind values in storms.parquet haven't changed from
-    data_1940_2022 during marginals.R script.
+    input (data_1940_2022) during marginals.R script.
     """
     field = storms['fieldname'][0]
     data_out = storms.copy()
@@ -98,15 +99,16 @@ def test_storms_data_1940_2022_alignment(storms, data_1940_2022):
     data_in = data_in[['grid', 'field']].to_dataframe().reset_index()
     data_in['time'] = data_in['time'].dt.date
     data_in = data_in.set_index(['time', 'grid'])
-
-
     intersection = data_in.join(data_out, how='right', lsuffix='_in', rsuffix='_out')
-    assert np.isclose(intersection['field_in'], intersection['field_out']).all()
+
+    assert np.isclose(intersection['field_in'], intersection['field_out']).all(), (
+        f"Mismatch in {field} values between data_1940_2022.nc and storms.parquet"
+    )
 
 
 @pytest.mark.parametrize('lag, storms', [(1,'u10')], indirect=['storms'])
-def test_storm_extractor_autocorrelation(storms, lag, alpha=0.1):
-    """Test that the storm maxima are not autocorrelated
+def test_storm_maxima_autocorrelation(storms, lag, alpha=0.1):
+    """Test that the storm maxima are not autocorrelated.
     
     (lag one only for now).
     """
@@ -132,7 +134,7 @@ def test_storm_extractor_autocorrelation(storms, lag, alpha=0.1):
         )
 
 
-def test_ecdf_strict(storms):
+def test_ecdf_values_strict(storms):
     """Test that the empirical CDF is within bounds (0, 1)"""
     from hazGAN.utils import TEST_YEAR
 
@@ -140,6 +142,47 @@ def test_ecdf_strict(storms):
     ecdf = storms['ecdf']
     assert ecdf.max() < 1, 'ecdf ≥ 1 found, {:.4f}'.format(ecdf.max())
     assert ecdf.min() > 0, 'ecdf ≤ 0 found {:.4f}'.format(ecdf.min())
+
+
+@pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300, 302])
+def test_ecdf_function_open_max(storms, cell):
+    """Test that the empirical CDF is within bounds (0, 1)"""
+    from hazGAN.statistics import ecdf
+
+    test = storms[storms['grid'] == cell].copy()
+    field = test['field']
+    ecdf_function = ecdf(field)
+
+    results = []
+    for pow in [2, 4, 6, 8]:
+        result = ecdf_function(10**pow)
+        results.append(result)
+    results = np.array(results)
+
+    assert all(results < 1), (
+        "ecdf ≥ 1 found, {}".format(max(results))
+    )
+
+
+@pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300, 302])
+def test_ecdf_function_open_min(storms, cell):
+    """Test that the empirical CDF is within bounds (0, 1)"""
+    from hazGAN.statistics import ecdf
+
+    test = storms[storms['grid'] == cell].copy()
+    field = test['field']
+    ecdf_function = ecdf(field)
+
+    results = []
+    for pow in [2, 4, 6, 8]:
+        result = ecdf_function(10**-pow)
+        results.append(result)
+    results = np.array(results)
+
+    assert all(results > 0), (
+        "ecdf ≤ 0 found, {}".format(min(results))
+    )
+        
 
 
 # takes a while... comment out for now
@@ -193,7 +236,7 @@ def test_gpd_params(storms, cell, tol=1e-6) -> None:
 
 @pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300, 302])
 def test_semigpd(storms, cell, tol=1) -> None:
-    """Test semi-parametric fit reasonable close"""
+    """Test semi-parametric fit reasonable close."""
     from hazGAN.statistics import GenPareto
     
     test  = storms[storms['grid'] == cell].copy()
@@ -252,5 +295,14 @@ if __name__ == "__main__":
     storms['fieldname'] = [FIELD] * len(storms)
 
     # %% add dev here
+    from hazGAN.statistics import ecdf
 
+    grid = 1
+    test = storms[storms['grid'] == grid].copy()
+    field = test['field']
+    ecdf_function = ecdf(field)
+
+    for pow in [2, 4, 6, 8]:
+        result = ecdf_function(10**pow)
+        print(result)
 # %%

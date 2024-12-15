@@ -82,87 +82,92 @@ def inv_probability_integral_transform(
 # load data.nc
 if __name__ == "__main__":
     import os
+    import pandas as pd
     import xarray as xr
     from environs import Env
     import matplotlib.pyplot as plt
     from hazGAN.utils import TEST_YEAR
+    from hazGAN.xarray import make_grid
 
     env = Env()
     env.read_env(recurse=True)
     datadir = env.str("TRAINDIR")
 
+    
+    storms = pd.read_parquet(os.path.join(datadir, "storms.parquet"))
+    storms['time.u10'] = pd.to_datetime(storms['time.u10'])
+    storms['time.tp'] = pd.to_datetime(storms['time.tp'])
+    storms['time.mslp'] = pd.to_datetime(storms['time.mslp'])
+    storms = storms[storms['time.u10'].dt.year != TEST_YEAR]
+    storms_test = storms[storms['time.u10'].dt.year == TEST_YEAR]
+
     data = xr.open_dataset(os.path.join(datadir, "data.nc"))
     mask = data['time.year'] != TEST_YEAR
     test_mask = data['time.year'] == TEST_YEAR
-    test = data.sel(time=test_mask)
+
+    data_test = data.sel(time=test_mask)
     data = data.sel(time=mask)
 
-    # %%
-    u = data['uniform'].data
-    x = data['anomaly'].data
-    theta = data['params'].data
-    u_test = test['uniform'].data
+    # %% test alignment with cellwise
+    import numpy as np
+    from empirical import GenPareto, Empirical
 
-    print("x.shape: {},\ntheta.shape: {}".format(x.shape, theta.shape))
-    plt.imshow(u[0, ..., 0])
-    
-    # %% test fit 
-    THETA = theta
-    CHANNEL = 2
-    fitted = inv_probability_integral_transform(u, x, theta=THETA, gumbel_margins=False)
+    def mape(x, y):
+        if np.isclose(x, 0).any():
+            x = x + 1e-6
+        return np.mean(np.abs((x - y) / x)) * 100
 
-    difference = fitted - x
-    difference_per_sample = np.abs(difference).sum(axis=(1, 2, 3))
-    idxmax = np.argmax(difference_per_sample)
-    print("Sample with max difference: {}".format(idxmax))
+    # %% big comparison of different fits
+    differences = []
+    for ds in [data, data_test]:
+        difference_dict = {}
+        for FIELD in ['u10', 'tp', 'mslp']:
+            maxdiffs_emp = []
+            maxdiffs_semi = []
+            maxdiffs_gpd = []
+            for CELL in range(1, 18*22):
+                test = data.sel(field=FIELD)
+                test = test.where(test['grid'] == CELL, drop=True)
+                test
 
-    difference_per_cell = np.abs(difference).sum(axis=(0, 3)).ravel()
-    idxmax_cell = np.unravel_index(np.argmax(difference_per_cell), difference_per_cell.shape)
-    print("Cell with max difference: {}".format(idxmax_cell))
+                # test GPD -> forward -> inverse
+                scale = test.sel(param='scale')['params'].data.item()
+                shape = test.sel(param='shape')['params'].data.item()
+                loc   = test.sel(param='loc')['params'].data.item()
+                x     = test['anomaly'].data.squeeze()
 
-    sample = 779 # idxmax
-    fig, axs = plt.subplots(1, 4, figsize=(15, 5))
+                gpd_fit = GenPareto(x, loc, scale, shape)
+                fit  = Empirical(x)
 
-    im = axs[0].imshow(x[sample, ..., CHANNEL])
-    axs[0].set_title("Anomaly")
-    plt.colorbar(im, ax=axs[0], fraction=0.046, shrink=0.8)
+                # pure empirical
+                field_u = fit.forward(x)
+                field_x = fit.inverse(field_u)
+                difference = x - field_x
+                maxdiff = difference.max()
+                maxdiffs_emp.append(maxdiff)
 
-    im = axs[1].imshow(u[sample, ..., CHANNEL])
-    axs[1].set_title("Uniform")
-    plt.colorbar(im, ax=axs[1], fraction=0.046, shrink=0.8)
+                # pure GPD
+                field_u = gpd_fit.forward(x)
+                field_x = gpd_fit.inverse(field_u)
+                difference = x - field_x
+                maxdiff = difference.max()
+                maxdiffs_gpd.append(maxdiff)
 
-    im = axs[2].imshow(fitted[sample, ..., CHANNEL])
-    axs[2].set_title("Inverse PIT")
-    plt.colorbar(im, ax=axs[2], fraction=0.046, shrink=0.8)
-    
-
-    im = axs[3].imshow(difference[sample, ..., CHANNEL], cmap="Spectral_r")
-    plt.colorbar(im, ax=axs[3], fraction=0.046, shrink=0.8)
-    axs[3].set_title("Difference")
-    
-    difference_flat = difference.flatten()
-    print("Max difference: {:.4f}".format(np.abs(difference_flat).max()))
-    print("Mean difference: {:.4f}".format(np.abs(difference_flat).mean()))
-
-    # %% test predictions
-    test = inv_probability_integral_transform(u_test, x, theta=THETA, gumbel_margins=False)
+                # empirical + GPD
+                field_u = fit.forward(x)
+                field_x = gpd_fit.inverse(field_u)
+                difference = x - field_x
+                maxdiff = difference.max()
+                maxdiffs_semi.append(maxdiff)
+            
+            difference_dict[FIELD] = {
+                'empirical': np.sum(maxdiffs_emp),
+                'gpd': np.sum(maxdiffs_gpd),
+                'semi': np.sum(maxdiffs_semi)
+                }
+        differences.append(difference_dict)
+    differences = {'train': differences[0], 'test': differences[1]}
 
     # %%
-    from hazGAN import Empirical, ecdf, quantile
-
-    grid = 300
-    channel = 0
-    n, h, w, c = x.shape
-    u_test = u_test.reshape(len(u_test), h*w, c)[:, grid, channel]
-    x = x.reshape(n, h*w, c)[:, grid, channel]
-
-    # %%
-    quantile(x)(u_test).max()
-    u_test.max()
-    # %%
-    from hazGAN import semiparametric_quantile, semiparametric_cdf
-
-    theta = theta.reshape(h*w, 3, 3)[grid, :, channel]
-    semiparametric_quantile(x, theta)(u_test).max()
-    semiparametric_cdf(x, theta)(x).max()
-# %%
+    reform = {(outerKey, innerKey): values for outerKey, innerDict in differences.items() for innerKey, values in innerDict.items()}
+    differences = pd.DataFrame(reform).T

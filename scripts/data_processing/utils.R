@@ -34,7 +34,8 @@ ecdf <- function(x) {
   }
   vals <- unique(x)
   rval <- approxfun(vals, cumsum(tabulate(match(x, vals))) / (n + 1),
-                    method = "constant", yleft = 0, yright = 1,
+                    method = "constant", #yleft = 0, yright = 1,
+                    rule = 2, # take values at extremes
                     f = 0, ties = "ordered")
   class(rval) <- c("ecdf", "stepfun", class(rval))
   assign("nobs", n, envir = environment(rval))
@@ -122,7 +123,7 @@ storm_extractor <- function(daily, var, rfunc) {
     summarise(
       variable = max(variable),
       time = time,
-      storm.size = "storm.size"
+      storm.size = storm.size
     )
 
   # Ljung-box again
@@ -182,12 +183,6 @@ gpd_transformer <- function(df, metadata, var, q) {
     
     train <- maxima[year(maxima$time) %ni% TEST.YEARS,]
     thresh <- quantile(train$variable, q)
-    
-    # dev start
-    if (i == 122) {
-      cat(paste0("\nMaxima u10 for gridcell ", i, ": ", max(train$variable), '\n'))
-    }
-    # dev end
 
     # validation
     excesses <- maxima$variable[maxima$variable >= thresh]
@@ -215,8 +210,23 @@ gpd_transformer <- function(df, metadata, var, q) {
       maxima$scale  <- scale
       maxima$shape  <- shape
       maxima$p      <- fit$p.value
+      
+      scdf <- function(train, loc, scale, shape){
+        calculator <- function(x){
+          u <- ecdf(train)(x)
+          pthresh <- ecdf(train)(loc)
+          tail_mask <- x > loc
+          x_tail <- x[tail_mask]
+          u_tail <- 1 - (1 - pthresh) * (1 - pgpd(x_tail, loc, scale, shape))
+          u[tail_mask] <- u_tail
+          return(u)
+        }
+        return(calculator)
+      }
 
       # empirical cdf transform
+      maxima$scdf <- scdf(train$variable, thresh,
+                          scale, shape)(maxima$variable)
       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
 
       maxima # assigns maxima to newrow

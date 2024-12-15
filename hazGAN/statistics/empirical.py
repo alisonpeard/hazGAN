@@ -94,7 +94,6 @@ class Empirical(object):
             return np.interp(query_points, u, x)
         
         return interpolator
-    
 
 
 class GenPareto(Empirical):
@@ -132,8 +131,13 @@ class GenPareto(Empirical):
         try:
             assert np.isfinite(u).all(), "Non-finite values in CDF."
             assert not np.isnan(u).any(), "NaN values in CDF."
-            assert (u >= 0).all(), "CDF values below 0."
-            assert (u < 1).all(), "CDF values ≥ 1."
+
+            if self.shape < 0:
+                assert (u <= 1).all(), "CDF values above 1."
+                assert (u > 0).all(), "CDF values ≤ 0."
+            else:
+                assert (u >= 0).all(), "CDF values below 0."
+                assert (u < 1).all(), "CDF values ≥ 1."
         
         except AssertionError as e:
             print(e)
@@ -164,7 +168,7 @@ class GenPareto(Empirical):
         try:
             assert np.isfinite(x).all(), "Non-finite values in quantile function."
             assert not np.isnan(x).any(), "NaN values in quantile function."
-            
+
         except AssertionError as e:
             print(e)
             print("u: ", min(u), max(u))
