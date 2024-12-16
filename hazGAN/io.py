@@ -55,7 +55,7 @@ def label_data(data, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}) -> xr.DataAr
 
 
 def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3, 20:1/3},
-         train_size=0.8, channels=['u10', 'tp'], image_shape=(18, 22),
+         train_size=0.8, fields=['u10', 'tp'], image_shape=(18, 22),
          padding_mode='reflect', gumbel=True, batch_size=16,
          verbose=True) -> tuple[Dataset, Dataset, dict]:
     """Main data loader for training.
@@ -79,7 +79,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
         os.path.join(datadir, 'data_pretrain.nc'),
         chunks={'time': 1000}
         )
-    pretrain = pretrain.transpose("time", "lat", "lon", "channel")
+    pretrain = pretrain.transpose("time", "lat", "lon", "field")
 
     print("Pretrain shape: {}".format(pretrain['uniform'].data.shape))
     print("Train shape: {}".format(data['uniform'].data.shape))
@@ -89,18 +89,18 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
 
     # conditioning & sampling variables
     metadata['epoch'] = np.datetime64('1950-01-01')
-    data['maxwind'] = data.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat'])
+    data['maxwind'] = data.sel(field='u10')['anomaly'].max(dim=['lon', 'lat'])
     data['label'] = label_data(data, label_ratios)
     data['season'] = data['time.season']
     data['time'] = (data['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
-    data = data.sel(channel=channels)
+    data = data.sel(field=fields)
 
     # conditioning & sampling variables (pretrain)
-    pretrain['maxwind'] = pretrain.sel(channel='u10')['anomaly'].max(dim=['lon', 'lat']) # anomaly
+    pretrain['maxwind'] = pretrain.sel(field='u10')['anomaly'].max(dim=['lon', 'lat']) # anomaly
     pretrain['label'] = (0 * pretrain['maxwind']).astype(int) # zero indicates normal climate data
     pretrain['season'] = pretrain['time.season']
     pretrain['time'] = (pretrain['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
-    pretrain = pretrain.sel(channel=channels)
+    pretrain = pretrain.sel(field=fields)
 
     if verbose:
         print("\nData summary:\n-------------")
@@ -219,7 +219,7 @@ if False:
         
         def __init__(self, datadir:str, condition="maxwind",
                     label_ratios={'pre':1/3, 7: 1/3, 20:1/3},
-                    train_size=0.8, channels=['u10', 'tp'],
+                    train_size=0.8, fields=['u10', 'tp'],
                     image_shape=(18, 22), padding_mode='reflect',
                     gumbel=True, batch_size=16, **kwargs):
             super().__init__(**kwargs)
@@ -228,7 +228,7 @@ if False:
             self.condition = condition
             self.label_ratios = label_ratios,
             self.train_size = train_size
-            self.channels = channels
+            self.fields = fields
             self.image_shape = image_shape
             self.padding_mode = padding_mode
             self.gumbel = gumbel

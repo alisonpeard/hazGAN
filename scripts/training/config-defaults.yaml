@@ -6,8 +6,8 @@ train_size:
   value: 0.8 # 840 # 50
 batch_size:
   value: 64 # for GPU constraints
-channels:
-  desc: Which channels to model, subsets of ['u10', 'tp', 'mslp']
+fields:
+  desc: Which fields to model, subsets of ['u10', 'tp', 'mslp']
   value: ['u10', 'mslp']
 label_ratios:
   desc: Dataset representation, by value

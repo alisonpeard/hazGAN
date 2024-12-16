@@ -233,6 +233,7 @@ gpd_transformer <- function(df, metadata, var, q) {
       maxima$shape  <- NA
       maxima$p      <- 0
       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
+      maxima$scdf <- maxima$ecdf
       return(maxima)
     })
     transformed <- rbind(transformed, newrow)

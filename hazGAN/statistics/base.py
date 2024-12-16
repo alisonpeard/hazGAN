@@ -31,7 +31,7 @@ def inv_exp(uniform):
 
 
 def gumbel(uniform):
-    """Gumbel"""
+    """Make Gumbel"""
     maxval = tf.reduce_max(uniform) # .numpy()
     if maxval == 1:
         warnings.warn("Values == 1 found, scaling by 1e-6")
@@ -42,7 +42,7 @@ def gumbel(uniform):
 
 
 def inv_gumbel(x):
-    """Inverse Gumbel"""
+    """Gumbel -> uniform"""
     return tf.math.exp(-tf.math.exp(-x))
 
 

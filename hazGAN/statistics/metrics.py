@@ -71,7 +71,7 @@ def pairwise_extremal_coeffs(uniform):
     shape = tf.shape(uniform)
     n, h, w = shape[0], shape[1], shape[2]
     uniform = tf.reshape(uniform, (n, h * w))
-    frechet = inv_frechet(uniform)
+    frechet = inverted_frechet(uniform)
 
     minima = minner_product(tf.transpose(frechet), frechet)
 
@@ -136,7 +136,7 @@ def get_extremal_coeffs_nd(marginals, sample_inds):
     n, h, w, d = marginals.shape
     data = marginals.reshape(n, h * w, d)
     data = data[:, sample_inds, :]
-    frechet = inv_frechet(data)
+    frechet = inverted_frechet(data)
     ecs = {}
     for i in range(len(sample_inds)):
         ecs[sample_inds[i]] = raw_extremal_coeff_nd(frechet[:, i, :])

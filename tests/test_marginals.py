@@ -277,32 +277,52 @@ if __name__ == "__main__":
     from hazGAN.utils import TEST_YEAR
 
     FIELD = "u10"
+    data = xr.open_dataset(os.path.join(wd, "data.nc"))
+    data = data.sel(field=[FIELD])
+
     data_1940_2022 = xr.open_dataset(os.path.join(wd, "data_1940_2022.nc"))
     data_1940_2022 = data_1940_2022.rename({'msl': 'mslp'})
     data_1940_2022['mslp'] = -data_1940_2022['mslp']
     metadata = pd.read_parquet(os.path.join(wd, "storms_metadata.parquet"))
 
     storms = pd.read_parquet(os.path.join(wd, "storms.parquet"))
-    columns = ['time.{}', 'storm', 'grid', '{}', 'ecdf.{}', 'thresh.{}',
+    columns = ['time.{}', 'storm', 'grid', '{}', 'scdf.{}', 'thresh.{}',
                 'scale.{}', 'shape.{}', 'p.{}']
     columns = [col.format(FIELD) for col in columns]
     storms = storms[columns]
-    storms.columns = ['time', 'storm', 'grid', 'field', 'ecdf', 'thresh',
+    storms.columns = ['time', 'storm', 'grid', 'field', 'scdf', 'thresh',
                 'scale', 'shape', 'p']
     storms['storm'] = storms['storm'].astype(int)
     storms['grid'] = storms['grid'].astype(int) 
     storms['time'] = pd.to_datetime(storms['time'])
     storms['fieldname'] = [FIELD] * len(storms)
 
-    # %% add dev here
-    from hazGAN.statistics import ecdf
+    # %%
+    def test_invPIT(storms, data):
+        from hazGAN.statistics import GenPareto
+        from hazGAN.statistics import invPITDataset
+        from hazGAN import make_grid
+        
+        # apply invPIT to the data
+        x_array = invPITDataset(data)
+        field = data.field.values[0]
+        n, h, w, _ = x_array.shape  
 
-    grid = 1
-    test = storms[storms['grid'] == grid].copy()
-    field = test['field']
-    ecdf_function = ecdf(field)
+        x_array = make_grid(x_array)
 
-    for pow in [2, 4, 6, 8]:
-        result = ecdf_function(10**pow)
-        print(result)
-# %%
+        for cell in range(h * w):
+            gridcell = storms[storms['grid'] == cell].reset_index(drop=True)
+            loc = gridcell['thresh'][0]
+            scale = gridcell['scale'][0]
+            shape = gridcell['shape'][0]
+            x = gridcell['field'][:]
+            u = gridcell['scdf'][:]
+
+            genpareto = GenPareto(x, loc, scale, shape)
+            x_cell = genpareto.inverse(u)
+
+            x_data = x_array.where(x_array['grid']==0, drop=True)['x'].data
+            x_data = x_data.squeeze()
+
+            assert np.allclose(x_data, x_cell), "Mismatch in cell {} for {}.".format(cell, field)
+    # %%

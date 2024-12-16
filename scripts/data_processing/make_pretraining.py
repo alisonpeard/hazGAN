@@ -33,13 +33,14 @@ from datetime import datetime
 import subprocess, os
 
 from hazGAN import sliding_windows
-
+from hazGAN.statistics import ecdf
 from make_training import process_outliers # borrow this function
 
 RESOLUTION = (22, 18)
 VISUALISATIONS = True
 WINDOWS = [2, 5, 8, 10, 12, 15, 20]
 THRESHOLD = 0.85 # rough manual bisection for this
+PROCESS_OUTLIERS = False
 
 INFILES = ['data_1940_2022.nc', 'data.nc']
 OUTFILES = ['data_pretrain.nc', 'data_pretrain.npz']
@@ -51,28 +52,23 @@ def notify(title, subtitle, message) -> None:
             """.format(message, title, subtitle))
 
 
-def marginal_ecdf(x, xp, up) -> np.ndarray:
-    x_sorted = np.sort(x.copy())
-    xp_sorted = np.sort(xp.copy())
-    up_sorted = np.sort(up.copy())
-    u = np.interp(x_sorted, xp_sorted, up_sorted)
-    return u
-
-
-def ecdf(ds, ds_train, index='time') -> xr.DataArray:
+def vectorised_ecdf(ds, ds_train, index='time') -> xr.DataArray:
     """""
     Interpolate the empirical CDF of the training data onto the pretraining data.
 
     https://docs.xarray.dev/en/stable/examples/apply_ufunc_vectorize_1d.html
     """
     X = ds_train['anomaly']
-    U = ds_train['uniform']
     x = ds['anomaly']
+
+    def unfunc_ecdf(x, xtrain) -> np.ndarray:
+        u = ecdf(xtrain)(x)
+        return u
     
     u = xr.apply_ufunc(
-        marginal_ecdf, 
-        x, X, U,
-        input_core_dims=[[index], [index], [index]],
+        unfunc_ecdf, 
+        x, X,
+        input_core_dims=[[index], [index]],
         output_core_dims=[[index]],
         exclude_dims={index},
         join='outer',
@@ -134,17 +130,17 @@ def main(datadir):
     #  make a new xarray dataset
     ds_window = xr.Dataset(
         {
-            'anomaly': (('time', 'latitude', 'longitude', 'channel'), X),
+            'anomaly': (('time', 'lat', 'lon', 'field'), X),
             'window_length': (('time',), window_length)
         },
         coords={
             'time': time, #range(u10.shape[0]),
-            'latitude': ds.latitude,
-            'longitude': ds.longitude,
-            'channel': ['u10', 'tp', 'mslp']
+            'lat': ds.lat,
+            'lon': ds.lon,
+            'field': ['u10', 'tp', 'mslp']
             }
     )
-    ds_window = ds_window.rename({'latitude': 'lat', 'longitude': 'lon'})
+    # ds_window = ds_window.rename({'latitude': 'lat', 'longitude': 'lon'})
     ds = ds_window
 
     # add metadata
@@ -156,17 +152,19 @@ def main(datadir):
     ds.attrs['note'] = "PIT by interpolation from storm data."
 
     # interpolate the empirical CDF
-    ds['uniform'] = ecdf(ds, ds_train)
+    ds['uniform'] = vectorised_ecdf(ds, ds_train)
+
 
     if VISUALISATIONS:
         fig, axs = plt.subplots(2, 2, figsize=(12, 8))
-        ds.isel(lon=0, lat=0, channel=0).anomaly.plot.hist(ax=axs[0, 0])
-        ds.isel(lon=0, lat=0, channel=0).uniform.plot.hist(ax=axs[0, 1])
-        ds.isel(time=100, channel=0).anomaly.plot.contourf(ax=axs[1, 0], levels=20, cmap='Spectral_r')
-        ds.isel(time=100, channel=0).uniform.plot.contourf(ax=axs[1, 1], levels=20, cmap='Spectral_r')
+        ds.isel(lon=0, lat=0, field=0).anomaly.plot.hist(ax=axs[0, 0])
+        ds.isel(lon=0, lat=0, field=0).uniform.plot.hist(ax=axs[0, 1])
+        ds.isel(time=100, field=0).anomaly.plot.contourf(ax=axs[1, 0], levels=20, cmap='Spectral_r')
+        ds.isel(time=100, field=0).uniform.plot.contourf(ax=axs[1, 1], levels=20, cmap='Spectral_r')
 
     # process outliers
-    # ds = process_outliers(ds, THRESHOLD, visuals=VISUALISATIONS)
+    if PROCESS_OUTLIERS:
+        ds = process_outliers(ds, THRESHOLD, visuals=VISUALISATIONS)
 
     # save to netCDF and NumPy
     ds.to_netcdf(os.path.join(datadir, OUTFILES[0]))

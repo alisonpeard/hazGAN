@@ -184,7 +184,7 @@ def main(config, verbose=True):
             label_ratios=config['label_ratios'], 
             batch_size=config['batch_size'],
             train_size=config['train_size'],
-            channels=config['channels'],
+            fields=config['fields'],
             gumbel=config['gumbel']
             )
         train = train.prefetch(tf.data.AUTOTUNE)
@@ -213,7 +213,7 @@ def main(config, verbose=True):
         wandb_logger = WandbMetricsLogger()
 
         # train
-        model = hazzy.conditional.compile_wgan(config, nchannels=len(config['channels']))
+        model = hazzy.conditional.compile_wgan(config, nchannels=len(config['fields']))
         if run:
             run.alert(title="Training", text=f"Training started", level=AlertLevel.INFO)
         start = time.time()
@@ -223,6 +223,7 @@ def main(config, verbose=True):
                         validation_data=valid,
                         callbacks=[image_count, wandb_logger, image_logger])
 
+    return model # debugging
     print("\nFinished! Training time: {:.2f} seconds\n".format(time.time() - start))
     evaluate_results(train, valid, config, history.history, model, metadata)
     return history.history
@@ -257,7 +258,7 @@ if __name__ == "__main__":
             config = yaml.safe_load(stream)
         config = {key: value['value'] for key, value in config.items()}
         run = None
-        config = update_config(config, 'epochs', 0)
+        config = update_config(config, 'epochs', 1)
         runname = "dry-run"
     else:
         wandb.init(allow_val_change=True, settings=wandb.Settings(_service_wait=300))  # saves snapshot of code as artifact
@@ -284,146 +285,10 @@ if __name__ == "__main__":
     if run:
         run.alert(title="Finished", text=f"Finished training", level=AlertLevel.INFO)
 
-    try:
-        notify("Process finished", "Python script", "Finished making pretraining data")
-    except Exception as e:
-        print("Notification failed: {}".format(e))
-
+    notify("Process finished", "Python script", "Finished making pretraining data")
 
 # %% ---DEBUG----
-import matplotlib.pyplot as plt
+model = history
+model(nsamples=2, condition=tf.constant([5,5]), label=tf.constant([2,2]))
 
-train, valid, metadata = hazzy.load_data(
-            datadir,
-            label_ratios=config['label_ratios'], 
-            batch_size=config['batch_size'],
-            train_size=config['train_size'],
-            channels=config['channels'],
-            gumbel=config['gumbel']
-            )
-# %%
-labels = [key for key in config['label_ratios'].keys()]
-biggest_label = len(labels) - VISUALS_LEVEL
-lower_bound = labels[biggest_label]
-
-train_extreme = train.take(1000).unbatch().filter(lambda sample: sample['label']==biggest_label)
-# valid_extreme = valid.unbatch().filter(lambda sample: sample['label']==biggest_label)
-condition = np.array(list(x['condition'] for x in train_extreme.as_numpy_iterator()))
-
-# TODO: try do this better
-nfake = 100
-x = np.linspace(0, 100, nfake)
-xp = np.linspace(0, 100, len(condition))
-fp = sorted(condition)
-condition = np.interp(x, xp, fp)
-label = np.tile(biggest_label, nfake)
-print("\nConditioning on 1000 {:.2f} - {:.2f} max wind percentiles".format(condition.min(), condition.max()))
-print("Conditioning on label: {}".format(label[0]))
-
-print("\nGenerating samples...")
-model = hazzy.conditional.compile_wgan(config, nchannels=len(config['channels']))
-paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]]) 
-fake_u = hazzy.unpad(model(condition, label, nsamples=nfake), paddings=paddings).numpy()
-# %%
-print("\nGathering validation data...")
-train_u = metadata['train']['uniform'].data
-train_x = metadata['train']['anomaly'].data
-valid_u = metadata['valid']['uniform'].data
-valid_x = metadata['valid']['anomaly'].data
-params = metadata['train']['params'].data
-
-print("\nFiltering by lower bound on anomaly...")
-train_mask = train_x[..., 0].max(axis=(1, 2)) > lower_bound
-valid_mask = valid_x[..., 0].max(axis=(1, 2)) > lower_bound
-train_u = train_u[train_mask]
-train_x = train_x[train_mask]
-valid_u = valid_u[valid_mask]
-
-
-sample_fake = fake_u[0]
-sample_real = train_u[0]
-
-# %% FUNCTIONS
-from hazGAN import POT  
-from hazGAN import inv_gumbel, empirical_quantile
-
-def inv_probability_integral_transform(marginals, x, y, params=None, gumbel_margins=False):
-    """
-    Transform uniform marginals to original distributions, by inverse-interpolating ecdf.
-    
-    Args:
-    -----
-    marginals : np.array
-        Uniform marginals with dimensions [n, h, w, c] or [n, h * w, c].
-    x : np.array
-        Data that original quantiles were calculated from.
-    y : np.array
-        Corresponding empirical distribution estimates.
-    params : np.array
-        Parameters of fitted GPD distribution.
-    """
-    marginals = inv_gumbel(marginals).numpy() if gumbel_margins else marginals
-
-    assert x.shape[1:] == marginals.shape[1:], f"Marginals and x have different dimensions: {marginals.shape[1:]} != {x.shape[1:]}."
-    assert y.shape[1:] == marginals.shape[1:], f"Marginals and y have different dimensions: {marginals.shape[1:]} != {y.shape[1:]}."
-    assert (x.shape[0] == tf.shape(y)[0]), f"x and y have different number of samples: {x.shape[0]} != {y.shape[0]}."
-
-    original_shape = marginals.shape
-    if marginals.ndim == 4:
-        n, h, w, c = marginals.shape
-        hw = h * w
-        marginals = marginals.reshape(n, hw, c)
-        x = x.reshape(len(x), hw, c)
-        y = y.reshape(len(y), hw, c)
-        if params is not None:
-            params = params.reshape(hw, 3, c)
-    elif marginals.ndim == 3:
-        n, hw, c = marginals.shape
-    else:
-        raise ValueError("Marginals must have dimensions [n, h, w, c] or [n, h * w, c].")      
-
-    quantiles = []
-    for channel in range(c):
-        if params is None:
-            q = np.array(
-            [
-                empirical_quantile(
-                    marginals[:, j, channel],
-                    x[:, j, channel], y[:, j, channel]
-                    )
-                    for j in range(hw)
-                ]
-            ).T
-        else:
-            q = np.array(
-            [
-                empirical_quantile(
-                    marginals[:, j, channel],
-                    x[:, j, channel],
-                    y[:, j, channel],
-                    params[j, ..., channel]
-                )
-                for j in range(hw)
-            ]
-        ).T
-        quantiles.append(q)
-    quantiles = np.stack(quantiles, axis=-1)
-    quantiles = quantiles.reshape(*original_shape)
-    return quantiles
-
-POT.inv_probability_integral_transform = inv_probability_integral_transform
-# %% ----END OF DEBUG----
-
-
-CONSTANT = 0.9
-constants = np.ones((1, sample_fake.shape[0], sample_fake.shape[1], sample_fake.shape[2]))
-constants *= CONSTANT
-
-inverse = POT.inv_probability_integral_transform(train_u[-2:,...], train_u, train_x,
-                                                 params, gumbel_margins=True)
-fig, axs = plt.subplots(1, 4)
-axs[0].imshow(constants[0, ..., 0], cmap='gray')
-axs[1].imshow(inverse[0, ..., 0], cmap='gray')
-axs[2].imshow(train_u[0, ..., 0], cmap='gray')
-axs[3].imshow(train_x[0, ..., 0], cmap='gray')
-# %%
+# %%

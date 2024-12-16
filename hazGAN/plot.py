@@ -8,7 +8,7 @@ import matplotlib as mpl
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from .constants import channel_labels
 from .statistics import (
-    POT,
+    invPIT,
     get_extremal_coeffs_nd,
     pairwise_extremal_coeffs,
     # interpolate_thresholds, # old, might not need
@@ -166,8 +166,8 @@ def figure_four(fake_u, train_u, train_x, params, imdir:str,
                 channel=0, cmap="Spectral_r", levels=20) -> None:
     """Plot the 32 most extreme train and generated anomalies."""
     # prep data to plot
-    fake = POT.inv_probability_integral_transform(fake_u, train_u, train_x, params)
-    real = POT.inv_probability_integral_transform(train_u, train_u, train_x, params)
+    fake = invPIT(fake_u, train_x, params)
+    real = invPIT(train_u, train_x, params)
     fake = fake[..., channel]
     real = train_x[..., channel]
 
@@ -333,9 +333,9 @@ def plot_generated_marginals(fake_data, start=0, nchannels=None, runname="", vmi
 #     fig, axs = plt.subplots(3, 3, figsize=figsize, layout='tight')
 
 #     if inverse_transform:
-#         train_quantiles = POT.inv_probability_integral_transform(train_marginals, x, y, params, evt_type, thresh)
-#         test_quantiles = POT.inv_probability_integral_transform(test_marginals, x, y, params, evt_type, thresh)
-#         fake_quantiles = POT.inv_probability_integral_transform(fake_marginals, x, y, params, evt_type, thresh)
+#         train_quantiles = invPIT(train_marginals, x, y, params, evt_type, thresh)
+#         test_quantiles = invPIT(test_marginals, x, y, params, evt_type, thresh)
+#         fake_quantiles = invPIT(fake_marginals, x, y, params, evt_type, thresh)
 #     else:
 #         train_quantiles = train_marginals
 #         test_quantiles = test_marginals

@@ -1,5 +1,6 @@
 # %%
 import numpy as np
+import xarray as xr
 
 if __name__ == "__main__":
     from base import *
@@ -7,6 +8,24 @@ if __name__ == "__main__":
 else:
     from .base import *
     from .empirical import quantile, semiparametric_quantile
+
+
+
+def invPITDataset(ds:xr.Dataset, theta_var:str="params",
+                  u_var:str="uniform", x_var:str="anomaly",
+                  gumbel_margins:bool=False) -> xr.DataArray:
+    """
+    Wrapper of invPIT for xarray.Dataset.
+    """
+    u = ds[u_var].values
+    x = ds[x_var].values
+    theta = ds[theta_var].values if theta_var in ds else None
+
+    x_inv = invPIT(u, x, theta, gumbel_margins)
+    x_inv = xr.DataArray(x_inv, dims=ds[x_var].dims, coords=ds[x_var].coords)
+
+    return x_inv
+
 
 
 def invPIT(
@@ -36,9 +55,9 @@ def invPIT(
     """
     u = inv_gumbel(u).numpy() if gumbel_margins else u
 
-    assert x.shape[1:] == u.shape[1:], (
-        f"Marginal dimensions mismatch: {u.shape[1:]} != {x.shape[1:]}"
-    )
+    # assert x.shape[1:] == u.shape[1:], (
+    #     f"Marginal dimensions mismatch: {u.shape[1:]} != {x.shape[1:]}"
+    # )
 
     # flatten along spatial dimensions
     original_shape = u.shape

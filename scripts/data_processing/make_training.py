@@ -39,7 +39,7 @@ hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k'}
 FIELDS = ["u10", "tp", 'mslp']
 VISUALISATIONS = True
 THRESHOLD = 0.75 # rough manual bisection for this
-PROCESS_OUTLIERS = True
+PROCESS_OUTLIERS = False
 
 # for snakemake in future
 INFILES = ['data_1940_2022.nc', 'storms.parquet', 'storms_metadata.parquet', 'medians.csv']
@@ -199,7 +199,8 @@ def main(datadir):
     lon = gdf["lon"].unique()
     X = gdf[FIELDS].values.reshape([T, ny, nx, nfields])
     D = gdf[["day_of_storm"]].values.reshape([T, ny, nx])
-    U = gdf[[f"ecdf_{c}" for c in FIELDS]].values.reshape([T, ny, nx, nfields])
+    U0 = gdf[[f"ecdf_{c}" for c in FIELDS]].values.reshape([T, ny, nx, nfields])
+    U1 = gdf[[f"scdf_{c}" for c in FIELDS]].values.reshape([T, ny, nx, nfields])
     M = gdf[[f"{c}_median" for c in FIELDS]].values.reshape([T, ny, nx, nfields])
     z = gdf[["storm", "storm_rp"]].groupby("storm").mean().values.reshape(T)
     s = gdf[["storm", "size"]].groupby("storm").mean().values.reshape(T)
@@ -222,7 +223,9 @@ def main(datadir):
     params = np.stack([thresh, scale, shape], axis=-2)
 
     # make an xarray dataset for training
-    ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'field'], U),
+    # NOTE: using SemiCDF instead of ECDF because invPIT works better
+    ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'field'], U1),
+                    'ecdf': (['time', 'lat', 'lon', 'field'], U0),
                     'anomaly': (['time', 'lat', 'lon', 'field'], X),
                     'medians': (['time', 'lat', 'lon', 'field'], M),
                     'day_of_storm': (['time', 'lat', 'lon'], D),
@@ -240,7 +243,7 @@ def main(datadir):
                     attrs={'CRS': 'EPSG:4326',
                             'u10': '10m Wind Speed [ms-1]',
                             'tp': 'Total Precipitation [m]',
-                            'mslp': 'Mean Sea Level Pressure [wind spePa]',
+                            'mslp': 'Mean Sea Level Pressure [Pa]',
                             'yearly_freq': rate})
 
 
@@ -253,7 +256,8 @@ def main(datadir):
     ds.attrs['note'] = "Fixed interpolation: [0, 1] --> (0, 1)."
 
     # remove outliers
-    # ds = process_outliers(ds, THRESHOLD, datadir=datadir, visuals=VISUALISATIONS)
+    if PROCESS_OUTLIERS:
+        ds = process_outliers(ds, THRESHOLD, datadir=datadir, visuals=VISUALISATIONS)
 
     # save
     print("Finished! Saving to netcdf...")

@@ -124,8 +124,11 @@ def define_generator(config, nchannels=2):
     score = wrappers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same')(conv3)
 
     # this is new: should control output range better
-    o = tf.keras.activations.sigmoid(score) # data in (0, 1)
-    o = -tf.math.log(-tf.math.log(o)) if config['gumbel'] else o # approximate Gumbel distribution
+    if config['gumbel']:
+        o = wrappers.GumbelEsque()(score)
+        # o = tf.keras.activations.sigmoid(score)
+    else:
+        o = tf.keras.activations.sigmoid(score)
     
     return tf.keras.Model([z, condition, label], o, name="generator")
 
