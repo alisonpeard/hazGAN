@@ -288,7 +288,17 @@ if __name__ == "__main__":
     notify("Process finished", "Python script", "Finished making pretraining data")
 
 # %% ---DEBUG----
+import matplotlib.pyplot as plt
 model = history
-model(nsamples=2, condition=tf.constant([5,5]), label=tf.constant([2,2]))
+n = 100
+out = model(nsamples=n, condition=tf.constant([5] * n), label=tf.constant([2]*n))
+
+minimum = out.numpy().min()
+maximum = out.numpy().max()
+out
 
 # %%
+x = out.numpy()
+plt.hist(x[:, 4, 6, 0])
+
+# %%

@@ -14,12 +14,6 @@ from hazGAN.utils import TEST_YEAR
 from hazGAN.statistics import GenPareto, Empirical
 
 
-def mape(x, y):
-    if np.isclose(x, 0).any():
-        x = x + 1e-6
-    return np.mean(np.abs((x - y) / x)) * 100
-
-
 if __name__ == "__main__":
     env = Env()
     env.read_env(recurse=True)
@@ -49,7 +43,7 @@ if __name__ == "__main__":
             maxdiffs_hybrid = []
             maxdiffs_gpd = []
             for CELL in range(1, 18*22):
-                test = data.sel(field=FIELD)
+                test = ds.sel(field=FIELD)
                 test = test.where(test['grid'] == CELL, drop=True)
                 test
 
@@ -62,21 +56,21 @@ if __name__ == "__main__":
                 gpd_fit = GenPareto(x, loc, scale, shape)
                 fit  = Empirical(x)
 
-                # pure empirical forward <==> inverse
+                # pure empirical forward <=> inverse
                 field_u = fit.forward(x)
                 field_x = fit.inverse(field_u)
                 difference = x - field_x
                 maxdiff = difference.max()
                 maxdiffs_emp.append(maxdiff)
 
-                # pure GPD forward <==> inverse
+                # pure GPD forward <=> inverse
                 field_u = gpd_fit.forward(x)
                 field_x = gpd_fit.inverse(field_u)
                 difference = x - field_x
                 maxdiff = difference.max()
                 maxdiffs_gpd.append(maxdiff)
 
-                # empirical + GPD forward <==> inverse
+                # empirical + GPD forward <=> inverse
                 field_u = fit.forward(x)
                 field_x = gpd_fit.inverse(field_u)
                 difference = x - field_x
@@ -95,4 +89,8 @@ if __name__ == "__main__":
     reform = {(outerKey, innerKey): values for outerKey, innerDict in differences.items() for innerKey, values in innerDict.items()}
     differences = pd.DataFrame(reform).T
 
+    print(differences.reset_index().set_index('level_0').to_markdown())
+
 # %%
+
+# %%

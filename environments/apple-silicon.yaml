@@ -2,6 +2,7 @@
 # mamba create -f apple-silicon.yaml
 # cd hazGAN
 # mamba activate hazGAN;python -c "import hazGAN as haz;print(haz.__version__)"
+# python helloworld_tensorflow.py --device GPU
 
 # ---------Uninstall----------
 # conda env remove -n hazGAN
@@ -12,12 +13,12 @@
 # 2. Metal compatibility: https://pypi.org/project/tensorflow-metal/
 # 3. https://developer.apple.com/metal/tensorflow-plugin/
 
-name: hazGAN2
+name: hazGAN
 channels:
     - apple
     - conda-forge
 dependencies:
-    - python=3.9 # >=3.8,<3.11
+    - python=3.9 # 3.8<=python<3.11
     - pip
     - dask
     - tqdm
@@ -25,7 +26,7 @@ dependencies:
     - notebook
     - pyyaml
     - h5py
-    - tensorflow-deps
+    # - tensorflow-deps
     - pandas
     - geopandas
     - fiona
@@ -37,7 +38,7 @@ dependencies:
     - netcdf4
     - shapely>=2.0
     - scipy
-    - scikit-learncd
+    - scikit-learn
     - matplotlib
     - cartopy # for basemaps
     - seaborn
