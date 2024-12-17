@@ -1,5 +1,5 @@
 """
-For conditional training (no constants yet).
+For conditional training (no constant fields yet).
 """
 # %%
 RUN_EAGERLY = False
@@ -189,6 +189,9 @@ def main(config, verbose=True):
             fields=config['fields'],
             gumbel=config['gumbel']
             )
+        
+        return train
+        train = train.take(1000) if dry_run else train
         train = train.prefetch(tf.data.AUTOTUNE)
         valid = valid.prefetch(tf.data.AUTOTUNE)
     
@@ -225,7 +228,7 @@ def main(config, verbose=True):
                         validation_data=valid,
                         callbacks=[image_count, wandb_logger, image_logger])
 
-    return model # debugging
+
     print("\nFinished! Training time: {:.2f} seconds\n".format(time.time() - start))
     evaluate_results(train, valid, config, history.history, model, metadata)
     return history.history
@@ -283,11 +286,11 @@ if __name__ == "__main__":
     tf.config.experimental.enable_op_determinism()  # removes stochasticity from individual operations
 
     # train
-    history = main(config)
+    result = main(config)
     if run:
         run.alert(title="Finished", text=f"Finished training", level=AlertLevel.INFO)
 
     notify("Process finished", "Python script", "Finished making pretraining data")
 
-# %% ---DEBUG----
+# %% ---DEBUG BELOW THIS LINEE----
 

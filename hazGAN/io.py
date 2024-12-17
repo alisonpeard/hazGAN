@@ -39,19 +39,36 @@ def encode_strings(ds:xr.Dataset, variable:str) -> tf.Tensor:
     return tf.one_hot(encoded, depth)
     
 
-def label_data(data, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}) -> xr.DataArray:
+def numeric(mylist:list) -> list[float]:
+    """Return a list of floats from a list of strings."""
+    def is_numeric(item):
+        try:
+            float(item)
+            return True
+        except ValueError:
+            return False
+    
+    return [float(item) for item in mylist if is_numeric(item)]
+
+
+def label_data(data:xr.DataArray, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}
+               ) -> xr.DataArray:
     """Apply labels to storm data using user-provided dict."""
     ratios = list(label_ratios.values())
-    assert np.isclose(sum(ratios), 1), "Ratios must sum to one, got {}.".format(sum(ratios))
+    assert np.isclose(sum(ratios), 1), "Ratios must sum to one, received {}.".format(sum(ratios))
 
-    nlabels = len(list(label_ratios.keys())) - 1 # excluding pretrain
-    labels = 0 * data['maxwind'] + nlabels       # assign highest label to everything
+    labels = numeric(list(label_ratios.keys()))
+    labels = sorted(labels)
+    data_labels = 0 * data['maxwind'] + 1
 
-    for label, lower_bound in enumerate(label_ratios.keys()):
-        if isinstance(lower_bound, Number): # first is always 'pre'
-            labels = labels.where(data['maxwind'] < lower_bound, int(label))
+    for label, lower_bound in enumerate(labels):
+        data_labels = data_labels.where(data['maxwind'] < lower_bound, int(label + 2))
 
-    return labels
+    # from collections import Counter
+    # counts = Counter(data_labels.data.flatten())
+    # print("Label distribution: {}".format(counts))
+    
+    return data_labels
 
 
 def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3, 20:1/3},
@@ -150,6 +167,13 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
 
     # manual under/oversampling
     split_train = [train.filter(lambda sample: sample['label']==label) for label in labels]
+
+    # print size of each dataset in split_train
+    data_sizes = {}
+    for label, dataset in zip(labels, split_train):
+        data_sizes[label] = dataset.reduce(0, lambda x, _: x + 1).numpy()
+    print("\nData sizes: {:,.0f}".format(data_sizes))
+
     target_dist = list(label_ratios.values())
     train = tf.data.Dataset.sample_from_datasets(split_train, target_dist)
 

@@ -12,9 +12,9 @@ fields:
 label_ratios:
   desc: Dataset representation, by value
   value:
-    pre: 0.1
-    '7': 0.4
-    '20': 0.5
+    'pre': 0.3333333
+    '15':  0.3333333
+    '999': 0.3333333
 augment_policy:
   desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
   value: 'color,translation,cutout'

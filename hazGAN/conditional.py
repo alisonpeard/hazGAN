@@ -126,7 +126,6 @@ def define_generator(config, nchannels=2):
     # this is new: should control output range better
     if config['gumbel']:
         o = wrappers.GumbelEsque()(score)
-        # o = tf.keras.activations.sigmoid(score)
     else:
         o = tf.keras.activations.sigmoid(score)
     
