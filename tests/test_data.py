@@ -119,7 +119,7 @@ def test_windbomb_values(template):
 def test_windbombs_removed(template, threshold, tmp_path):
     """Test no more wind bombs in training data"""
     data = xr.open_dataset(os.path.join(wd, "data.nc"))
-    data['u10'] = (data['anomaly'] + data['medians']).sel(channel='u10')
+    data['u10'] = (data['anomaly'] + data['medians']).sel(field='u10')
     similarities = get_similarities(data, template)
 
     exceeded = similarities >= threshold

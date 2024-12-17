@@ -2,7 +2,7 @@
 # %%
 from keras import layers
 from keras import initializers
-from keras.layers import Layer
+from keras.layers import Layer, BatchNormalization
 import tensorflow as tf
 
 
@@ -50,119 +50,17 @@ class BatchNormalization(layers.BatchNormalization):
         
 
 class GumbelEsque(Layer):
+  """Output something like Gumbel marginals."""
   def __init__(self, epsilon=1e-6, *args, **kwargs):
     super(GumbelEsque, self).__init__(*args, **kwargs)
     self.epsilon = epsilon
 
   def call(self, inputs):
-    if False:
-        uniform = tf.math.sigmoid(inputs)
-        out = -tf.math.log1p(uniform)
-        gumbel = -tf.math.log1p(out)
-    else:
-        uniform = tf.clip_by_value(
-            tf.math.sigmoid(inputs),
-            clip_value_min = self.epsilon,
-            clip_value_max = 1. - self.epsilon
-        )
-        gumbel = -tf.math.log(-tf.math.log(uniform))
-    return gumbel
-# %% CLAUDE
-import tensorflow as tf
-
-def differentiable_batch_uniform_transform(x, smoothing_factor=1e-3):
-    """
-    Differentiable transformation to uniform distribution across batch dimension.
-    
-    Parameters:
-    -----------
-    x : tf.Tensor
-        Input tensor of shape [batch_size, ...]
-    smoothing_factor : float, optional
-        Controls the smoothness of the ranking approximation
-    
-    Returns:
-    --------
-    tf.Tensor
-        Transformed tensor with uniform-like distribution
-    """
-    # Reshape to separate batch and feature dimensions
-    original_shape = tf.shape(x)
-    x_flat = tf.reshape(x, [original_shape[0], -1])
-    
-    def soft_rank(feature_column):
-        comparisons = tf.sigmoid( # broadcasted comparisons in 2D
-            (
-            feature_column[:, tf.newaxis] - feature_column[tf.newaxis, :]
-            ) / smoothing_factor
-            )
-        soft_ranks = tf.reduce_sum(comparisons, axis=1)
-        numerator = soft_ranks - tf.reduce_min(soft_ranks)
-        denominator = tf.reduce_max(soft_ranks) - tf.reduce_min(soft_ranks)
-        normalized_ranks = numerator / denominator
-        return normalized_ranks
-    
-    uniform_distribution = tf.transpose(
-        tf.map_fn(soft_rank, tf.transpose(x_flat))
+    normalised = BatchNormalization()(inputs)
+    uniform = tf.clip_by_value(
+        tf.math.sigmoid(normalised),
+        clip_value_min = self.epsilon,
+        clip_value_max = 1. - self.epsilon
     )
-    
-    return tf.reshape(uniform_distribution, original_shape)
-
-# Demonstration function
-def demonstrate_differentiable_transform():
-    # Create a sample tensor
-    x = tf.Variable([
-        [1.0, 5.0],
-        [3.0, 2.0],
-        [2.0, 4.0],
-        [4.0, 3.0]
-    ])
-    
-    # Demonstrate differentiability with gradient computation
-    with tf.GradientTape() as tape:
-        transformed = differentiable_batch_uniform_transform(x)
-        # Example loss (just to show gradient computation)
-        loss = tf.reduce_mean(transformed)
-    
-    # Compute gradients
-    grads = tape.gradient(loss, [x])
-    
-    print("Original tensor:")
-    print(x)
-    print("\nTransformed tensor:")
-    print(transformed)
-    print("\nGradients:")
-    print(grads)
-    
-    return x, transformed, grads
-
-# Run the demonstration
-demonstrate_differentiable_transform()
-# %%
-class ECDF(Layer):
-    def __init__(self, alpha=0, beta=0, *args, **kwargs):
-        super(ECDF, self).__init__(*args, **kwargs)
-        self.alpha = alpha
-        self.beta = beta
-
-
-    def call(self, inputs):
-        x = inputs
-        n = tf.size(x)
-
-        unique_vals, unique_indices = tf.unique(x)
-        counts = tf.math.bincount(unique_indices)
-        cumulative_counts = tf.cumsum(counts)
-        ecdf_vals = (
-            (cumulative_counts - self.alpha) /
-            (n + 1 - self.alpha - self.beta) 
-        )
-
-        indices = tf.searchsorted(unique_vals, x, side='right') - 1
-        indices = tf.clip(indices, 0, tf.size(ecdf_vals) - 1)
-
-        return ecdf_vals[indices]
-    
-    @staticmethod
-    def unique(self, x):
-        vals, indices = tf.argsort(x), tf.argsort(x)
+    gumbel = -tf.math.log(-tf.math.log(uniform))
+    return gumbel

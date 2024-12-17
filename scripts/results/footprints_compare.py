@@ -6,7 +6,6 @@ import os
 import numpy as np
 import yaml
 import xarray as xr
-import hazGAN as hg
 import matplotlib.pyplot as plt
 from itertools import combinations
 import cartopy.crs as ccrs

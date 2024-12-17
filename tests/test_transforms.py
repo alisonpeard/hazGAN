@@ -73,6 +73,7 @@ def data(request):
     dataset = xr.open_dataset(os.path.join(wd, "data.nc"))
     return dataset.sel(field=[field])
 
+
 @pytest.mark.parametrize('storms, data',
                          [('u10', 'u10'),
                           ('tp', 'tp'),

@@ -20,10 +20,12 @@ from environs import Env
 import numpy as np
 import tensorflow as tf
 
+# %%
 import hazGAN as hazzy
 from hazGAN import plot
 from hazGAN.tensorflow.callbacks import WandbMetricsLogger, CountImagesSeen, ImageLogger
 
+# %%
 tf.keras.backend.clear_session()
 tf.debugging.set_log_device_placement(LOG_DEVICE_PLACEMENT)
 tf.config.run_functions_eagerly(RUN_EAGERLY) # for debugging
@@ -175,7 +177,7 @@ def evaluate_results(train,
     final_chi_rmse = history['chi_rmse'][-1]
     print(f"final_chi_rmse: {final_chi_rmse:.4f}")
 
-
+# %%
 def main(config, verbose=True):
     # load data
     with tf.device(device):
@@ -288,17 +290,4 @@ if __name__ == "__main__":
     notify("Process finished", "Python script", "Finished making pretraining data")
 
 # %% ---DEBUG----
-import matplotlib.pyplot as plt
-model = history
-n = 100
-out = model(nsamples=n, condition=tf.constant([5] * n), label=tf.constant([2]*n))
 
-minimum = out.numpy().min()
-maximum = out.numpy().max()
-out
-
-# %%
-x = out.numpy()
-plt.hist(x[:, 4, 6, 0])
-
-# %%
