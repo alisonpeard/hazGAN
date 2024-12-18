@@ -69,7 +69,7 @@ def label_data(data:xr.DataArray, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}
 
 def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
          train_size=0.8, fields=['u10', 'tp'], image_shape=(18, 22),
-         padding_mode='reflect', gumbel=True, batch_size=16,
+         padding_mode='reflect', gumbel=True, batch_size=16, repeat=True,
          verbose=False, testyear=TEST_YEAR) -> tuple[Dataset, Dataset, dict]:
     """Main data loader for training.
 
@@ -203,7 +203,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3
 
     # pipeline methods
     train = train.shuffle(10_000)
-    train = train.repeat()
+    train = train.repeat() if repeat else train
     train = train.batch(batch_size)
 
     valid = valid.batch(batch_size, drop_remainder=True)
@@ -215,6 +215,56 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3
     return train, valid, metadata
 
 
+import pickle
+
+
+def load_cached_data(datadir:str, compression="GZIP", cachedir=None, **kwargs) -> tuple[Dataset, Dataset, dict]:
+    """Load cached data if available"""
+    if cachedir is None:
+        cachedir = os.path.join(datadir, 'cached')
+    cachetrain = os.path.join(cachedir, 'train')
+    cachevalid = os.path.join(cachedir, 'valid')
+    cachemeta = os.path.join(cachedir, 'metadata.pickle')
+    cachekwargs = os.path.join(cachedir, 'kwargs.pickle')
+
+    def load_and_cache_data(datadir:str, **kwargs) -> tuple[Dataset, Dataset, dict]:
+        train, valid, metadata = load_data(datadir, **kwargs)
+        print("Saving data to cache...")
+        os.makedirs(cachedir, exist_ok=True)
+        train.save(cachetrain, compression=compression)
+        valid.save(cachevalid, compression=compression)
+        with open(cachemeta, 'wb') as dst:
+            pickle.dump(metadata, dst)
+        with open(cachekwargs, 'wb') as dst:
+            pickle.dump(kwargs, dst)
+        print("Data saved to {}.".format(cachedir))
+        return train, valid, metadata
+
+    if os.path.exists(cachedir):
+        if os.path.exists(cachekwargs):
+            try:
+                with open(cachekwargs, 'r') as src:
+                    cached_kwargs = pickle.load(src)
+                    if cached_kwargs == kwargs:
+                        print("Loading cached data...")
+                        kwargs['repeat'] = False
+                        train = Dataset.load(cachetrain, compression=compression)
+                        valid = Dataset.load(cachevalid, compression=compression)
+                        with open(cachemeta, 'r') as src:
+                            metadata = pickle.load(src)
+                        return train, valid, metadata
+                    else:
+                        print("Cached kwargs do not match. Loading data from scratch...")
+            
+            except Exception:
+                print("Error loading cached data. Loading data from scratch...")
+        else:
+            print("No cached kwargs found. Loading data from scratch...")
+    else:
+        print("Cache dir does not exist. Loading data from scratch...")
+    return load_and_cache_data(datadir, **kwargs)
+
+    
 # %% ##########################################################################
 # SCROLL DOWN FOR TESTING
 
