@@ -9,6 +9,10 @@ git clone git@github.com:alisonpeard/hazGAN.git
 cd environments
 mamba create -f apple-silicon.yaml # or other OS env
 mamba activate hazGAN
+python helloworld_tensorflow.py --device GPU # confirm tensorflow working
 cd ..
 python -m pip install -e .
+
+pytest tests/ -x
+python scripts/training/train.py --dry-run
 ```

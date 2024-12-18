@@ -17,6 +17,15 @@ channel_labels = {0: r'wind speed [ms$^{-1}$]', 1: r'total precipitation [m]'}
 longitude = np.linspace(xmin, xmax, 3)
 latitude = np.linspace(ymin, ymax, 4)
 
+TEST_YEAR = 2022
+
 def PADDINGS():
     """Wrap in function to avoid early initialization."""
     return tf.constant([[1, 1], [1, 1], [0, 0]])
+
+
+KNOWN_OUTLIERS = np.array([
+    '1992-04-15T00:00:00.000000000',
+    '1952-05-09T00:00:00.000000000',
+    '1995-05-02T00:00:00.000000000'
+    ], dtype='datetime64[ns]')

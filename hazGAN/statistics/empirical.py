@@ -118,35 +118,36 @@ class GenPareto(Empirical):
         """(1.3) H&T for $\ksi\leq 0$ and upper tail."""
         # empirical base
         u = self.ecdf(x)
-        loc_u = self.ecdf(self.loc)
 
-        # parametric tail
-        tail_mask = x > self.loc
-        tail_x = x[tail_mask]
+        if np.isfinite(self.loc):
+            # parametric tail
+            loc_u = self.ecdf(self.loc)
+            tail_mask = x > self.loc
+            tail_x = x[tail_mask]
 
-        tail_fit = genpareto.cdf(tail_x, self.shape, loc=self.loc, scale=self.scale)
-        tail_u = 1 - (1 - loc_u) * (1 - tail_fit)
-        u[tail_mask] = tail_u
+            tail_fit = genpareto.cdf(tail_x, self.shape, loc=self.loc, scale=self.scale)
+            tail_u = 1 - (1 - loc_u) * (1 - tail_fit)
+            u[tail_mask] = tail_u
 
-        try:
-            assert np.isfinite(u).all(), "Non-finite values in CDF."
-            assert not np.isnan(u).any(), "NaN values in CDF."
+            try:
+                assert np.isfinite(u).all(), "Non-finite values in CDF."
+                assert not np.isnan(u).any(), "NaN values in CDF."
 
-            if self.shape < 0:
-                assert (u <= 1).all(), "CDF values above 1."
-                assert (u > 0).all(), "CDF values ≤ 0."
-            else:
-                assert (u >= 0).all(), "CDF values below 0."
-                assert (u < 1).all(), "CDF values ≥ 1."
-        
-        except AssertionError as e:
-            print(e)
-            print("x: ", min(x), max(x))
-            print("u: ", min(u), max(u))
-            print("loc: ", self.loc)
-            print("scale: ", self.scale)
-            print("shape: ", self.shape)
-            raise e
+                if self.shape < 0:
+                    assert (u <= 1).all(), "CDF values above 1."
+                    assert (u > 0).all(), "CDF values ≤ 0."
+                else:
+                    assert (u >= 0).all(), "CDF values below 0."
+                    assert (u < 1).all(), "CDF values ≥ 1."
+            
+            except AssertionError as e:
+                print(e)
+                print("x: ", min(x), max(x))
+                print("u: ", min(u), max(u))
+                print("loc: ", self.loc)
+                print("scale: ", self.scale)
+                print("shape: ", self.shape)
+                raise e
 
         return u
 
@@ -155,31 +156,33 @@ class GenPareto(Empirical):
         # empirical base
         x = self.quantile(u)
 
-        # parametric tail
-        loc_u = self.ecdf(self.loc)
-        tail_mask = u > loc_u
-        tail_u = u[tail_mask]
+        # check parameters are not NaN
+        if np.isfinite(self.loc):
+            # parametric tail
+            loc_u = self.ecdf(self.loc)
+            tail_mask = u > loc_u
+            tail_u = u[tail_mask]
 
-        tail_u = 1 - ((1 - tail_u) / (1 - loc_u))
-        tail_x = genpareto.ppf(tail_u, self.shape, loc=self.loc, scale=self.scale)
+            tail_u = 1 - ((1 - tail_u) / (1 - loc_u))
+            tail_x = genpareto.ppf(tail_u, self.shape, loc=self.loc, scale=self.scale)
 
-        x[tail_mask] = tail_x
+            x[tail_mask] = tail_x
 
-        try:
-            assert np.isfinite(x).all(), "Non-finite values in quantile function."
-            assert not np.isnan(x).any(), "NaN values in quantile function."
+            try:
+                assert np.isfinite(x).all(), "Non-finite values in quantile function."
+                assert not np.isnan(x).any(), "NaN values in quantile function."
 
-        except AssertionError as e:
-            print(e)
-            print("u: ", min(u), max(u))
-            print("x: ", min(x), max(x))
-            print("loc: ", self.loc)
-            print("scale: ", self.scale)
-            print("shape: ", self.shape)
-            print("tail_fit min: ", min(tail_x))
-            print("tail_fit max: ", max(tail_x))
-            print("multiplicative constant: ", 1 - ((1 - tail_u) / (1 - loc_u)))
-            raise e
+            except AssertionError as e:
+                print(e)
+                print("u: ", min(u), max(u))
+                print("x: ", min(x), max(x))
+                print("loc: ", self.loc)
+                print("scale: ", self.scale)
+                print("shape: ", self.shape)
+                print("tail_fit min: ", min(tail_x))
+                print("tail_fit max: ", max(tail_x))
+                print("multiplicative constant: ", 1 - ((1 - tail_u) / (1 - loc_u)))
+                raise e
 
         return x
     

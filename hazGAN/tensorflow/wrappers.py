@@ -49,21 +49,22 @@ class BatchNormalization(layers.BatchNormalization):
                                                  *args, **kwargs)
         
 
-class GumbelEsque(Layer):
+class GumbelIsh(Layer):
   """Output something like Gumbel marginals.
   
   Hopefully batchnorm+clipping will keep this numerically stable."""
   def __init__(self, epsilon=1e-6, *args, **kwargs):
-    super(GumbelEsque, self).__init__(*args, **kwargs)
-    self.epsilon = epsilon
+    super(GumbelIsh, self).__init__(*args, **kwargs)
+    self.epsilon = tf.constant(epsilon)
     self.norm = BatchNormalization()
 
   def call(self, inputs):
     normalised = self.norm(inputs)
-    uniform = tf.clip_by_value(
-        tf.math.sigmoid(normalised),
+    sigmoid = tf.math.sigmoid(normalised)
+    clipped = tf.clip_by_value(
+        sigmoid,
         clip_value_min = self.epsilon,
         clip_value_max = 1. - self.epsilon
     )
-    gumbel = -tf.math.log(-tf.math.log(uniform))
+    gumbel = -tf.math.log(-tf.math.log(clipped))
     return gumbel

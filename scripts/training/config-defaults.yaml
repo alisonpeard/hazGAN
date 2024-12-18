@@ -1,7 +1,7 @@
 # training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
 epochs:
   desc: Number of epochs to train for
-  value: 100
+  value: 1000
 train_size:
   value: 0.8 # 840 # 50
 batch_size:
@@ -43,14 +43,8 @@ latent_space_distn:
 gumbel:
   desc: Train on Gumbel marginals instead of uniform marginals
   value: True
-uniform:
-  desc: Train on uniform marginals from ECDF or semi-parametric model
-  value: uniform
 lambda_gp:
   value: 10.
-lambda_condition:
-  desc: Weight of penalty on max wind condition
-  value: 0.01
 
 # architecture
 lrelu:
@@ -62,12 +56,12 @@ dropout:
 latent_dims:
   desc: Gulrajani et al. 2017 use 128
   value: 128
-g_layers:
-  desc: Number of channels in the hidden layers for the generator. [256, 128, 64]
-  value: [256, 128, 64]
-d_layers:
-  desc: Number of channels in the hidden layers for the discriminator. [128, 256, 512]
-  value: [64, 128, 256]
+generator_width:
+  desc: Maximum filters in any layer of the generator. 
+  value: 256
+critic_width:
+  desc: Maximum filters in any layer of the critic.
+  value: 256
 interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
   value: bilinear

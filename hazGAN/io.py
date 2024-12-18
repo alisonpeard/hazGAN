@@ -14,7 +14,8 @@ import xarray as xr
 import dask.array as da
 import tensorflow as tf
 from tensorflow.data import Dataset
-from .constants import PADDINGS
+from .constants import PADDINGS, TEST_YEAR
+
 
 
 def print_if_verbose(string:str, verbose=True) -> None:
@@ -64,17 +65,13 @@ def label_data(data:xr.DataArray, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}
     for label, lower_bound in enumerate(labels):
         data_labels = data_labels.where(data['maxwind'] < lower_bound, int(label + 2))
 
-    # from collections import Counter
-    # counts = Counter(data_labels.data.flatten())
-    # print("Label distribution: {}".format(counts))
-    
     return data_labels
 
 
-def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3, 20:1/3},
+def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
          train_size=0.8, fields=['u10', 'tp'], image_shape=(18, 22),
          padding_mode='reflect', gumbel=True, batch_size=16,
-         verbose=True) -> tuple[Dataset, Dataset, dict]:
+         verbose=True, testyear=TEST_YEAR) -> tuple[Dataset, Dataset, dict]:
     """Main data loader for training.
 
     Returns:
@@ -98,9 +95,13 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
         )
     pretrain = pretrain.transpose("time", "lat", "lon", "field")
 
+    # remove test year from both datasets
+    data = data.sel(time=data['time.year'] != testyear)
+    pretrain = pretrain.sel(time=pretrain['time.year'] != testyear)
+
     print("Pretrain shape: {}".format(pretrain['uniform'].data.shape))
     print("Train shape: {}".format(data['uniform'].data.shape))
-    print("\nData loaded. Processing data...\n")
+    print("\nData loaded. Processing data...")
     
     metadata = {} # start collecting metadata
 
@@ -169,10 +170,13 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     split_train = [train.filter(lambda sample: sample['label']==label) for label in labels]
 
     # print size of each dataset in split_train
+    print("\nCalculating input class sizes...")
     data_sizes = {}
     for label, dataset in zip(labels, split_train):
         data_sizes[label] = dataset.reduce(0, lambda x, _: x + 1).numpy()
-    print("\nData sizes: {:,.0f}".format(data_sizes))
+    print("\nClass sizes:\n------------")
+    for label, size in data_sizes.items():
+        print("Label: {} | size: {:,.0f}".format(label, size))
 
     target_dist = list(label_ratios.values())
     train = tf.data.Dataset.sample_from_datasets(split_train, target_dist)
@@ -212,7 +216,41 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 7: 1/3,
     return train, valid, metadata
 
 
-# %%
+# %% ##########################################################################
+# SCROLL DOWN FOR TESTING
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# %% DEV // DEBUGGING BELOW HERE ##############################################
 if __name__ == "__main__":
     print('Testing io.py...')
     env = Env()

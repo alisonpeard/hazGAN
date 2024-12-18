@@ -19,7 +19,6 @@ try:
     from environs import Env
     import matplotlib.pyplot as plt
     from statsmodels.stats.diagnostic import acorr_ljungbox
-
     env = Env()
     env.read_env(recurse=True)
     wd = env.str("TRAINDIR")

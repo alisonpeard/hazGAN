@@ -31,6 +31,7 @@ def test_imports():
 
 def test_environment():
     assert env is not None
+    assert wd is not None, "TRAINDIR not found in .env file"
 
 
 @pytest.fixture

@@ -6,7 +6,7 @@ RUN_EAGERLY = False
 RESTRICT_MEMORY = True
 MEMORY_GROWTH = False
 LOG_DEVICE_PLACEMENT = False
-VISUALS_LEVEL = 1
+DRY_RUN_EPOCHS = 100
 
 import os
 import sys
@@ -20,12 +20,11 @@ from environs import Env
 import numpy as np
 import tensorflow as tf
 
-# %%
 import hazGAN as hazzy
 from hazGAN import plot
 from hazGAN.tensorflow.callbacks import WandbMetricsLogger, CountImagesSeen, ImageLogger
 
-# %%
+
 tf.keras.backend.clear_session()
 tf.debugging.set_log_device_placement(LOG_DEVICE_PLACEMENT)
 tf.config.run_functions_eagerly(RUN_EAGERLY) # for debugging
@@ -42,8 +41,8 @@ global force_cpu
 
 def notify(title, subtitle, message):
     os.system("""
-                osascript -e 'display notification "{}" with title "{}" subtitle "{}" beep'
-                """.format(message, title, subtitle))
+              osascript -e 'display notification "{}" with title "{}" subtitle "{}" beep'
+              """.format(message, title, subtitle))
 
 
 def check_interactive(sys):
@@ -113,38 +112,41 @@ def export_sample(samples):
     np.savez(os.path.join(rundir, 'samples.npz'), uniform=samples)
 
 
-def evaluate_results(train,
-                     valid,
-                     config,
-                     history,
-                     model,
-                     metadata
+def evaluate_results(train, model, label:int, config:dict,
+                     history:dict, metadata:dict, nsamples:int=100
                      ) -> None:
-    """Make some key figures to view results."""
-    #! This should work ok but only generated samples are filtered by label
+    """Make some key figures to view results.
+    """
     save_config(rundir, config)
     print("Gathering labels and conditions...")
-    labels = [key for key in config['label_ratios'].keys()]
-    biggest_label = len(labels) - VISUALS_LEVEL
-    lower_bound = labels[biggest_label]
 
-    train_extreme = train.take(1000).unbatch().filter(lambda sample: sample['label']==biggest_label)
-    # valid_extreme = valid.unbatch().filter(lambda sample: sample['label']==biggest_label)
-    condition = np.array(list(x['condition'] for x in train_extreme.as_numpy_iterator()))
+    # filter training data
+    train_extreme = train.take(1000).unbatch().filter(lambda sample: sample['label']==label)
+    condition_train = np.array(list(x['condition'] for x in train_extreme.as_numpy_iterator()))
     
-    # TODO: try do this better
-    nfake = 100
-    x = np.linspace(0, 100, nfake)
-    xp = np.linspace(0, 100, len(condition))
-    fp = sorted(condition)
-    condition = np.interp(x, xp, fp)
-    label = np.tile(biggest_label, nfake)
-    print("\nConditioning on 1000 {:.2f} - {:.2f} max wind percentiles".format(condition.min(), condition.max()))
-    print("Conditioning on label: {}".format(label[0]))
+    # filter generated data
+    x = np.linspace(0, 100, nsamples)
+    xp = np.linspace(0, 100, len(condition_train))
+    fp = sorted(condition_train)
+    condition = np.interp(x, xp, fp) # interpolate conditions
+    labels = np.tile(label, nsamples)
+    lower_bound = np.floor(condition_train.min())
+    upper_bound = np.ceil(condition_train.max())
+    print(
+        "\nConditioning on {} {:.2f} - {:.2f} max wind percentiles with label {}"
+        .format(
+            nsamples,
+            lower_bound,
+            upper_bound,
+            label
+        )
+    )
+    
+
 
     print("\nGenerating samples...")
     paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]]) 
-    fake_u = hazzy.unpad(model(condition, label, nsamples=nfake), paddings=paddings).numpy()
+    fake_u = hazzy.unpad(model(condition, labels, nsamples=nsamples), paddings=paddings).numpy()
 
     print("\nGathering validation data...")
     train_u = metadata['train']['uniform'].data
@@ -177,7 +179,7 @@ def evaluate_results(train,
     final_chi_rmse = history['chi_rmse'][-1]
     print(f"final_chi_rmse: {final_chi_rmse:.4f}")
 
-# %%
+
 def main(config, verbose=True):
     # load data
     with tf.device(device):
@@ -190,8 +192,6 @@ def main(config, verbose=True):
             gumbel=config['gumbel']
             )
         
-        return train
-        train = train.take(1000) if dry_run else train
         train = train.prefetch(tf.data.AUTOTUNE)
         valid = valid.prefetch(tf.data.AUTOTUNE)
     
@@ -219,7 +219,7 @@ def main(config, verbose=True):
 
         # train
         model = hazzy.conditional.compile_wgan(config, nchannels=len(config['fields']))
-        if run:
+        if run is not None:
             run.alert(title="Training", text=f"Training started", level=AlertLevel.INFO)
         start = time.time()
         print("\nTraining...\n")
@@ -230,7 +230,7 @@ def main(config, verbose=True):
 
 
     print("\nFinished! Training time: {:.2f} seconds\n".format(time.time() - start))
-    evaluate_results(train, valid, config, history.history, model, metadata)
+    evaluate_results(train, model, 2, config, history.history, metadata)
     return history.history
 
 
@@ -263,11 +263,10 @@ if __name__ == "__main__":
             config = yaml.safe_load(stream)
         config = {key: value['value'] for key, value in config.items()}
         run = None
-        config = update_config(config, 'epochs', 1)
+        config = update_config(config, 'epochs', DRY_RUN_EPOCHS)
         runname = "dry-run"
     else:
-        wandb.init(allow_val_change=True, settings=wandb.Settings(_service_wait=300))  # saves snapshot of code as artifact
-
+        run = wandb.init(allow_val_change=True, settings=wandb.Settings(_service_wait=300))  # saves snapshot of code as artifact
         runname = wandb.run.name
         config = wandb.config
     
@@ -292,5 +291,5 @@ if __name__ == "__main__":
 
     notify("Process finished", "Python script", "Finished making pretraining data")
 
-# %% ---DEBUG BELOW THIS LINEE----
+# %% ---DEBUG BELOW THIS LINE----
 

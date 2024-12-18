@@ -24,7 +24,6 @@ def test_finds_env():
 
 
 def test_paths():
-    for path in ['WORKINGDIR', 'ERA5DIR', 'TRAINDIR', 'DATADIR',
-                'IMAGEDIR']:
+    for path in ['WORKINGDIR', 'TRAINDIR', 'DATADIR', 'IMAGEDIR']:
         assert env.str(path) is not None, f"{path} is None"
         assert os.path.exists(env.str(path)), f"{env.str(path)} does not exist"

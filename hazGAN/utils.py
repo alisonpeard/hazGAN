@@ -11,14 +11,6 @@ def notify(title, subtitle, message):
               osascript -e 'display notification "{}" with title "{}" subtitle "{}" beep'
               """.format(message, title, subtitle))
 
-    
-KNOWN_OUTLIERS = np.array([
-    '1992-04-15T00:00:00.000000000',
-    '1952-05-09T00:00:00.000000000',
-    '1995-05-02T00:00:00.000000000'
-    ], dtype='datetime64[ns]')
-
-TEST_YEAR = 2022
 
 def rescale(x:np.ndarray) -> np.ndarray:
     return (x - x.min() / (x.max() - x.min()))

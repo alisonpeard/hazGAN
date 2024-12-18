@@ -78,11 +78,21 @@ def define_generator(config, nchannels=2):
     """
     >>> generator = define_generator(config)
     """
+
     def normalise(x):
         if config['normalize_generator']:
             return layers.BatchNormalization(axis=-1)(x)
         else:
             return x
+        
+    width = config['generator_width']
+
+    assert width // 8 == 0, "generator width must be divisible by 8"
+    assert width >= 64, "generator width must be at least 64"
+
+    width0 = width
+    width1 = width // 2
+    width2 = width // 3
     
     # flexible input processing
     z = tf.keras.Input(shape=(config['latent_dims'],), name='noise_input', dtype='float32')
@@ -101,20 +111,20 @@ def define_generator(config, nchannels=2):
     concatenated = layers.concatenate(inputs)
 
     # Fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
-    fc = wrappers.Dense(config["g_layers"][0] * 5 * 5 * nchannels, use_bias=False)(concatenated)
+    fc = wrappers.Dense(width0 * 5 * 5 * nchannels, use_bias=False)(concatenated)
     fc = layers.Reshape((5, 5, int(nchannels * config["g_layers"][0])))(fc)
     lrelu0 = layers.LeakyReLU(config['lrelu'])(fc)
     drop0 = layers.Dropout(config['dropout'])(lrelu0)
     bn0 = normalise(drop0)
     
     # 1st deconvolution block, 5 x 5 x 1024 -> 7 x 7 x 512
-    conv1 = wrappers.Conv2DTranspose(config["g_layers"][1], 3, 1, use_bias=False)(bn0)
+    conv1 = wrappers.Conv2DTranspose(width1, 3, 1, use_bias=False)(bn0)
     lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
     drop1 = layers.Dropout(config['dropout'])(lrelu1)
     bn1 = normalise(drop1)
 
     # 2nd deconvolution block, 6 x 8 x 512 -> 14 x 18 x 256
-    conv2 = wrappers.Conv2DTranspose(config["g_layers"][2], (3, 4), 1, use_bias=False)(bn1)
+    conv2 = wrappers.Conv2DTranspose(width2, (3, 4), 1, use_bias=False)(bn1)
     lrelu2 = layers.LeakyReLU(config['lrelu'])(conv2)
     drop2 = layers.Dropout(config['dropout'])(lrelu2)
     bn2 = normalise(drop2)
@@ -125,7 +135,8 @@ def define_generator(config, nchannels=2):
 
     # this is new: should control output range better
     if config['gumbel']:
-        o = wrappers.GumbelEsque()(score)
+        o = wrappers.GumbelIsh()(score)
+        # o = score
     else:
         o = tf.keras.activations.sigmoid(score)
     
@@ -142,6 +153,14 @@ def define_critic(config, nchannels=2):
             return layers.LayerNormalization(axis=-1)(x)
         else:
             return x
+        
+    width = config['critic_width']
+    assert config['critic_width'] // 8 == 0, "critic width must be divisible by 8."
+    assert config['critic_width'] >= 64, "critic width must be at least 64." 
+    
+    width2 = width
+    width1 = width2 // 2
+    width0 = width1 // 2
         
     # flexible input processsing
     x = tf.keras.Input(shape=(20, 24, nchannels), name='samples')
@@ -161,25 +180,25 @@ def define_critic(config, nchannels=2):
     concatenated = layers.concatenate(inputs)
 
     # 1st hidden layer 9x10x64
-    conv1 = wrappers.Conv2D(config["d_layers"][0], (4, 5), (2, 2), "valid")(concatenated)
+    conv1 = wrappers.Conv2D(width0, (4, 5), (2, 2), "valid")(concatenated)
     lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
     drop1 = layers.Dropout(config['dropout'])(lrelu1)
     drop1 = normalise(drop1)
 
     # 2nd hidden layer 7x7x128
-    conv1 = wrappers.Conv2D(config["d_layers"][1], (3, 4), (1, 1), "valid")(drop1)
+    conv1 = wrappers.Conv2D(width1, (3, 4), (1, 1), "valid")(drop1)
     lrelu2 = layers.LeakyReLU(config['lrelu'])(conv1)
     drop2 = layers.Dropout(config['dropout'])(lrelu2)
     drop2 = normalise(drop2)
 
     # 3rd hidden layer 5x5x256
-    conv2 = wrappers.Conv2D(config["d_layers"][2], (3, 3), (1, 1), "valid")(drop2)
+    conv2 = wrappers.Conv2D(width2, (3, 3), (1, 1), "valid")(drop2)
     lrelu3 = layers.LeakyReLU(config['lrelu'])(conv2)
     drop3 = layers.Dropout(config['dropout'])(lrelu3)
     drop3 = normalise(drop3)
 
     # fully connected 1x1
-    flat = layers.Reshape((-1, 5 * 5 * config["d_layers"][2]))(drop3)
+    flat = layers.Reshape((-1, 5 * 5 * width2))(drop3)
     score = wrappers.Dense(1)(flat) #? sigmoid might smooth training by constraining?, S did similar, caused nans
     out = layers.Reshape((1,))(score)
     return tf.keras.Model([x, condition, label], out, name="critic")
@@ -189,7 +208,7 @@ class WGANGP(keras.Model):
     """Wasserstein GAN with gradient penalty."""
 
     # this should improve memory usage
-    __slots__ = ['critic', 'generator', 'latent_dim', 'lambda_gp', 'lambda_condition',
+    __slots__ = ['critic', 'generator', 'latent_dim', 'lambda_gp',
                     'config', 'latent_space_distn', 'trainable_vars', 'inv', 'augment',
                     'seed', 'chi_rmse_tracker', 'generator_loss_tracker', 'critic_loss_tracker',
                     'value_function_tracker', 'critic_real_tracker', 'critic_fake_tracker',
@@ -203,7 +222,6 @@ class WGANGP(keras.Model):
         self.generator = define_generator(config, nchannels)
         self.latent_dim = config['latent_dims']
         self.lambda_gp = config['lambda_gp']
-        self.lambda_condition = config['lambda_condition']
         self.config = config
         self.latent_space_distn = getattr(tf.random, config['latent_space_distn'])
         self.trainable_vars = [
@@ -266,6 +284,8 @@ class WGANGP(keras.Model):
             assert n == nsamples, f"Latent vector must be same length ({n}) as requested number of samples ({nsamples})."
 
         raw = self.generator([noise, condition, label], training=False)
+        tf.print("Minimum before transformation:", tf.reduce_min(raw))
+        tf.print("Maximum before transformation:", tf.reduce_max(raw))
         return self.inv(raw)
     
 
@@ -356,8 +376,7 @@ class WGANGP(keras.Model):
             generated_data = self.generator([random_noise, condition, label])
             score = self.critic([self.augment(generated_data), condition, label], training=False)
             generator_loss = -tf.reduce_mean(score)
-            condition_penalty = tf.reduce_mean(tf.square(tf.reduce_max(generated_data[..., 0], axis=[1, 2]) - condition))
-            generator_penalised_loss = generator_loss #!+ self.lambda_condition * condition_penalty
+            generator_penalised_loss = generator_loss
         
         chi_rmse = chi_loss(self.inv(data), self.inv(generated_data))
         gradients = tape.gradient(generator_penalised_loss, self.generator.trainable_weights)
