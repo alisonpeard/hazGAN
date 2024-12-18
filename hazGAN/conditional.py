@@ -252,6 +252,12 @@ class WGANGP(keras.Model):
         self.critic_grad_norm = keras.metrics.Mean(name="critic_grad_norm")
         self.generator_grad_norm = keras.metrics.Mean(name="generator_grad_norm")
 
+        # for predictor optimisation https://openreview.net/forum?id=Skj8Kag0Z
+        self.generator.previous_state = self.generator.trainable_weights.copy()
+        self.critic.previous_state = self.critic.trainable_weights.copy()
+        self.generator.current_state = self.generator.trainable_weights.copy()
+        self.critic.current_state = self.critic.trainable_weights.copy()
+
         # monitor for vanishing gradients
         self.critic_grad_norms = [
             keras.metrics.Mean(name=f"critic_{i}_{var.path}") for i, var in enumerate(self.critic.trainable_variables)
@@ -309,6 +315,39 @@ class WGANGP(keras.Model):
         return {'critic': self.critic_valid_tracker.result()}
 
 
+    def train_with_prediction(model_name:str) -> callable:
+        """Decorator to train with prediction."""
+        def lookahead(model) -> None:
+            print(f"\nLooking ahead with {model_name}...")
+            old_weights = model.previous_state
+            current_weights = model.trainable_weights
+            model.current_state = current_weights.copy()
+
+            for old, current in zip(old_weights, current_weights):
+                delta = tf.math.subtract(current, old) # will just be zero if no change
+                prediction = tf.math.add(current, delta)
+                current.assign(prediction)
+
+        def reset(model) -> None:
+            print(f"Resetting {model_name}...\n")
+            current_weights = model.current_state
+            predicted_weights = model.trainable_weights
+
+            for current, weight in zip(current_weights, predicted_weights):
+                weight.assign(current)
+
+        def decorator(func):
+            def wrapper(self,*args, **kwargs):
+                model = getattr(self, model_name)
+                lookahead(model)
+                func(self, *args, **kwargs)
+                reset(model)
+            return wrapper
+        
+        return decorator
+    
+
+    # @train_with_prediction("generator")
     def train_critic(self, data, condition, label, batch_size) -> None:
         """Train critic with gradient penalty.
         
@@ -365,7 +404,7 @@ class WGANGP(keras.Model):
 
         return None
 
-    
+    # @train_with_prediction("critic")
     def train_generator(self, data, condition, label, batch_size) -> None:
         """https://www.tensorflow.org/guide/function#conditionals
         """

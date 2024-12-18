@@ -5,9 +5,8 @@ Improved input-output methods to flexibly load from pretraining and training set
 import os
 import gc
 import time
-from typing import Union
 from environs import Env
-from numbers import Number
+from functools import partial
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -71,7 +70,7 @@ def label_data(data:xr.DataArray, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}
 def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
          train_size=0.8, fields=['u10', 'tp'], image_shape=(18, 22),
          padding_mode='reflect', gumbel=True, batch_size=16,
-         verbose=True, testyear=TEST_YEAR) -> tuple[Dataset, Dataset, dict]:
+         verbose=False, testyear=TEST_YEAR) -> tuple[Dataset, Dataset, dict]:
     """Main data loader for training.
 
     Returns:
@@ -85,6 +84,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3
     """
     assert condition in ['maxwind', 'time.season', 'label']
     gc.disable() # slight speed up
+    printv = partial(print_if_verbose, verbose=verbose)
 
     print("\nLoading training data (hang on)...")
     start = time.time() # time data loading
@@ -99,9 +99,9 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3
     data = data.sel(time=data['time.year'] != testyear)
     pretrain = pretrain.sel(time=pretrain['time.year'] != testyear)
 
-    print("Pretrain shape: {}".format(pretrain['uniform'].data.shape))
-    print("Train shape: {}".format(data['uniform'].data.shape))
-    print("\nData loaded. Processing data...")
+    printv("Pretrain shape: {}".format(pretrain['uniform'].data.shape))
+    printv("Train shape: {}".format(data['uniform'].data.shape))
+    printv("\nData loaded. Processing data...")
     
     metadata = {} # start collecting metadata
 
@@ -120,10 +120,9 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3
     pretrain['time'] = (pretrain['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
     pretrain = pretrain.sel(field=fields)
 
-    if verbose:
-        print("\nData summary:\n-------------")
-        print("{:,.0f} samples from storm dataset".format(data.sizes['time']))
-        print("{:,.0f} samples from normal climate dataset".format(pretrain.sizes['time']))
+    printv("\nData summary:\n-------------")
+    printv("{:,.0f} samples from storm dataset".format(data.sizes['time']))
+    printv("{:,.0f} samples from normal climate dataset".format(pretrain.sizes['time']))
 
     # train/test split
     if isinstance(train_size, float):
@@ -170,13 +169,13 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3
     split_train = [train.filter(lambda sample: sample['label']==label) for label in labels]
 
     # print size of each dataset in split_train
-    print("\nCalculating input class sizes...")
+    printv("\nCalculating input class sizes...")
     data_sizes = {}
     for label, dataset in zip(labels, split_train):
         data_sizes[label] = dataset.reduce(0, lambda x, _: x + 1).numpy()
-    print("\nClass sizes:\n------------")
+    printv("\nClass sizes:\n------------")
     for label, size in data_sizes.items():
-        print("Label: {} | size: {:,.0f}".format(label, size))
+        printv("Label: {} | size: {:,.0f}".format(label, size))
 
     target_dist = list(label_ratios.values())
     train = tf.data.Dataset.sample_from_datasets(split_train, target_dist)

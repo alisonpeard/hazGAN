@@ -6,7 +6,8 @@ RUN_EAGERLY = False
 RESTRICT_MEMORY = True
 MEMORY_GROWTH = False
 LOG_DEVICE_PLACEMENT = False
-DRY_RUN_EPOCHS = 100
+DRY_RUN_EPOCHS = 1
+VERBOSE = False
 
 import os
 import sys
@@ -29,7 +30,9 @@ tf.keras.backend.clear_session()
 tf.debugging.set_log_device_placement(LOG_DEVICE_PLACEMENT)
 tf.config.run_functions_eagerly(RUN_EAGERLY) # for debugging
 
+
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
+
 
 global run
 global datadir
@@ -189,7 +192,8 @@ def main(config, verbose=True):
             batch_size=config['batch_size'],
             train_size=config['train_size'],
             fields=config['fields'],
-            gumbel=config['gumbel']
+            gumbel=config['gumbel'],
+            verbose=VERBOSE
             )
         
         train = train.prefetch(tf.data.AUTOTUNE)
