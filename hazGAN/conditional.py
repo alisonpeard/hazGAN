@@ -87,7 +87,7 @@ def define_generator(config, nchannels=2):
         
     width = config['generator_width']
 
-    assert width // 8 == 0, "generator width must be divisible by 8"
+    assert width % 8 == 0, "generator width must be divisible by 8"
     assert width >= 64, "generator width must be at least 64"
 
     width0 = width
@@ -112,7 +112,7 @@ def define_generator(config, nchannels=2):
 
     # Fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
     fc = wrappers.Dense(width0 * 5 * 5 * nchannels, use_bias=False)(concatenated)
-    fc = layers.Reshape((5, 5, int(nchannels * config["g_layers"][0])))(fc)
+    fc = layers.Reshape((5, 5, int(nchannels * width0)))(fc)
     lrelu0 = layers.LeakyReLU(config['lrelu'])(fc)
     drop0 = layers.Dropout(config['dropout'])(lrelu0)
     bn0 = normalise(drop0)
@@ -155,7 +155,7 @@ def define_critic(config, nchannels=2):
             return x
         
     width = config['critic_width']
-    assert config['critic_width'] // 8 == 0, "critic width must be divisible by 8."
+    assert config['critic_width'] % 8 == 0, "critic width must be divisible by 8."
     assert config['critic_width'] >= 64, "critic width must be at least 64." 
     
     width2 = width

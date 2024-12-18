@@ -6,6 +6,9 @@ __pycache__/
 # my envirnoment files
 .env
 
+# wandb files
+scripts/training/wandb/
+
 # weird files popping up in linux
 ._*
 

@@ -135,7 +135,7 @@ def test_storm_maxima_autocorrelation(storms, lag, alpha=0.1):
 
 def test_ecdf_values_strict(storms):
     """Test that the empirical CDF is within bounds (0, 1)"""
-    from hazGAN.utils import TEST_YEAR
+    from hazGAN.constants import TEST_YEAR
 
     storms = storms[storms['time'].dt.year != TEST_YEAR].copy()
     ecdf = storms['ecdf']
@@ -188,7 +188,7 @@ def test_ecdf_function_open_min(storms, cell):
 @pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300, 302])
 def test_ecdf(storms, cell, tol=1e-6):
     """Test that applying ecdf function recovers the 'ecdf' column"""
-    from hazGAN.utils import TEST_YEAR
+    from hazGAN.constants import TEST_YEAR
     from hazGAN.statistics import ecdf
     
     test = storms[storms['time'].dt.year != TEST_YEAR].copy()
@@ -205,7 +205,7 @@ def test_ecdf(storms, cell, tol=1e-6):
 @pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300])
 def test_quantile(storms, cell, tol=1e-6):
     """Test that applying quantile function recovers the field column"""
-    from hazGAN.utils import TEST_YEAR
+    from hazGAN.constants import TEST_YEAR
     from hazGAN.statistics import quantile
     
     test = storms[storms['time'].dt.year != TEST_YEAR].copy()
@@ -273,7 +273,7 @@ if __name__ == "__main__":
     wd = env.str("TRAINDIR")
 
     # load test fixtures for dev
-    from hazGAN.utils import TEST_YEAR
+    from hazGAN.constants import TEST_YEAR
 
     FIELD = "u10"
     data = xr.open_dataset(os.path.join(wd, "data.nc"))

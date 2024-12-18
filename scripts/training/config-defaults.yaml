@@ -31,9 +31,6 @@ seed:
   value: 42
 
 # training features
-optimizer:
-  desc: Optimizer to use, ['SGD', 'Adam']
-  value: Adam
 training_balance:
   desc: Gulrajani et al. 2017 use 5
   value: 5
@@ -72,7 +69,10 @@ normalize_critic:
   desc: Whether to layer normalise critic blocks. NB this matters for conditioning.
   value: True
 
-# Adam parameters https://doi.org/10.48550/arXiv.1704.00028
+# optimizer
+optimizer:
+  desc: Optimizer to use, ['SGD', 'Adam']
+  value: Adam
 learning_rate:
   desc: Gulrajani et al. 2017 use 0.0001 (Appendix B)
   value: 0.001
