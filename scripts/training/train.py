@@ -2,7 +2,7 @@
 For conditional training (no constant fields yet).
 """
 # %%
-RUN_EAGERLY = False
+RUN_EAGERLY = True
 RESTRICT_MEMORY = True
 MEMORY_GROWTH = False
 LOG_DEVICE_PLACEMENT = False
@@ -19,6 +19,7 @@ from wandb import AlertLevel
 from environs import Env
 import numpy as np
 import tensorflow as tf
+from memory_profiler import profile
 
 import hazGAN as hazzy
 from hazGAN import plot
@@ -28,6 +29,8 @@ from hazGAN.tensorflow.callbacks import WandbMetricsLogger, CountImagesSeen, Ima
 tf.keras.backend.clear_session()
 tf.debugging.set_log_device_placement(LOG_DEVICE_PLACEMENT)
 tf.config.run_functions_eagerly(RUN_EAGERLY) # for debugging
+
+logfile = open("training.log", "w+")
 
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
@@ -180,6 +183,7 @@ def evaluate_results(train, model, label:int, config:dict,
     print(f"final_chi_rmse: {final_chi_rmse:.4f}")
 
 
+@profile(stream=logfile)
 def main(config, verbose=True):
     # load data
     with tf.device(device):

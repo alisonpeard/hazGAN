@@ -13,11 +13,16 @@ from tensorflow import keras
 from tensorflow.keras import optimizers
 from tensorflow.keras import layers
 # from tensorflow.keras.optimizers.schedules import ExponentialDecay # will use again
+
+import tracemalloc
 from inspect import signature
+from memory_profiler import profile
 
 from .statistics import chi_loss, inv_gumbel
 from .tensorflow import DiffAugment
 from .tensorflow import wrappers
+
+logfile = open("trainstep.log", 'w+')
 
 # %%
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
@@ -400,7 +405,7 @@ class WGANGP(keras.Model):
     def skip(self, *args, **kwargs) -> None:
         return None
     
-
+    @profile(stream=logfile)
     @tf.function
     def train_step(self, batch) -> dict:
         """print(train_step.pretty_printed_concrete_signatures())"""
