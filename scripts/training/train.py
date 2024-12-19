@@ -23,7 +23,7 @@ from memory_profiler import profile
 
 import hazGAN as hazzy
 from hazGAN import plot
-from hazGAN.tensorflow.callbacks import WandbMetricsLogger, CountImagesSeen, ImageLogger
+from hazGAN.pytorch.callbacks import WandbMetricsLogger, CountImagesSeen, ImageLogger
 
 
 tf.keras.backend.clear_session()

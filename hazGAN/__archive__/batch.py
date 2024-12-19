@@ -1,6 +1,6 @@
 import math
 import numpy as np
-import tensorflow as tf
+import pytorch as tf
 
 
 def sample(data, size:int, replace=False)->list:

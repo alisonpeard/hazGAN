@@ -1,7 +1,7 @@
 """Data handling methods for the hazGAN model."""
 import os
 import pandas as pd
-import tensorflow as tf
+import pytorch as tf
 import xarray as xr
 from .extreme_value_theory import gumbel
 

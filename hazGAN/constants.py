@@ -1,6 +1,6 @@
 """Default settings for modelling."""
 import numpy as np
-import tensorflow as tf
+import pytorch as tf
 
 SEED = 42
 

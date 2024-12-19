@@ -2,7 +2,7 @@ import os
 from collections import deque
 import numpy as np
 import wandb
-import tensorflow as tf
+import pytorch as tf
 from tensorflow.keras.callbacks import Callback
 from tensorflow.nn import sigmoid_cross_entropy_with_logits as cross_entropy
 import matplotlib.pyplot as plt

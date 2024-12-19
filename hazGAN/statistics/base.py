@@ -2,7 +2,7 @@
 Functions for transforming data to other distributions using empirical cdf.
 """
 import numpy as np
-import tensorflow as tf
+import pytorch as tf
 from scipy.stats import genextreme, genpareto
 from tqdm import tqdm
 import warnings

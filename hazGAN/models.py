@@ -8,36 +8,189 @@ References:
 # %%
 import warnings
 import functools
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import optimizers
-from tensorflow.keras import layers
-# from tensorflow.keras.optimizers.schedules import ExponentialDecay # will use again
-
-import tracemalloc
+import torch
+from torch import nn
 from inspect import signature
-from memory_profiler import profile
+from typing import Tuple, Union
+from pytorch.blocks import (
+    ResidualUpBlock,
+    ResidualDownBlock,
+    GumbelBlock
+)
 
-from .statistics import chi_loss, inv_gumbel
-from .tensorflow import DiffAugment
-from .tensorflow import wrappers
+# from .statistics import chi_loss, inv_gumbel
+# from .pytorch import DiffAugment
+# from .pytorch import wrappers
 
-logfile = open("trainstep.log", 'w+')
+SAMPLE_CONFIG = {
+    'generator_width': 64,
+    'nconditions': 2,
+    'embedding_depth': 64,
+    'latent_dims': 64,
+    'lrelu': 0.2,
+    'critic_width': 64
+}
 
 # %%
-def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
+def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None, device='mps'):
     """Sample from Gumbel(0, 1)"""
-    T = tf.constant(temperature, dtype=tf.float32)
-    O = tf.constant(offset, dtype=tf.float32)
-    U = tf.random.uniform(shape, minval=0, maxval=1, seed=seed)
-    return O - T * tf.math.log(-tf.math.log(U + eps) + eps)
+    T = torch.tensor(temperature, device=device)
+    O = torch.tensor(offset, device=device)
+    U = torch.rand(shape, device=device)
+    return O - T * torch.log(-torch.log(U + eps) + eps)
 
 
 def initialise_variables():
-    """Initialise mutable Tensorflow objects."""
-    tf.random.gumbel = sample_gumbel
+    """Allows me to specify distribution in wandb sweeps."""
+    torch.gumbel = sample_gumbel
+    torch.uniform = torch.rand
+    torch.normal = torch.randn
+    
+
+class Generator(nn.Module):
+    def __init__(self, config, nfields=2):
+        super(Generator, self).__init__()
+
+        # set up feature widths
+        self.nfields = nfields
+        width = config['generator_width']
+        assert width % 8 == 0, "generator width must be divisible by 8"
+        assert width >= 64, "generator width must be at least 64"
+        self.width0 = width
+        self.width1 = width // 2
+        self.width2 = width // 3
+        self.latent_dims = config['latent_dims']
+
+        self.constant_to_features = None # placeholder for later
+
+        self.label_to_features = nn.Sequential(
+            nn.Embedding(config['nconditions'], config['embedding_depth'], sparse=False),
+            nn.Linear(config['embedding_depth'], self.width0 * 5 * 5 * nfields, bias=False),
+            nn.Unflatten(-1, (self.width0 * nfields, 5, 5)),
+            nn.LeakyReLU(config['lrelu']),
+            nn.BatchNorm2d(self.width0 * nfields),
+        ) # output shape: (batch_size, width0 * nfields, 5, 5)
+
+        self.condition_to_features = nn.Sequential(
+            nn.Linear(1, config['embedding_depth'], bias=False),
+            nn.Linear(config['embedding_depth'], self.width0 * 5 * 5 * nfields, bias=False),
+            nn.Unflatten(-1, (self.width0 * nfields, 5, 5)),
+            nn.LeakyReLU(config['lrelu']),
+            nn.BatchNorm2d(self.width0 * nfields)
+        ) # output shape: (batch_size, width0 * nfields, 5, 5)
+
+        self.latent_to_features = nn.Sequential(
+            nn.Linear(self.latent_dims, self.width0 * 5 * 5 * nfields, bias=False), # custom option
+            nn.Unflatten(-1, (self.width0 * nfields, 5, 5)),
+            nn.LeakyReLU(config['lrelu']),
+            nn.BatchNorm2d(self.width0 *  nfields)
+        ) # output shape: (batch_size, width0 * nfields, 5, 5)
+
+        self.features_to_image = nn.Sequential(
+            ResidualUpBlock(self.width0 * nfields, self.width1, (3, 3), bias=False),
+            # (3,3) kernel: 5x5 -> 15x15
+            ResidualUpBlock(self.width1, self.width2, (3, 4), bias=False),
+        
+            ResidualUpBlock(self.width2, nfields, (4, 6), 2, bias=False),
+        ) # output shape: (batch_size, 20, 24, nfields)
+
+        self.refine_fields = nn.Sequential(
+            nn.Conv2d(nfields, nfields, kernel_size=4, padding="same", groups=nfields),
+            nn.LeakyReLU(config['lrelu']),
+            nn.BatchNorm2d(nfields),
+            nn.Conv2d(nfields, nfields, kernel_size=3, padding="same", groups=nfields),
+            GumbelBlock(nfields)
+        ) # output shape: (batch_size, 20, 24, nfields)
 
 
+    def forward(self, z, label, condition):
+        z = self.latent_to_features(z)
+        label = self.label_to_features(label)
+        condition = self.condition_to_features(condition)
+        x = z + label + condition
+        # x = torch.cat([z, label, condition], dim=1)
+        x = self.features_to_image(x)
+        x = self.refine_fields(x)
+        return x
+
+    
+class Critic(nn.Module):
+    def __init__(self, config, nfields=2):
+        super(Critic, self).__init__()
+
+        # set up feature widths
+        self.nfields = nfields
+        width = config['critic_width']
+        assert width % 8 == 0, "critic width must be divisible by 8"
+        assert width >= 64, "critic width must be at least 64"
+        
+        self.width0 = width // 3
+        self.width1 = width // 2
+        self.width2 = width
+
+        self.process_fields = nn.Sequential(
+            nn.Conv2d(nfields, self.width0 * nfields, kernel_size=4, padding="same", groups=nfields),
+            nn.LeakyReLU(config['lrelu']),
+        ) # output shape: (batch_size, width0 * nfields, 20, 24)
+
+        self.label_to_features = nn.Sequential(
+            nn.Embedding(config['nconditions'], config['embedding_depth'], sparse=False),
+            nn.Linear(config['embedding_depth'], self.width0 * 20 * 24 * nfields, bias=False),
+            nn.Unflatten(-1, (self.width0 * nfields, 20, 24)),
+            nn.LeakyReLU(config['lrelu']),
+            nn.LayerNorm((self.width0 * nfields, 20, 24))
+        ) # output shape: (batch_size, width0 * nfields, 20, 24)
+
+        self.condition_to_features = nn.Sequential(
+            nn.Linear(1, config['embedding_depth'], bias=False),
+            nn.Linear(config['embedding_depth'], self.width0 * 20 * 24 * nfields, bias=False),
+            nn.Unflatten(-1, (self.width0 * nfields, 20, 24)),
+            nn.LeakyReLU(config['lrelu']),
+            nn.LayerNorm((self.width0 * nfields, 20, 24))
+        ) # output shape: (batch_size, width0 * nfields, 20, 24)
+
+        self.image_to_features = nn.Sequential(
+            ResidualDownBlock(self.width0 * nfields, self.width1, (4, 5), 2, bias=False),
+            ResidualDownBlock(self.width1, self.width2, (3, 4), bias=False),
+            ResidualDownBlock(self.width2, self.width2, (3, 3), bias=False),
+        ) # output shape: (batch_size, width2, 1, 1)
+
+
+        self.features_to_score = nn.Sequential(
+            nn.Conv2d(self.width2, nfields, kernel_size=4, groups=nfields, bias=False, padding='same'),
+            nn.Flatten(1, -1),
+            nn.LeakyReLU(config['lrelu']),
+            nn.LayerNorm((nfields * 5 * 5)),
+            nn.Linear(nfields * 5 * 5, 1),
+            nn.Sigmoid() # maybe
+        ) # output shape: (batch_size, 1)
+
+    def forward(self, x, label, condition):
+        x = self.process_fields(x)
+        label = self.label_to_features(label)
+        condition = self.condition_to_features(condition)
+        x = x + label + condition
+        x = self.image_to_features(x)
+        x = self.features_to_score(x)
+        return x
+    
+
+if __name__ == "__main__": # tests
+    generator = Generator(SAMPLE_CONFIG)
+    critic =  Critic(SAMPLE_CONFIG)
+
+    z = torch.rand(1, SAMPLE_CONFIG['latent_dims'])
+    label = torch.randint(0, SAMPLE_CONFIG['nconditions'], (1,))
+    condition = torch.rand(1, 1)
+    x = torch.rand(1, 2, 20, 24)
+
+    x = generator.forward(z, label, condition)
+    p = critic.forward(x, label, condition)
+    print("Generated shape:", x.shape)
+    print("Critic score shape:", p.shape)
+#%%
+
+"""
 def get_optimizer_kwargs(optimizer):
     optimizer = getattr(optimizers, optimizer)
     params = signature(optimizer).parameters
@@ -59,7 +212,6 @@ def process_optimizer_kwargs(config):
     
     return kwargs
 
-
 def compile_wgan(config, nchannels=2):
     initialise_variables()
     kwargs = process_optimizer_kwargs(config)
@@ -78,135 +230,9 @@ def printv(message, verbose):
     if verbose:
         tf.print(message)
 
+"""
 
-def define_generator(config, nchannels=2):
-    """
-    >>> generator = define_generator(config)
-    """
-
-    def normalise(x):
-        if config['normalize_generator']:
-            return layers.BatchNormalization(axis=-1)(x)
-        else:
-            return x
-        
-    width = config['generator_width']
-
-    assert width % 8 == 0, "generator width must be divisible by 8"
-    assert width >= 64, "generator width must be at least 64"
-
-    width0 = width
-    width1 = width // 2
-    width2 = width // 3
-    
-    # flexible input processing
-    z = tf.keras.Input(shape=(config['latent_dims'],), name='noise_input', dtype='float32')
-    inputs = [z] #TODO: list accumulation may not work as expected with AutoGraph
-    if config['condition']:
-        condition = tf.keras.Input(shape=(1,), name='condition', dtype='float32')
-        condition_projected = wrappers.Dense(config['embedding_depth'], input_shape=(1,))(condition)
-        condition_projected = layers.LeakyReLU(config['lrelu'])(condition_projected)
-        condition_projected = wrappers.Dense(config['embedding_depth'])(condition_projected) # add complexity
-        inputs.append(condition_projected) # is this okay in AutoGraph?
-    if config['labels']:
-        label = tf.keras.Input(shape=(1,), name="label", dtype='int32')
-        label_embedded = wrappers.Embedding(config['nconditions'], config['embedding_depth'])(label)
-        label_embedded = layers.Reshape((config['embedding_depth'],))(label_embedded)
-        inputs.append(label_embedded)
-    concatenated = layers.concatenate(inputs)
-
-    # Fully connected layer, 1 x 1 x 25600 -> 5 x 5 x 1024
-    fc = wrappers.Dense(width0 * 5 * 5 * nchannels, use_bias=False)(concatenated)
-    fc = layers.Reshape((5, 5, int(nchannels * width0)))(fc)
-    lrelu0 = layers.LeakyReLU(config['lrelu'])(fc)
-    drop0 = layers.Dropout(config['dropout'])(lrelu0)
-    bn0 = normalise(drop0)
-    
-    # 1st deconvolution block, 5 x 5 x 1024 -> 7 x 7 x 512
-    conv1 = wrappers.Conv2DTranspose(width1, 3, 1, use_bias=False)(bn0)
-    lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
-    drop1 = layers.Dropout(config['dropout'])(lrelu1)
-    bn1 = normalise(drop1)
-
-    # 2nd deconvolution block, 6 x 8 x 512 -> 14 x 18 x 256
-    conv2 = wrappers.Conv2DTranspose(width2, (3, 4), 1, use_bias=False)(bn1)
-    lrelu2 = layers.LeakyReLU(config['lrelu'])(conv2)
-    drop2 = layers.Dropout(config['dropout'])(lrelu2)
-    bn2 = normalise(drop2)
-
-    # Output layer, 17 x 21 x 128 -> 20 x 24 x nchannels, resizing not inverse conv
-    conv3 = layers.Resizing(20, 24, interpolation=config['interpolation'])(bn2)
-    score = wrappers.Conv2DTranspose(nchannels, (4, 6), 1, padding='same')(conv3)
-
-    # this is new: should control output range better
-    if config['gumbel']:
-        o = wrappers.GumbelIsh()(score)
-        # o = score
-    else:
-        o = tf.keras.activations.sigmoid(score)
-    
-    return tf.keras.Model([z, condition, label], o, name="generator")
-
-
-def define_critic(config, nchannels=2):
-    """
-    >>> critic = define_critic()
-    """
-
-    def normalise(x):
-        if config['normalize_critic']:
-            return layers.LayerNormalization(axis=-1)(x)
-        else:
-            return x
-        
-    width = config['critic_width']
-    assert config['critic_width'] % 8 == 0, "critic width must be divisible by 8."
-    assert config['critic_width'] >= 64, "critic width must be at least 64." 
-    
-    width2 = width
-    width1 = width2 // 2
-    width0 = width1 // 2
-        
-    # flexible input processsing
-    x = tf.keras.Input(shape=(20, 24, nchannels), name='samples')
-    inputs = [x]
-    if config['condition']:
-        condition = tf.keras.Input(shape=(1,), name='condition')
-        condition_projected = wrappers.Dense(config['embedding_depth'] * 20 * 24)(condition)
-        condition_projected = layers.LeakyReLU(config['lrelu'])(condition_projected)
-        condition_projected = wrappers.Dense(config['embedding_depth'] * 20 * 24)(condition_projected)
-        condition_projected = layers.Reshape((20, 24, config['embedding_depth']))(condition_projected)
-        inputs.append(condition_projected)
-    if config['labels']:
-        label = tf.keras.Input(shape=(1,), name='label')
-        label_embedded = wrappers.Embedding(config['nconditions'], config['embedding_depth'] * 20 * 24)(label)
-        label_embedded = layers.Reshape((20, 24, config['embedding_depth']))(label_embedded)
-        inputs.append(label_embedded)
-    concatenated = layers.concatenate(inputs)
-
-    # 1st hidden layer 9x10x64
-    conv1 = wrappers.Conv2D(width0, (4, 5), (2, 2), "valid")(concatenated)
-    lrelu1 = layers.LeakyReLU(config['lrelu'])(conv1)
-    drop1 = layers.Dropout(config['dropout'])(lrelu1)
-    drop1 = normalise(drop1)
-
-    # 2nd hidden layer 7x7x128
-    conv1 = wrappers.Conv2D(width1, (3, 4), (1, 1), "valid")(drop1)
-    lrelu2 = layers.LeakyReLU(config['lrelu'])(conv1)
-    drop2 = layers.Dropout(config['dropout'])(lrelu2)
-    drop2 = normalise(drop2)
-
-    # 3rd hidden layer 5x5x256
-    conv2 = wrappers.Conv2D(width2, (3, 3), (1, 1), "valid")(drop2)
-    lrelu3 = layers.LeakyReLU(config['lrelu'])(conv2)
-    drop3 = layers.Dropout(config['dropout'])(lrelu3)
-    drop3 = normalise(drop3)
-
-    # fully connected 1x1
-    flat = layers.Reshape((-1, 5 * 5 * width2))(drop3)
-    score = wrappers.Dense(1)(flat) #? sigmoid might smooth training by constraining?, S did similar, caused nans
-    out = layers.Reshape((1,))(score)
-    return tf.keras.Model([x, condition, label], out, name="critic")
+"""
 
 
 class WGANGP(keras.Model):
@@ -405,7 +431,7 @@ class WGANGP(keras.Model):
     def skip(self, *args, **kwargs) -> None:
         return None
     
-    @profile(stream=logfile)
+   
     @tf.function
     def train_step(self, batch) -> dict:
         """print(train_step.pretty_printed_concrete_signatures())"""
@@ -482,3 +508,4 @@ class WGANGP(keras.Model):
         ] + self.critic_grad_norms + self.generator_grad_norms
 
 # %%
+"""
