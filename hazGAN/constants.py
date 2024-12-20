@@ -1,6 +1,5 @@
 """Default settings for modelling."""
 import numpy as np
-import pytorch as tf
 
 SEED = 42
 
@@ -21,7 +20,7 @@ TEST_YEAR = 2022
 
 def PADDINGS():
     """Wrap in function to avoid early initialization."""
-    return tf.constant([[1, 1], [1, 1], [0, 0]])
+    return np.array([[1, 1], [1, 1], [0, 0]])
 
 
 KNOWN_OUTLIERS = np.array([
@@ -29,3 +28,23 @@ KNOWN_OUTLIERS = np.array([
     '1952-05-09T00:00:00.000000000',
     '1995-05-02T00:00:00.000000000'
     ], dtype='datetime64[ns]')
+
+
+SAMPLE_CONFIG = {
+    'generator_width': 64,
+    'nconditions': 2,
+    'embedding_depth': 64,
+    'latent_dim': 64,
+    'lrelu': 0.2,
+    'critic_width': 64,
+    'lambda_gp': 10,
+    'latent_space_distn': 'gumbel',
+    'augment_policy': 'color,translation',
+    'gumbel': True,
+    'seed': 42,
+    'optimizer': 'Adam',
+    'learning_rate': 1e-4,
+    'beta_1': 0.9,
+    'beta_2': 0.99,
+    'training_balance': 5
+}

@@ -50,6 +50,7 @@ dependencies:
         - rpy2 # optional
         - environs
         - bottleneck
+        - keras>=3.0.0
         - wandb==0.16.6 # stable May 2024
         - pytest
         # - -e ..
