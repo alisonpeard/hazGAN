@@ -5,17 +5,19 @@ Improved input-output methods to flexibly load from pretraining and training set
 import os
 import gc
 import time
-from typing import Union
+import torch
 from environs import Env
-from numbers import Number
 import numpy as np
-import pandas as pd
+from numpy.typing import ArrayLike
 import xarray as xr
 import dask.array as da
-import pytorch as tf
-from tensorflow.data import Dataset
-from .constants import PADDINGS, TEST_YEAR
+import torch
+from collections import Counter
+from typing import Dict, List, Tuple, Any
+from torch.utils.data import Dataset, DataLoader, Subset, ConcatDataset
+from torch.utils.data import WeightedRandomSampler
 
+from constants import TEST_YEAR
 
 
 def print_if_verbose(string:str, verbose=True) -> None:
@@ -24,7 +26,14 @@ def print_if_verbose(string:str, verbose=True) -> None:
         print(string)
 
 
-def encode_strings(ds:xr.Dataset, variable:str) -> tf.Tensor:
+def one_hot(a:np.ndarray) -> np.ndarray:
+    categories, inverse = np.unique(a, return_inverse=True)
+    encoded = np.zeros((a.size, categories.size))
+    encoded[np.arange(a.size), inverse] = 1
+    return encoded
+
+
+def encode_strings(ds:xr.Dataset, variable:str) -> ArrayLike:
     """One-hot encode a string variable"""
     # check that all ds[variable] data are strings
 
@@ -36,9 +45,16 @@ def encode_strings(ds:xr.Dataset, variable:str) -> tf.Tensor:
 
     encoding = {string: number for  number, string in enumerate(np.unique(ds[variable]))}
     encoded = np.array([encoding[string] for string in ds[variable].data])
-    depth = len(list(encoding.keys()))
-    return tf.one_hot(encoded, depth)
-    
+    encoded = one_hot(encoded)
+    return encoded
+
+
+def gumbel(uniform:torch.Tensor, eps:float=1e-6) -> torch.Tensor:
+    assert torch.all(uniform < 1.0), "Uniform values must be < 1"
+    assert torch.all(uniform > 0.0), "Uniform values must be > 0"
+    uniform = torch.clamp(uniform, eps, 1-eps)
+    return -torch.log(-torch.log(uniform))
+
 
 def numeric(mylist:list) -> list[float]:
     """Return a list of floats from a list of strings."""
@@ -67,12 +83,30 @@ def label_data(data:xr.DataArray, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}
 
     return data_labels
 
+def weight_labels(x:np.ndarray) -> np.ndarray:
+    """Return a weight for each label in x"""
+    counts = Counter(x)
+    weights = np.vectorize(counts.__getitem__)(x)
+    weights = 1.0 / weights
+    return weights
 
-def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
-         train_size=0.8, fields=['u10', 'tp'], image_shape=(18, 22),
-         padding_mode='reflect', gumbel=True, batch_size=16,
-         verbose=True, testyear=TEST_YEAR) -> tuple[Dataset, Dataset, dict]:
-    """Main data loader for training.
+def sample_dict(data, condition="maxwind") -> dict:
+        labels = data['label'].data.astype(int)
+        samples = {
+            'uniform': data['uniform'].data.astype(np.float32),
+            'condition': data[condition].data.astype(np.float32),
+            'label': labels,
+            'weight': weight_labels(labels),
+            'season': encode_strings(data, "season"),
+            'days_since_epoch': data['time'].data.astype(int),
+            }
+        return samples
+
+
+def prep_xr_data(datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
+         train_size=0.8, fields=['u10', 'tp'], epoch='1940-01-01',
+         verbose=True, testyear=TEST_YEAR) -> tuple[xr.Dataset, xr.Dataset, dict]:
+    """Library-agnostic data loader for training.
 
     Returns:
     --------
@@ -83,11 +117,6 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3
     metadata : dict
         Dict with useful metadata
     """
-    assert condition in ['maxwind', 'time.season', 'label']
-    gc.disable() # slight speed up
-
-    print("\nLoading training data (hang on)...")
-    start = time.time() # time data loading
     data = xr.open_dataset(os.path.join(datadir, 'data.nc')) # , engine='zarr'
     pretrain = xr.open_dataset(
         os.path.join(datadir, 'data_pretrain.nc'),
@@ -106,7 +135,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3
     metadata = {} # start collecting metadata
 
     # conditioning & sampling variables
-    metadata['epoch'] = np.datetime64('1950-01-01')
+    metadata['epoch'] = np.datetime64(epoch)
     data['maxwind'] = data.sel(field='u10')['anomaly'].max(dim=['lon', 'lat'])
     data['label'] = label_data(data, label_ratios)
     data['season'] = data['time.season']
@@ -120,11 +149,6 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3
     pretrain['time'] = (pretrain['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
     pretrain = pretrain.sel(field=fields)
 
-    if verbose:
-        print("\nData summary:\n-------------")
-        print("{:,.0f} samples from storm dataset".format(data.sizes['time']))
-        print("{:,.0f} samples from normal climate dataset".format(pretrain.sizes['time']))
-
     # train/test split
     if isinstance(train_size, float):
         n = data['time'].size
@@ -134,7 +158,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3
     static_vars = [var for var in data.data_vars if 'time' not in data[var].dims]
 
     train_dates = np.random.choice(data['time'].data, train_size, replace=False)
-    train= xr.merge([
+    train = xr.merge([
         data[dynamic_vars].sel(time=train_dates),
         data[static_vars]
     ])
@@ -151,17 +175,201 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3
     train = xr.concat([train, pretrain], dim='time', data_vars="minimal")
     labels = da.unique(train['label'].data).astype(int).compute().tolist()
     metadata['labels'] = labels
-    metadata['paddings'] = PADDINGS()
 
-    def sample_dict(data):
-        samples = {
-            'uniform': data['uniform'].data.astype(np.float32),
-            'condition': data[condition].data.astype(np.float32),
-            'label': data['label'].data.astype(int),
-            'season': encode_strings(data, "season"),
-            'days_since_epoch': data['time']
-            }
-        return samples
+    # compute
+    train = train.compute()
+    valid = valid.compute()
+
+    # get value counts for resampling
+    metadata['train_counts'] = Counter(train['label'].data)
+    metadata['valid_counts'] = Counter(valid['label'].data)
+
+    if verbose:
+        print("\nData summary:\n-------------")
+        print("{:,.0f} training samples from very stormy dataset".format(metadata['train_counts'][2.0]))
+        print("{:,.0f} training samples from stormy dataset".format(metadata['train_counts'][1.0]))
+        print("{:,.0f} training samples from normal climate dataset".format(metadata['train_counts'][0.0]))
+
+        print("{:,.0f} validation samples from very stormy dataset".format(metadata['valid_counts'][2.0]))
+        print("{:,.0f} validation samples from stormy dataset".format(metadata['valid_counts'][1.0]))
+
+    return train, valid, metadata
+
+# %%
+class DictDataset(Dataset):
+    def __init__(self, data_dict:Dict[str, np.ndarray]):
+        self.keys = list(data_dict.keys())
+        self.data = data_dict
+        self.length = len(data_dict[self.keys[0]])
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, idx):
+        batch = {}
+        for key in self.keys:
+            batch[key] = self.data[key][idx]
+        return batch
+    
+# %%
+
+
+
+
+
+
+# %% DEV // DEBUGGING BELOW HERE ##############################################
+def test_sampling_ratios(loader):
+        sample = next(iter(loader))['label'].numpy()
+        labels = Counter(sample)
+
+        for sample in loader:
+            labels += Counter(sample['label'].numpy())
+
+        return labels
+# %%
+if __name__ == "__main__":
+    print('Testing io.py...')
+    env = Env()
+    env.read_env(recurse=True)
+    datadir = env.str("TRAINDIR")
+
+    train, valid, metadata = prep_xr_data(datadir)
+
+    # make datasets
+    train = DictDataset(sample_dict(train))
+    valid = DictDataset(sample_dict(valid))
+
+    # make loaders
+    train_sampler = WeightedRandomSampler(train.data['weights'], len(train), replacement=True)
+    train_loader = DataLoader(train, batch_size=16, pin_memory=True, sampler=train_sampler)
+    valid_loader = DataLoader(valid, batch_size=16, shuffle=False, pin_memory=True)
+
+    # %%
+    # %%transform wrapper
+    # https://pytorch.org/tutorials/beginner/data_loading_tutorial.html
+
+# %% VIZ
+
+# %%
+xds = DictDataset(sample_dict(train))
+sample = next(iter(xds))
+
+
+
+# %%
+
+
+def create_dataloaders(
+    sample_dict: Dict[str, np.ndarray],
+    labels: List[Any],
+    label_ratios: Dict[Any, float],
+    batch_size: int,
+    image_shape: Tuple[int, int],
+    padding_mode: str = None
+) -> Tuple[DataLoader, DataLoader, Dict]:
+    
+    # Create datasets
+    dataset = CustomDataset(sample_dict)
+    
+    # Split into train/valid
+    train_size = int(0.8 * len(dataset))
+    indices = torch.randperm(len(dataset))
+    train_indices = indices[:train_size]
+    valid_indices = indices[train_size:]
+    
+    train_dataset = Subset(dataset, train_indices)
+    valid_dataset = Subset(dataset, valid_indices)
+    
+    # Split train by labels
+    label_datasets = []
+    data_sizes = {}
+
+    return train_dataset
+    print("\nCalculating input class sizes...")
+    for label in labels:
+        label_indices = [i for i in range(len(train_dataset)) 
+                        if train_dataset[i]['label'] == label]
+        label_datasets.append(Subset(train_dataset, label_indices))
+        data_sizes[label] = len(label_indices)
+    
+    print("\nClass sizes:\n------------")
+    for label, size in data_sizes.items():
+        print(f"Label: {label} | size: {size:,}")
+    
+    # Create resampled dataset
+    target_dist = list(label_ratios.values())
+    train_dataset = ResampledDataset(label_datasets, target_dist)
+    
+    # Create transform
+    transform = TransformWrapper(
+        image_shape=image_shape,
+        use_gumbel=True,
+        padding_mode=padding_mode
+    )
+    
+    # Create dataloaders
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True
+    )
+    
+    valid_loader = DataLoader(
+        valid_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        drop_last=True
+    )
+    
+    gc.enable()
+    gc.collect()
+    
+    return train_loader, valid_loader
+
+
+
+# %%
+def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
+         train_size=0.8, fields=['u10', 'tp'], image_shape=(18, 22),
+         padding_mode='reflect', gumbel=True, batch_size=16,
+         verbose=True, testyear=TEST_YEAR) -> tuple:
+    """Main data loader for training.
+
+    Returns:
+    --------
+    train : Dataset
+        Train dataset with (footprint, condition, label)
+    valid : Dataset
+        Validation dataset with (footprint, condition, label)
+    metadata : dict
+        Dict with useful metadata
+    """
+    assert condition in ['maxwind', 'time.season', 'label']
+    gc.disable() # slight speed up
+    print("\nLoading training data (hang on)...")
+    start = time.time() # time data loading
+
+    # process xarray datasets
+    train, valid, metadata = prep_data(datadir, label_ratios, train_size, fields, verbose, testyear)
+
+    # create dataloaders
+    train_loader = create_dataloaders(
+        sample_dict(train), metadata['labels'], label_ratios, batch_size, image_shape, padding_mode
+    )
+
+    end = time.time()
+    print('\nTime taken to load datasets: {:.2f} seconds.\n'.format(end - start))
+    gc.enable()
+    gc.collect()
+
+    return train_loader
+
+    # below here is library-specific and old
 
     train = Dataset.from_tensor_slices(sample_dict(train)).shuffle(10_000)
     valid = Dataset.from_tensor_slices(sample_dict(valid)).shuffle(500)
@@ -217,38 +425,7 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3
 
 
 # %% ##########################################################################
-# SCROLL DOWN FOR TESTING
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# SCROLL DOWN FOR TESTING // DEBUGGING
 
 # %% DEV // DEBUGGING BELOW HERE ##############################################
 if __name__ == "__main__":
@@ -257,8 +434,12 @@ if __name__ == "__main__":
     env.read_env(recurse=True)
     datadir = env.str("TRAINDIR")
 
-    train, valid, metadata = load_data(datadir)
+    train = load_data(datadir)
 
+
+
+    # %%
+    train, valid, metadata = load_data(datadir)
     def benchmark(dataset, num_epochs=2):
         start_time = time.perf_counter()
         for epoch_num in range(num_epochs):
@@ -274,44 +455,6 @@ if __name__ == "__main__":
     # train.save(os.path.join(datadir, 'train_dataset'))
     # valid.save(os.path.join(datadir, 'valid_dataset'))
 # %%
-# TODO: Make a class to handle train, valid, and metadata
-if False:
-    import json
-    class MetaDataset(Dataset):
-        
-        def __init__(self, datadir:str, condition="maxwind",
-                    label_ratios={'pre':1/3, 7: 1/3, 20:1/3},
-                    train_size=0.8, fields=['u10', 'tp'],
-                    image_shape=(18, 22), padding_mode='reflect',
-                    gumbel=True, batch_size=16, **kwargs):
-            super().__init__(**kwargs)
-            self.datasets = []
-            self.datadir = datadir
-            self.condition = condition
-            self.label_ratios = label_ratios,
-            self.train_size = train_size
-            self.fields = fields
-            self.image_shape = image_shape
-            self.padding_mode = padding_mode
-            self.gumbel = gumbel
-            self.batch_size = {}
-
-            self.kwargs = {}
-            self.metadata = {}
-
-        def __len__():
-            pass
-
-        def load(self):
-            self.train = super().load(os.path.join(datadir, 'train'))
-            self.valid = super().load(os.path.join(datadir, 'valid'))
-            # self.metadata = 
-
-        def save(self):
-            self.train.save(os.path.join(self.datadir, "train"))
-            self.train.save(os.path.join(self.datadir, "valid"))
-            with open(os.path.join(self.dir, 'metadata.json'), 'wb') as fp:
-                json.dumps(self.metadata, fp)
 
 
 
