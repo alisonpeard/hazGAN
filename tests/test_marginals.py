@@ -137,14 +137,14 @@ def test_ecdf_values_strict(storms):
     """Test that the empirical CDF is within bounds (0, 1)"""
     from hazGAN.constants import TEST_YEAR
 
-    storms = storms[storms['time'].dt.year != TEST_YEAR].copy()
+    # storms = storms[storms['time'].dt.year != TEST_YEAR].copy()
     ecdf = storms['ecdf']
     assert ecdf.max() < 1, 'ecdf ≥ 1 found, {:.4f}'.format(ecdf.max())
     assert ecdf.min() > 0, 'ecdf ≤ 0 found {:.4f}'.format(ecdf.min())
 
 
 @pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300, 302])
-def test_ecdf_function_open_max(storms, cell):
+def test_ecdf_function_upper_bound(storms, cell):
     """Test that the empirical CDF is within bounds (0, 1)"""
     from hazGAN.statistics import ecdf
 
@@ -164,7 +164,7 @@ def test_ecdf_function_open_max(storms, cell):
 
 
 @pytest.mark.parametrize('cell', [1, 5, 20, 40, 100, 200, 300, 302])
-def test_ecdf_function_open_min(storms, cell):
+def test_ecdf_function_lower_bound(storms, cell):
     """Test that the empirical CDF is within bounds (0, 1)"""
     from hazGAN.statistics import ecdf
 
