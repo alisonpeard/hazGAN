@@ -13,37 +13,56 @@ else:
     from .base import prep_xr_data, sample_dict
 
 
-def gumbel(uniform:torch.Tensor, eps:float=1e-6) -> torch.Tensor:
-    assert torch.all(uniform < 1.0), "Uniform values must be < 1, received {}".format(np.max(uniform))
-    assert torch.all(uniform > 0.0), "Uniform values must be > 0, received {}".format(np.max(uniform))
-    uniform = torch.clamp(uniform, eps, 1-eps)
-    return -torch.log(-torch.log(uniform))
-
-
-class PrepData:
-    """Transforms for data preparation."""
-    def __init__(self, image_shape:tuple[int, int], gumbel:bool=True, padding_mode:str=None):
-        self.image_shape = image_shape
-        self.gumbel =  gumbel
-        self.padding_mode = padding_mode
-
-    def __call__(self, sample:dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+# Transforms
+class Gumbel(object):
+    """Convert uniform data to Gumbel using PIT."""
+    def __call__(self, sample:dict, eps:float=1e-8) -> dict:
         uniform = sample['uniform']
-        uniform = torch.tensor(uniform, dtype=torch.float32)
-        uniform = torch.permute(uniform, (2, 0, 1))
+        assert torch.all(uniform < 1.0), "Uniform values must be < 1, received {}".format(torch.max(uniform))
+        assert torch.all(uniform > 0.0), "Uniform values must be > 0, received {}".format(torch.max(uniform))
+        uniform = torch.clamp(uniform, eps, 1-eps)
+        gumbel = -torch.log(-torch.log(uniform))
+        sample['uniform'] = gumbel
+        return sample
+
+
+class ToTensor(object):
+    """Convert ndarrays in sample to Tensors."""
+    def __call__(self, sample:dict) -> dict:
+        for key in sample.keys():
+            sample[key] = torch.tensor(sample[key], dtype=torch.float32)
+        sample['uniform'] = torch.permute(sample['uniform'], (2, 0, 1))
+        return sample
+    
+class Resize(object):
+    """Resize uniform data to image_shape."""
+    def __init__(self, image_shape:tuple[int, int]):
+        self.image_shape = image_shape
+
+    def __call__(self, sample:dict) -> dict:
+        uniform = sample['uniform']
         uniform = transforms.functional.resize(
             uniform, self.image_shape
         )
-        uniform = gumbel(uniform) if gumbel else uniform
-
-        if self.padding_mode is not None:
-            paddings = (0, 0, 1, 1)
-            uniform = transforms.functional.pad(
-                uniform, paddings, padding_mode=self.padding_mode
-            )
+        sample['uniform'] = uniform
         return sample
     
+class Pad(object):
+    """Pad uniform data."""
+    def __init__(self, padding_mode:str, paddings=(0, 0, 1, 1)):
+        self.padding_mode = padding_mode
+        self.paddings = paddings
 
+    def __call__(self, sample:dict) -> dict:
+        uniform = sample['uniform']
+        uniform = transforms.functional.pad(
+            uniform, self.paddings, padding_mode=self.padding_mode
+        )
+        sample['uniform'] = uniform
+        return sample
+
+
+# dataset class
 class DictDataset(Dataset):
     def __init__(self, data_dict:dict[str, np.ndarray], transform=None):
         self.keys = list(data_dict.keys())
@@ -94,14 +113,16 @@ if __name__ == "__main__":
     datadir = env.str("TRAINDIR")
 
     traindata, validdata, metadata = prep_xr_data(datadir)
+    traindata['uniform'].max()
 
-    # make datasets
-    transform = PrepData(image_shape=(18, 22), gumbel=True, padding_mode='reflect')
-    train = DictDataset(sample_dict(traindata), transform=transform)
-    valid = DictDataset(sample_dict(validdata), transform=transform)
+    # %%make datasets
+    transform = transforms.Compose([ToTensor(), Gumbel(), Resize((18, 22)), Pad('reflect', (0, 0, 1, 1))])
+    train = DictDataset(sample_dict(traindata))
+    valid = DictDataset(sample_dict(validdata))
 
-    # make loaders
-    transformer = PrepData(image_shape=(18, 22), gumbel=True, padding_mode='reflect')
+
+
+    # %% make loaders
     trainsampler = WeightedRandomSampler(train.data['weight'], len(train), replacement=True)
     trainloader = DataLoader(train, batch_size=16, pin_memory=True, sampler=trainsampler)
     validloader = DataLoader(valid, batch_size=16, shuffle=False, pin_memory=True)
