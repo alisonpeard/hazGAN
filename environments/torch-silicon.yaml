@@ -47,7 +47,7 @@ dependencies:
     - pytorch-nightly::torchaudio
     - pytorch-nightly::torchvision
     - pip:
-        - rpy2 # optional
+        # - rpy2 # optional
         - environs
         - bottleneck
         - keras>=3.0.0
