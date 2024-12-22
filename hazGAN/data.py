@@ -9,9 +9,8 @@ from numpy.typing import ArrayLike
 import xarray as xr
 import dask.array as da
 from collections import Counter
-from warnings import warn
-# from ..constants import TEST_YEAR
-TEST_YEAR = 2021
+
+from ..constants import TEST_YEAR
 
 
 def print_if_verbose(string:str, verbose=True) -> None:
@@ -94,16 +93,17 @@ def sample_dict(data, condition="maxwind") -> dict:
 
 
 def check_validity(dataset, name:str) -> None:
-    """Check that uniform data is in (0, 1) range."""
+    """Check that uniform data is in [0, 1] range.
+    -- depends on ECDF or Semi-CDF data."""
     max_unif = dataset['uniform'].max()
     min_unif = dataset['uniform'].min()
-    if max_unif >= 1.0 or min_unif <= 0.0:
+    if max_unif > 1.0 or min_unif < 0.0:
         print(
-            "WARNING: Uniform data in {} dataset is not in (0, 1) range. ".format(name) + 
+            "WARNING: Uniform data in {} dataset is not in [0, 1] range. ".format(name) + 
             "Max: {:.3f}, Min: {:.3f}".format(max_unif, min_unif)
         )
     else:
-        print("GOOD: Uniform data in {} dataset is in (0, 1) range.".format(name))
+        print("GOOD: Uniform data in {} dataset is in [0, 1] range.".format(name))
 
 def prep_xr_data(datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
          train_size=0.8, fields=['u10', 'tp'], epoch='1940-01-01',

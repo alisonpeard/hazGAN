@@ -5,7 +5,7 @@ try:
     import numpy as np
     import xarray as xr
     from collections import Counter
-    from hazGAN.io import label_data
+    from hazGAN.data import label_data
 except Exception as e:
     pass
 
@@ -13,7 +13,7 @@ except Exception as e:
 def test_imports():
     import numpy as np
     import xarray as xr
-    from hazGAN.io import label_data
+    from hazGAN.data import label_data
     from collections import Counter
 
 

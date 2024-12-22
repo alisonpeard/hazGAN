@@ -1,9 +1,9 @@
 # from .utils import *
 # from .plot import *
-# from .io import *
+from .data import *
 # from .tensorflow import *
-from . import conditional
-from .R import R
+# from . import conditional
+# from .R import R
 # from .statistics import *
 # from .xarray import *
 
