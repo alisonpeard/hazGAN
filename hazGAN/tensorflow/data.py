@@ -1,4 +1,13 @@
 # %%
+# untested
+import gc
+import time
+from environs import Env
+import tensorflow as tf
+from tensorflow.data import Dataset
+from ..constants import TEST_YEAR, PADDINGS
+from ..data import prep_xr_data, sample_dict
+
 def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
          train_size=0.8, fields=['u10', 'tp'], image_shape=(18, 22),
          padding_mode='reflect', gumbel=True, batch_size=16,
@@ -20,21 +29,8 @@ def load_data(datadir:str, condition="maxwind", label_ratios={'pre':1/3, 15: 1/3
     start = time.time() # time data loading
 
     # process xarray datasets
-    train, valid, metadata = prep_data(datadir, label_ratios, train_size, fields, verbose, testyear)
-
-    # create dataloaders
-    train_loader = create_dataloaders(
-        sample_dict(train), metadata['labels'], label_ratios, batch_size, image_shape, padding_mode
-    )
-
-    end = time.time()
-    print('\nTime taken to load datasets: {:.2f} seconds.\n'.format(end - start))
-    gc.enable()
-    gc.collect()
-
-    return train_loader
-
-    # below here is library-specific and old
+    train, valid, metadata = prep_xr_data(datadir, label_ratios, train_size, fields, verbose, testyear)
+    labels = metadata["labels"]
 
     train = Dataset.from_tensor_slices(sample_dict(train)).shuffle(10_000)
     valid = Dataset.from_tensor_slices(sample_dict(valid)).shuffle(500)

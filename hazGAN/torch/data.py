@@ -5,7 +5,7 @@ import torch
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 
-from ..data import prep_xr_data, sample_dict
+from ..data import load_xr_data, sample_dict
 
 
 # Transforms
@@ -13,7 +13,7 @@ class Gumbel(object):
     """Convert uniform data to Gumbel using PIT."""
     def __call__(self, sample:dict, eps:float=1e-8) -> dict:
         uniform = sample['uniform']
-        assert torch.all(uniform <= 1.0), "Uniform values must be <= 1, received {}".format(torch.max(uniform))
+        assert torch.all(uniform <= 1.0),"Uniform values must be <= 1, received {}".format(torch.max(uniform))
         assert torch.all(uniform >= 0.0), "Uniform values must be >= 0, received {}".format(torch.max(uniform))
         uniform = torch.clamp(uniform, eps, 1-eps)
         gumbel = -torch.log(-torch.log(uniform))
@@ -24,11 +24,19 @@ class Gumbel(object):
 class ToTensor(object):
     """Convert ndarrays in sample to Tensors."""
     def __call__(self, sample:dict) -> dict:
-        for key in sample.keys():
-            sample[key] = torch.tensor(sample[key], dtype=torch.float32)
+        sample['uniform'] = torch.tensor(sample['uniform'], dtype=torch.float32)
         sample['uniform'] = torch.permute(sample['uniform'], (2, 0, 1))
+
+        # reshape condition for dense layer
+        sample['condition'] = torch.tensor(sample['condition'], dtype=torch.float32).reshape(1)
+        sample['label'] = torch.tensor(sample['label'], dtype=torch.long)
+        sample['weight'] = torch.tensor(sample['weight'], dtype=torch.float32)
+        sample['season'] = torch.tensor(sample['season'], dtype=torch.long)
+        sample['days_since_epoch'] = torch.tensor(sample['days_since_epoch'], dtype=torch.long)
+
         return sample
-    
+
+
 class Resize(object):
     """Resize uniform data to image_shape."""
     def __init__(self, image_shape:tuple[int, int]):
@@ -41,7 +49,8 @@ class Resize(object):
         )
         sample['uniform'] = uniform
         return sample
-    
+
+
 class Pad(object):
     """Pad uniform data."""
     def __init__(self, padding_mode:str, paddings=(0, 0, 1, 1)):
@@ -57,6 +66,17 @@ class Pad(object):
         return sample
 
 
+class sendToDevice(object):
+    """Cast uniform data to float32."""
+    def __init__(self, device:str) -> None:
+        self.device = device
+    
+    def __call__(self, sample:dict) -> dict:
+        for key in sample.keys():
+            sample[key] = sample[key].to(self.device)
+        return sample
+
+
 # dataset class
 class StormDataset(Dataset):
     def __init__(self, data_dict:dict[str, np.ndarray], transform=None):
@@ -64,7 +84,7 @@ class StormDataset(Dataset):
         self.data = data_dict
         self.length = len(data_dict[self.keys[0]])
         self.transform = transform
-
+    
     def __len__(self):
         return self.length
 
@@ -78,14 +98,15 @@ class StormDataset(Dataset):
 
 
 def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
-              img_size:tuple=(18, 22)) -> tuple[Dataset, Dataset, dict]:
-    traindata, validdata, metadata = prep_xr_data(datadir)
+              img_size:tuple=(18, 22), device='mps') -> tuple[Dataset, Dataset, dict]:
+    traindata, validdata, metadata = load_xr_data(datadir)
     train = StormDataset(sample_dict(traindata))
     valid = StormDataset(sample_dict(validdata))
 
     transform = transforms.Compose(
         [ToTensor(), Gumbel(), Resize(img_size),
-         Pad(padding_mode, (0, 0, 2, 2))]
+         Pad(padding_mode, (0, 0, 2, 2)),
+         sendToDevice(device)]
          )
     
     train = StormDataset(sample_dict(traindata), transform=transform)

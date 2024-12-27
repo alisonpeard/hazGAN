@@ -10,7 +10,7 @@ import xarray as xr
 import dask.array as da
 from collections import Counter
 
-from ..constants import TEST_YEAR
+from .constants import TEST_YEAR
 
 
 def print_if_verbose(string:str, verbose=True) -> None:
@@ -104,6 +104,7 @@ def check_validity(dataset, name:str) -> None:
         )
     else:
         print("GOOD: Uniform data in {} dataset is in [0, 1] range.".format(name))
+
 
 def prep_xr_data(datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
          train_size=0.8, fields=['u10', 'tp'], epoch='1940-01-01',
@@ -204,4 +205,147 @@ def prep_xr_data(datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
     gc.collect()
     return train, valid, metadata
 
+# %%
+def equal(a, b) -> bool:
+    """Check if two objects are equal recursively.
+    
+    Examples:
+    ---------
+    >>> equal(['abc'], ['abc'])
+    >>> equal(1, 1)
+    >>> equal({'a': 1}, {'a': 1})
+    >>> equal(True, False)
+    >>> equal('abc', 'abc') 
+    """
+    print("{} == {}?".format(a, b))
+
+    if (a is None):
+        return b is a
+    
+    if isinstance(a, str) and isinstance(b, str):
+        print('a', a)
+        print('b', b)
+        return (a == b)
+
+    if isinstance(a, dict) and isinstance(b, dict):
+        return all(equal(a[key], b[key]) for key in a.keys())
+    
+    if hasattr(a, '__iter__') and hasattr(b, '__iter__'):
+        print('a', a)
+        print('b', b)
+        return all([equal(i, j) for i, j in zip(a, b)])
+
+    # catch all
+    result = (a == b)
+    print("result:", result)
+    return (a == b)
+# %%
+if __name__ == "__main__":
+    # datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
+    #          train_size=0.8, fields=['u10', 'tp'], epoch='1940-01-01',
+    #          verbose=True, testyear=TEST_YEAR
+    TEST_YEAR = 2021
+
+    def dummy(datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
+            train_size=0.8, fields=['u10', 'tp'], epoch='1940-01-01',
+            verbose=True, testyear=TEST_YEAR):
+        kwargs = locals()
+        return kwargs
+
+    kwargs1 = dummy(os.path.join('data', 'train'))
+    kwargs2 = dummy(os.path.join('data', 'train'))
+
+    # %%
+    equal(kwargs1, kwargs2)
+
+
+# %%
+def load_xr_cached(**kwargs) -> tuple[xr.Dataset, xr.Dataset, dict]:
+    """Cache prepped data for faster loading."""
+    if kwargs.get('cache'):
+        datadir = kwargs.get('datadir')
+        cachedir = os.path.join(datadir, 'cache')
+
+        if os.path.exists(cachedir):
+            # check if file containing args exists in cache dir
+            kwargfile = os.path.join(cachedir, 'kwargs.npz')
+
+            if os.path.exists(kwargfile):
+                print("Loading cached arguments...")
+                cached_kwargs = np.load(kwargfile, allow_pickle=True)
+                cached_kwargs = {key: value[()] for key, value in cached_kwargs.items()}
+
+                # args_match = all([kwargs.get(key) == cached_kwargs.get(key) for key in kwargs.keys()])
+                args_match = equal(kwargs, cached_kwargs)
+                
+                if args_match:
+                    print("Arguments match cached arguments. Loading data...")
+                    train = xr.open_dataset(os.path.join(cachedir, 'train.nc'))
+                    valid = xr.open_dataset(os.path.join(cachedir, 'valid.nc'))
+                    metadata = np.load(os.path.join(cachedir, 'metadata.npz'), allow_pickle=True)
+                    metadata = {key: value[()] for key, value in metadata.items()}
+                    metadata['train'] = xr.Dataset(metadata['train'])
+                    metadata['valid'] = xr.Dataset(metadata['valid'])
+                    return train, valid, metadata
+    # if these conditions are not met, return Nones
+    return None, None, None
+
+
+def cache_xr_data(train, valid, metadata, **kwargs):
+    """Cache prepped data for faster loading."""
+    if kwargs.get('cache'):
+        datadir = kwargs.get('datadir')
+        cachedir = os.path.join(datadir, 'cache')
+
+        # check if file containing args exists in cache dir
+        if not os.path.exists(cachedir):
+            os.makedirs(cachedir)
+
+        argfile = os.path.join(cachedir, 'kwargs.npz')
+
+        print("Caching arguments...")
+        np.savez(argfile, **kwargs)
+
+        print("Caching data...")
+        train.to_netcdf(os.path.join(cachedir, 'train.nc'))
+        valid.to_netcdf(os.path.join(cachedir, 'valid.nc'))
+
+        # metadata can only be saved to npz as DataArrays
+        metadata_train = metadata['train']
+        metadata_valid = metadata['valid']
+        train_arrays = {var: metadata_train[var] for var in metadata_train}
+        valid_arrays = {var: metadata_valid[var] for var in metadata_valid}
+        metadata['train'] = train_arrays
+        metadata['valid'] = valid_arrays
+
+        np.savez(os.path.join(cachedir, 'metadata.npz'), **metadata)
+        print("Data cached to {}".format(cachedir))
+
+
+def load_xr_data(datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
+         train_size=0.8, fields=['u10', 'tp'], epoch='1940-01-01',
+         verbose=True, testyear=TEST_YEAR, cache=True) -> tuple[xr.Dataset, xr.Dataset, dict]:
+    """Library-agnostic data loader for training.
+
+    Returns:
+    --------
+    train : Dataset
+        Train dataset with (footprint, condition, label)
+    valid : Dataset
+        Validation dataset with (footprint, condition, label)
+    metadata : dict
+        Dict with useful metadata
+    """
+    if cache:
+        kwargs = locals()
+        train, valid, metadata = load_xr_cached(**kwargs)
+        if train is not None:
+            # load from cache if available
+            print("Data loaded from cache.")
+            return train, valid, metadata
+        else:
+            # if there's no cached data, load and cache
+            train, valid, metadata = prep_xr_data(datadir, label_ratios, train_size, fields, epoch, verbose, testyear)
+            cache_xr_data(train, valid, metadata, **kwargs)
+            return train, valid, metadata
 # %%
