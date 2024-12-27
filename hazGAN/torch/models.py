@@ -6,7 +6,6 @@ References:
 ..[2] Harris (2022) - application
 """
 # %%
-import torch
 from torch import nn
 from .blocks import (
     ResidualUpBlock,
@@ -22,8 +21,10 @@ class Generator(nn.Module):
         # set up feature widths
         self.nfields = nfields
         width = config['generator_width']
+
         assert width % 8 == 0, "generator width must be divisible by 8"
         assert width >= 64, "generator width must be at least 64"
+
         self.width0 = width
         self.width1 = width // 2
         self.width2 = width // 3
@@ -58,7 +59,6 @@ class Generator(nn.Module):
             ResidualUpBlock(self.width0 * nfields, self.width1, (3, 3), bias=False),
             # (3,3) kernel: 5x5 -> 15x15
             ResidualUpBlock(self.width1, self.width2, (3, 4), bias=False),
-        
             ResidualUpBlock(self.width2, nfields, (4, 6), 2, bias=False),
         ) # output shape: (batch_size, 20, 24, nfields)
 
@@ -81,7 +81,7 @@ class Generator(nn.Module):
         x = self.refine_fields(x)
         return x
 
-    
+
 class Critic(nn.Module):
     def __init__(self, config, nfields=2):
         super(Critic, self).__init__()

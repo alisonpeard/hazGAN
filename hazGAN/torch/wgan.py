@@ -8,11 +8,9 @@ from keras import optimizers, ops
 import torch
 from torch.autograd import grad
 
-
-from constants import SAMPLE_CONFIG
-from torch_utils.models import Critic, Generator
-from torch_utils.augment import DiffAugment
-from stat_utils import chi_rmse
+from ..constants import SAMPLE_CONFIG
+from .models import Critic, Generator
+from .augment import DiffAugment
 
 
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None, device='mps'):
