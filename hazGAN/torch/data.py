@@ -6,17 +6,19 @@ from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 
 from ..data import load_xr_data, sample_dict
+from ..constants import TEST_YEAR
 
+__all__ = ['load_data', 'test_sampling_ratios', 'test_iter_time']
 
 # Transforms
 class Gumbel(object):
     """Convert uniform data to Gumbel using PIT."""
-    def __call__(self, sample:dict, eps:float=1e-8) -> dict:
+    def __call__(self, sample:dict, eps:float=1e-6) -> dict:
         uniform = sample['uniform']
         assert torch.all(uniform <= 1.0),"Uniform values must be <= 1, received {}".format(torch.max(uniform))
         assert torch.all(uniform >= 0.0), "Uniform values must be >= 0, received {}".format(torch.max(uniform))
-        uniform = torch.clamp(uniform, eps, 1-eps)
-        gumbel = -torch.log(-torch.log(uniform))
+        clamped = torch.clamp(uniform, eps, 1-eps)
+        gumbel = -torch.log(-torch.log(clamped))
         sample['uniform'] = gumbel
         return sample
 
@@ -97,14 +99,26 @@ class StormDataset(Dataset):
         return batch
 
 
+
 def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
-              img_size:tuple=(18, 22), device='mps') -> tuple[Dataset, Dataset, dict]:
-    traindata, validdata, metadata = load_xr_data(datadir)
+              img_size:tuple=(18, 22), device='mps', train_size:float=0.8,
+              fields:list=['u10', 'tp'], epoch='1940-01-01', verbose=True,
+              label_ratios:dict={'pre':1/3, 15: 1/3, 999:1/3},
+              testyear:int=TEST_YEAR, cache:bool=True) -> tuple[Dataset, Dataset, dict]:
+    """Load data and return train and valid dataloaders."""
+    
+    traindata, validdata, metadata = load_xr_data(
+        datadir, train_size=train_size, fields=fields, epoch=epoch,
+        verbose=verbose, testyear=testyear, label_ratios=label_ratios,
+        cache=cache
+        )
+    
     train = StormDataset(sample_dict(traindata))
     valid = StormDataset(sample_dict(validdata))
 
     transform = transforms.Compose(
-        [ToTensor(), Gumbel(), Resize(img_size),
+        [ToTensor(), Resize(img_size),
+         Gumbel(),
          Pad(padding_mode, (0, 0, 2, 2)),
          sendToDevice(device)]
          )

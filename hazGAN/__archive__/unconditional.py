@@ -235,7 +235,7 @@ class WGANGP(keras.Model):
                     tape_gp.watch(interpolates)
                     score = self.critic(interpolates)
                 gradients = tape_gp.gradient(score, [interpolates])[0]
-                slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1])) # NOTE: previously , axis=[1, 2, 3] but Gulrajani code has [1]
+                slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1,2,3])) # NOTE: previously , axis=[1, 2, 3] but Gulrajani code has [1]
                 if self.penalty == 'lipschitz':
                     gradient_penalty = tf.reduce_mean(tf.clip_by_value(slopes - 1., 0., np.infty)**2) # https://openreview.net/forum?id=B1hYRMbCW
                 elif self.penalty == 'gp':

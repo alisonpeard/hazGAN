@@ -11,7 +11,7 @@ from torch.autograd import grad
 from ..constants import SAMPLE_CONFIG
 from .models import Critic, Generator
 from .augment import DiffAugment
-
+from ..statistics.metrics import chi_rmse
 
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None, device='mps'):
     """Sample from Gumbel(0, 1)"""
@@ -48,10 +48,11 @@ class WGANGP(keras.Model):
             *self.critic.parameters()
         ]
 
+        
         if config['gumbel']:
-            self.inv = lambda x: -ops.log(-ops.log(x))
+            self.uniform = lambda x: torch.exp(-torch.exp(-x))
         else:
-            self.inv = lambda x: x
+            self.uniform = lambda x: x
 
         # stateful metrics
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
@@ -70,6 +71,12 @@ class WGANGP(keras.Model):
         self.critic_grad_norm = keras.metrics.Mean(name="critic_grad_norm")
         self.generator_grad_norm = keras.metrics.Mean(name="generator_grad_norm")
 
+        # image statistcs
+        self.fake_mean = keras.metrics.Mean(name="fake_mean")
+        self.real_mean = keras.metrics.Mean(name="real_mean")
+        self.fake_std = keras.metrics.Mean(name="fake_std")
+        self.real_std = keras.metrics.Mean(name="real_std")
+
         self.built = True
 
     def compile(self, *args, **kwargs) -> None:
@@ -81,6 +88,7 @@ class WGANGP(keras.Model):
                   'beta_2': config['beta_2']}
         self.critic_optimizer = optimizer(**opt_kwargs)
         self.generator_optimizer = optimizer(**opt_kwargs)
+        super().to(self.device)
 
 
     def call(self, label, condition, nsamples=5,
@@ -102,7 +110,7 @@ class WGANGP(keras.Model):
         if verbose:
             print("Minimum before transformation:", ops.min(raw))
             print("Maximum before transformation:", ops.max(raw))
-        return self.inv(raw)
+        return self.uniform(raw)
     
 
     def evaluate(self, x) -> dict:
@@ -129,6 +137,7 @@ class WGANGP(keras.Model):
         interpolates = data + (eps * differences)
         score_interpolates = self.critic(interpolates, label, condition)
         gradients = grad(score_interpolates, interpolates,
+                         grad_outputs=torch.ones(score_interpolates.size()).to(self.device),
                          create_graph=True, retain_graph=True)[0]
         gradients = gradients.view(data.shape[0], -1)
         gradient_norm = ops.sqrt(ops.sum(gradients ** 2, axis=1) + 1e-12)
@@ -162,12 +171,26 @@ class WGANGP(keras.Model):
         self.critic_grad_norm.update_state(ops.norm(grad_norms))
         self.critic_steps.update_state(1)
 
+        # update image statistics
+        self.fake_mean.update_state(ops.mean(fake_data))
+        self.real_mean.update_state(ops.mean(data))
+        self.fake_std.update_state(ops.std(fake_data))
+        self.real_std.update_state(ops.std(data))
+
+
+    def chi_wrapper(self, real, fake):
+        """Torch wrapper for chi_rmse."""
+        real = real.detach().cpu()
+        fake = fake.detach().cpu()
+        chi = chi_rmse(real, fake)
+        return torch.tensor(chi, dtype=torch.float32)
+
 
     def _train_generator(self, data, label, condition, batch_size) -> None:
         noise = self.latent_space_distn((batch_size, self.latent_dim))
         generated_data = self.generator(noise, label, condition)
         critic_score = self.critic(generated_data, label, condition)
-        chi_rmse = chi_rmse(self.inv(data), self.inv(generated_data))
+        chi = self.chi_wrapper(self.uniform(data), self.uniform(generated_data))
 
         self.zero_grad()
         loss = -ops.mean(critic_score)
@@ -179,7 +202,7 @@ class WGANGP(keras.Model):
         grad_norms = [ops.norm(grad) for grad in grads]
 
         self.generator_loss_tracker(loss)
-        self.chi_rmse_tracker(chi_rmse)
+        self.chi_rmse_tracker(chi)
         self.generator_grad_norm.update_state(ops.norm(grad_norms))
         self.generator_steps.update_state(1)
 
@@ -197,7 +220,11 @@ class WGANGP(keras.Model):
             "value_function": -self.value_function_tracker.result(),
             'critic_real': self.critic_real_tracker.result(),
             'critic_fake': self.critic_fake_tracker.result(),
-            'gradient_penalty': self.gradient_penalty_tracker.result()
+            'gradient_penalty': self.gradient_penalty_tracker.result(),
+            'fake_mean': self.fake_mean.result(),
+            'real_mean': self.real_mean.result(),
+            'fake_std': self.fake_std.result(),
+            'real_std': self.real_std.result()
         }
         
         if self.critic_steps.result() % self.training_balance == 0:
@@ -213,7 +240,9 @@ class WGANGP(keras.Model):
         metrics['chi_rmse'] = self.chi_rmse_tracker.result()
         metrics["critic_grad_norm"] = self.critic_grad_norm.result()
         metrics["generator_grad_norm"] = self.generator_grad_norm.result()
-        
+
+        print('\n') # log metrics on newlines
+
         return metrics
 
     @property
@@ -228,7 +257,11 @@ class WGANGP(keras.Model):
             self.value_function_tracker,
             self.chi_rmse_tracker,
             self.critic_grad_norm,
-            self.generator_grad_norm
+            self.generator_grad_norm,
+            self.fake_mean,
+            self.real_mean,
+            self.fake_std,
+            self.real_std,
         ]
     
 

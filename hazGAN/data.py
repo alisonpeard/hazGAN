@@ -206,8 +206,8 @@ def prep_xr_data(datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
     return train, valid, metadata
 
 # %%
-def equal(a, b) -> bool:
-    """Check if two objects are equal recursively.
+def equal(a, b, verbose=False) -> bool:
+    """Recursively check if two objects are equal.
     
     Examples:
     ---------
@@ -217,29 +217,24 @@ def equal(a, b) -> bool:
     >>> equal(True, False)
     >>> equal('abc', 'abc') 
     """
-    print("{} == {}?".format(a, b))
+    if verbose:
+        print("{} == {}?".format(a, b))
 
     if (a is None):
         return b is a
     
     if isinstance(a, str) and isinstance(b, str):
-        print('a', a)
-        print('b', b)
         return (a == b)
 
     if isinstance(a, dict) and isinstance(b, dict):
         return all(equal(a[key], b[key]) for key in a.keys())
     
     if hasattr(a, '__iter__') and hasattr(b, '__iter__'):
-        print('a', a)
-        print('b', b)
         return all([equal(i, j) for i, j in zip(a, b)])
-
-    # catch all
-    result = (a == b)
-    print("result:", result)
+    
     return (a == b)
 # %%
+# test function
 if __name__ == "__main__":
     # datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
     #          train_size=0.8, fields=['u10', 'tp'], epoch='1940-01-01',
@@ -256,7 +251,7 @@ if __name__ == "__main__":
     kwargs2 = dummy(os.path.join('data', 'train'))
 
     # %%
-    equal(kwargs1, kwargs2)
+    assert equal(kwargs1, kwargs2)
 
 
 # %%
@@ -336,16 +331,16 @@ def load_xr_data(datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
     metadata : dict
         Dict with useful metadata
     """
+    kwargs = locals()
     if cache:
-        kwargs = locals()
         train, valid, metadata = load_xr_cached(**kwargs)
         if train is not None:
             # load from cache if available
             print("Data loaded from cache.")
             return train, valid, metadata
-        else:
-            # if there's no cached data, load and cache
-            train, valid, metadata = prep_xr_data(datadir, label_ratios, train_size, fields, epoch, verbose, testyear)
-            cache_xr_data(train, valid, metadata, **kwargs)
-            return train, valid, metadata
+    
+    # if there's no cached data, load and (optionally) cache
+    train, valid, metadata = prep_xr_data(datadir, label_ratios, train_size, fields, epoch, verbose, testyear)
+    cache_xr_data(train, valid, metadata, **kwargs)
+    return train, valid, metadata
 # %%

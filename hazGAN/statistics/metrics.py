@@ -12,12 +12,11 @@ def chi_rmse(real, fake):
         chi_diff[channel] = chi_diff_1d(real_channel, fake_channel)
     return np.mean(chi_diff)
 
-
 def chi_diff_1d(real, fake):
     ecs_real = pairwise_extremal_coeffs(real)
     ecs_fake = pairwise_extremal_coeffs(fake)
     diff = ecs_real - ecs_fake
-    return np.sqrt(np.reduce_mean(np.square(diff)))
+    return np.sqrt(np.mean(np.square(diff)))
 
 
 def pairwise_extremal_coeffs(uniform):
@@ -26,11 +25,12 @@ def pairwise_extremal_coeffs(uniform):
         len(uniform.shape) == 3
             ), "Function all_extremal_coeffs fors for 3-dimensional tensors only."
     n, h, w = uniform.shape
-    uniform = tf.reshape(uniform, (n, h * w))
+    uniform = np.reshape(uniform, (n, h * w))
     frechet = inverted_frechet(uniform)
     minima = minner_product(np.transpose(frechet), frechet)
-    n = type(frechet)(n)
+    n = float(n)
     minima = minima.astype(type(frechet))
+    ecs = np.zeros_like(minima)
     ecs = np.divide(n, minima, out=ecs, where=minima != 0)
     return ecs
 
@@ -44,6 +44,7 @@ def minner_product(a, b):
         axis=1
     )
     return x
+
 
 def test_minner_product():
     x = np.array([[1, 2], [1, 1]])
