@@ -29,9 +29,9 @@ def pairwise_extremal_coeffs(uniform):
     frechet = inverted_frechet(uniform)
     minima = minner_product(np.transpose(frechet), frechet)
     n = float(n)
-    minima = minima.astype(type(frechet))
+    minima = minima.astype(float)
     ecs = np.zeros_like(minima)
-    ecs = np.divide(n, minima, out=ecs, where=minima != 0)
+    ecs = np.divide(n, minima, out=ecs, where=minima != 0, dtype=float)
     return ecs
 
 
@@ -110,26 +110,26 @@ def test_minner_product():
 #     return {key: d - val for key, val in coefs.items()}
 
 
-# def get_extremal_coeffs_nd(marginals, sample_inds):
-#     """Calculate extremal coefficients across D-dimensional uniform data."""
-#     n, h, w, d = marginals.shape
-#     data = marginals.reshape(n, h * w, d)
-#     data = data[:, sample_inds, :]
-#     frechet = inverted_frechet(data)
-#     ecs = {}
-#     for i in range(len(sample_inds)):
-#         ecs[sample_inds[i]] = raw_extremal_coeff_nd(frechet[:, i, :])
-#     return ecs
+def get_extremal_coeffs_nd(marginals, sample_inds):
+    """Calculate extremal coefficients across D-dimensional uniform data."""
+    n, h, w, d = marginals.shape
+    data = marginals.reshape(n, h * w, d)
+    data = data[:, sample_inds, :]
+    frechet = inverted_frechet(data)
+    ecs = {}
+    for i in range(len(sample_inds)):
+        ecs[sample_inds[i]] = raw_extremal_coeff_nd(frechet[:, i, :])
+    return ecs
 
 
-# def raw_extremal_coeff_nd(frechets):
-#     n, d = frechets.shape
-#     minima = np.min(frechets, axis=1)  # minimum for each row
-#     minima = np.sum(minima)
-#     if minima > 0:
-#         theta = n / minima
-#     else:
-#         print("Warning: all zeros in minima array.")
-#         theta = d
-#     return theta
+def raw_extremal_coeff_nd(frechets):
+    n, d = frechets.shape
+    minima = np.min(frechets, axis=1)  # minimum for each row
+    minima = np.sum(minima)
+    if minima > 0:
+        theta = n / minima
+    else:
+        print("Warning: all zeros in minima array.")
+        theta = d
+    return theta.astype(float)
 

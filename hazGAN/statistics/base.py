@@ -11,7 +11,7 @@ def frechet(uniform):
 
 
 def inverted_frechet(uniform):
-    """Inverted Fréchet RV is exponentially distributed."""
+    """Inverted Fréchet RV is also exponentially distributed."""
     return -np.log(uniform)
 
 

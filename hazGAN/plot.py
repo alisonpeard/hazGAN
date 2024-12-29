@@ -1,7 +1,6 @@
 import os
 import random
 import numpy as np
-import pytorch as tf
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 import matplotlib as mpl
@@ -21,6 +20,7 @@ save_kwargs = {"dpi": 300, "bbox_inches": "tight", "pad_inches": 0.1}
 
 # plots for training script
 def log_image_to_wandb(fig, name:str, dir:str, **kwargs):
+    """Pass figure to wandb if available."""
     import wandb
     if wandb.run is not None:
         impath = os.path.join(dir, f"{name}.png")
@@ -74,9 +74,9 @@ def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str) -
 
 def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str, channel=0) -> None:
     """Plot spatial extremal coefficients."""
-    ecs_train = pairwise_extremal_coeffs(train_u.astype(np.float32)[..., channel]).numpy()
-    ecs_valid = pairwise_extremal_coeffs(valid_u.astype(np.float32)[..., channel]).numpy()
-    ecs_fake = pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., channel]).numpy()
+    ecs_train = pairwise_extremal_coeffs(train_u.astype(np.float32)[..., channel])
+    ecs_valid = pairwise_extremal_coeffs(valid_u.astype(np.float32)[..., channel])
+    ecs_fake = pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., channel])
     
     cmap = plt.cm.coolwarm_r
     vmin = 1
@@ -89,8 +89,9 @@ def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str, c
                             'wspace': .02,
                             'width_ratios': [1, 1, 1, .05]}
                             )
-
-    im = axs[0].imshow(ecs_train, vmin=vmin, vmax=vmax, cmap=cmap)
+    print(ecs_train.dtype)
+    print(ecs_train.shape)
+    axs[0].imshow(ecs_train, vmin=vmin, vmax=vmax, cmap=cmap)
     im = axs[1].imshow(ecs_valid, vmin=vmin, vmax=vmax, cmap=cmap)
     im = axs[2].imshow(ecs_fake, vmin=vmin, vmax=vmax, cmap=cmap)
 
@@ -98,7 +99,7 @@ def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str, c
         ax.set_xticks([])
         ax.set_yticks([])
     
-    fig.colorbar(im, cax=axs[3], extend='both', orientation='vertical');
+    # fig.colorbar(im, cax=axs[3], extend='both', orientation='vertical');
     axs[0].set_title("Train", fontsize=16)
     axs[1].set_title("Test", fontsize=16)
     axs[2].set_title("hazGAN", fontsize=16)
@@ -218,57 +219,8 @@ def figure_four(fake_u, train_u, train_x, params, imdir:str,
     return fig
 
 
-def figure_five(fake_u, train_u, imdir:str, channel=0,
-                 cmap="Spectral_r", levels=20):
-    """Plot the 32 most extreme train and generated percentiles."""
-    from hazGAN import DiffAugment  
 
-    policy = 'color,translation,cutout'
-
-    # prep data to plot
-    lon = np.linspace(80, 95, 22)
-    lat = np.linspace(10, 25, 18)
-    lon, lat = np.meshgrid(lon, lat)
-    
-    fake = DiffAugment(fake_u, policy).numpy()[..., channel]
-    real = DiffAugment(train_u, policy).numpy()[..., channel]
-
-    if fake.shape[0] < 32:
-        fake = np.tile(
-            fake,
-            reps=(int(np.ceil(32 / fake.shape[0])), 1, 1)
-            )
-
-    samples = {'Generated samples': fake, "Training samples": real}
-
-    # set up plot specs
-    fig = plt.figure(figsize=(16, 16), layout="tight")
-    subfigs = fig.subfigures(2, 1, hspace=0.2)
-
-    for subfig, item in zip(subfigs, samples.items()):
-        axs = subfig.subplots(4, 8, sharex=True, sharey=True,
-                                    gridspec_kw={'hspace': 0, 'wspace': 0})
-        label = item[0]
-        sample = item[1]
-        vmin = sample.min()
-        vmax = sample.max()
-        for i, ax in enumerate(axs.flat):
-            im = ax.contourf(lon, lat, sample[i, ...],
-                             vmin=vmin, vmax=vmax,
-                             cmap=cmap, levels=levels)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.invert_yaxis()
-        subfig.suptitle(label, y=1.04, fontsize=24)
-        subfig.subplots_adjust(right=.99)
-        cbar_ax = subfig.add_axes([1., .02, .02, .9]) 
-        subfig.colorbar(im, cax=cbar_ax)
-    fig.suptitle('Augmented Percentiles')
-    log_image_to_wandb(fig, f"augmented_percentiles", imdir)
-    return fig
-
-
-## ----Old stuff (decide if needed later)---- ##
+## ----Older stuff (decide if needed later)---- ##
 def add_watermark(ax, text):
         ax.text(-1, 0.01, text,
         fontsize=8, color='k', alpha=0.5,
@@ -292,32 +244,82 @@ def discrete_colormap(data, nintervals, min=None, cmap="cividis", under='lightgr
     return cmap, norm
 
 
-def plot_generated_marginals(fake_data, start=0, nchannels=None, runname="", vmin=0, vmax=1):
-    print(f"Range: [{fake_data.min():.2f}, {fake_data.max():.2f}]")
 
-    if nchannels is None:
-        nchannels = fake_data.shape[-1]
+def plot_sample_density(data, ax, sample_pixels=None, cmap='cividis', s=10):
+    """Scatterplot for two variables, coloured by density."""
+    h, w = data.shape[1:3]
+    n = h * w
 
-    ncols = 10
-    fig, axs = plt.subplots(nchannels, ncols, layout='tight', figsize=(10, 3 * nchannels))
+    if sample_pixels is None:
+        sample_pixels_x = random.sample(range(n), 1)
+        sample_pixels_y = random.sample(range(n), 1)
+    else:
+        assert sample_pixels[0] != sample_pixels[1]
+        sample_pixels_x = [sample_pixels[0]]
+        sample_pixels_y = [sample_pixels[1]]
 
-    if nchannels == 1:
-        axs = axs[np.newaxis, :]
-    for i in range(nchannels):
-        for j in range(ncols):
-            ax = axs[i, j]
-            im = ax.imshow(fake_data[start + j, ..., i], cmap='Spectral_r', vmin=vmin, vmax=vmax)
-        axs[i, 0].set_ylabel(f'channel {i}')
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes('right', size='5%', pad=0.05)
-        fig.colorbar(im, cax=cax, orientation='vertical', label='Quantile')
-        plt.suptitle(f'Generated marginals {runname}')
+    data_ravel = np.reshape(data, [len(data), n])
 
-    for ax in axs.ravel():
-        ax.set_xticks([])
-        ax.set_yticks([])
+    sample_x = np.take(data_ravel, sample_pixels_x, axis=1)
+    sample_y = np.take(data_ravel, sample_pixels_y, axis=1)
 
+    axtitle = f"Pixels ({sample_pixels_x[0]}, {sample_pixels_y[0]})"
+
+    scatter_density(sample_x.numpy(), sample_y.numpy(), ax, title=axtitle, cmap=cmap, s=s)
+
+
+def scatter_density(x, y, ax, title='', cmap='cividis', s=10):
+    xy = np.hstack([x, y]).transpose()
+    z = gaussian_kde(xy)(xy)
+    idx = z.argsort()
+    x, y, z = x[idx], y[idx], z[idx]
+    ax.scatter(x, y, c=z, s=s, cmap=cmap)
+    ax.set_title(title)
+    return ax
+
+
+def scatter_density2(x, y, ax, title='', cmap='cividis'):
+    """Sometimes first doesn't work -- need to resolve why later."""
+    xy = np.vstack([x,y])
+    z = gaussian_kde(xy)(xy)
+    idx = z.argsort()
+    x, y, z = x[idx], y[idx], z[idx]
+    ax.scatter(x, y, c=z, s=10, cmap=cmap)
+    ax.set_title(title)
+    return ax
+
+
+def compare_channels_plot(train_images, test_images, fake_data, cmap='cividis'):
+    fig, axs = plt.subplots(3, 3, figsize=(15, 3))
+
+    for i, j in enumerate([300, 201, 102]):
+
+        n, h, w, c = train_images.shape
+        data_ravel = np.reshape(train_images, [n, h * w, c])
+        data_sample = np.take(data_ravel, j, axis=1).numpy()
+        x = np.array([data_sample[:, 0]]).transpose()
+        y = np.array([data_sample[:, 1]]).transpose()
+        scatter_density(x, y, ax=axs[i, 0], cmap=cmap)
+
+        n, h, w, c = test_images.shape
+        data_ravel = np.reshape(test_images, [n, h * w, c])
+        data_sample = np.take(data_ravel, j, axis=1).numpy()
+        x = np.array([data_sample[:, 0]]).transpose()
+        y = np.array([data_sample[:, 1]]).transpose()
+        scatter_density(x, y, ax=axs[i, 1], cmap=cmap)
+
+        n, h, w, c = fake_data.shape
+        data_ravel = np.reshape(fake_data, [n, h * w, c])
+        data_sample = np.take(data_ravel, j, axis=1).numpy()
+        x = np.array([data_sample[:, 0]]).transpose()
+        y = np.array([data_sample[:, 1]]).transpose()
+        scatter_density(x, y, ax=axs[i, 2], cmap=cmap)
+
+        for ax in axs.ravel():
+            ax.set_xlabel('u10')
+            ax.set_ylabel('v10')
     return fig
+
 
 
 # def compare_tails_plot(train_marginals, test_marginals, fake_marginals, x, y, params=None,
@@ -392,98 +394,3 @@ def plot_generated_marginals(fake_data, start=0, nchannels=None, runname="", vmi
 #     suptitle = suptitle if inverse_transform else f'{suptitle} (uniform marginals)'
 #     fig.suptitle(suptitle)
 #     return fig
-
-
-def plot_sample_density(data, ax, sample_pixels=None, cmap='cividis', s=10):
-    """For generated quantiles."""
-    h, w = data.shape[1:3]
-    n = h * w
-
-    if sample_pixels is None:
-        sample_pixels_x = random.sample(range(n), 1)
-        sample_pixels_y = random.sample(range(n), 1)
-    else:
-        assert sample_pixels[0] != sample_pixels[1]
-        sample_pixels_x = [sample_pixels[0]]
-        sample_pixels_y = [sample_pixels[1]]
-
-    data_ravel = tf.reshape(data, [len(data), n])
-
-    sample_x = tf.gather(data_ravel, sample_pixels_x, axis=1)
-    sample_y = tf.gather(data_ravel, sample_pixels_y, axis=1)
-
-    axtitle = f"Pixels ({sample_pixels_x[0]}, {sample_pixels_y[0]})"
-    scatter_density(sample_x.numpy(), sample_y.numpy(), ax, title=axtitle, cmap=cmap, s=s)
-
-
-def scatter_density(x, y, ax, title='', cmap='cividis', s=10):
-    xy = np.hstack([x, y]).transpose()
-    z = gaussian_kde(xy)(xy)
-    idx = z.argsort()
-    x, y, z = x[idx], y[idx], z[idx]
-    ax.scatter(x, y, c=z, s=s, cmap=cmap)
-    ax.set_title(title)
-    return ax
-
-
-def scatter_density2(x, y, ax, title='', cmap='cividis'):
-    """Sometimes first doesn't work -- need to resolve why later."""
-    xy = np.vstack([x,y])
-    z = gaussian_kde(xy)(xy)
-    idx = z.argsort()
-    x, y, z = x[idx], y[idx], z[idx]
-    ax.scatter(x, y, c=z, s=10, cmap=cmap)
-    ax.set_title(title)
-    return ax
-
-
-def compare_channels_plot(train_images, test_images, fake_data, cmap='cividis'):
-    fig, axs = plt.subplots(3, 3, figsize=(15, 3))
-
-    for i, j in enumerate([300, 201, 102]):
-
-        n, h, w, c = train_images.shape
-        data_ravel = tf.reshape(train_images, [n, h * w, c])
-        data_sample = tf.gather(data_ravel, j, axis=1).numpy()
-        x = np.array([data_sample[:, 0]]).transpose()
-        y = np.array([data_sample[:, 1]]).transpose()
-        scatter_density(x, y, ax=axs[i, 0], cmap=cmap)
-
-        n, h, w, c = test_images.shape
-        data_ravel = tf.reshape(test_images, [n, h * w, c])
-        data_sample = tf.gather(data_ravel, j, axis=1).numpy()
-        x = np.array([data_sample[:, 0]]).transpose()
-        y = np.array([data_sample[:, 1]]).transpose()
-        scatter_density(x, y, ax=axs[i, 1], cmap=cmap)
-
-        n, h, w, c = fake_data.shape
-        data_ravel = tf.reshape(fake_data, [n, h * w, c])
-        data_sample = tf.gather(data_ravel, j, axis=1).numpy()
-        x = np.array([data_sample[:, 0]]).transpose()
-        y = np.array([data_sample[:, 1]]).transpose()
-        scatter_density(x, y, ax=axs[i, 2], cmap=cmap)
-
-        for ax in axs.ravel():
-            ax.set_xlabel('u10')
-            ax.set_ylabel('v10')
-    return fig
-
-
-def plot_one_hundred_images(fake_data, channel=0, suptitle="Generated marginals", **plot_kwargs):
-    import matplotlib.gridspec as gridspec
-    fig = plt.figure(figsize=(10, 10), constrained_layout=True)
-    heights = [1] * 10 + [0.1]
-    gs = gridspec.GridSpec(11, 10, wspace=0.1, hspace=0.1, height_ratios=heights)
-
-    for i in range(100):
-        ax = plt.subplot(gs[i])
-        im = ax.imshow(fake_data[i, ..., channel], **plot_kwargs)
-        ax.set_xticks([])
-        ax.set_yticks([])
-
-    cax = fig.add_subplot(gs[-1, :])
-    fig.colorbar(im, cax=cax, shrink=0.8, aspect=0.01, orientation="horizontal", label='Quantile')
-    fig.suptitle(suptitle)
-    return fig
-
-

@@ -233,28 +233,8 @@ def equal(a, b, verbose=False) -> bool:
         return all([equal(i, j) for i, j in zip(a, b)])
     
     return (a == b)
-# %%
-# test function
-if __name__ == "__main__":
-    # datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
-    #          train_size=0.8, fields=['u10', 'tp'], epoch='1940-01-01',
-    #          verbose=True, testyear=TEST_YEAR
-    TEST_YEAR = 2021
-
-    def dummy(datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
-            train_size=0.8, fields=['u10', 'tp'], epoch='1940-01-01',
-            verbose=True, testyear=TEST_YEAR):
-        kwargs = locals()
-        return kwargs
-
-    kwargs1 = dummy(os.path.join('data', 'train'))
-    kwargs2 = dummy(os.path.join('data', 'train'))
-
-    # %%
-    assert equal(kwargs1, kwargs2)
 
 
-# %%
 def load_xr_cached(**kwargs) -> tuple[xr.Dataset, xr.Dataset, dict]:
     """Cache prepped data for faster loading."""
     if kwargs.get('cache'):
@@ -282,6 +262,8 @@ def load_xr_cached(**kwargs) -> tuple[xr.Dataset, xr.Dataset, dict]:
                     metadata['train'] = xr.Dataset(metadata['train'])
                     metadata['valid'] = xr.Dataset(metadata['valid'])
                     return train, valid, metadata
+                else:
+                    print("Arguments do not match cached arguments. Remaking data.")
     # if these conditions are not met, return Nones
     return None, None, None
 

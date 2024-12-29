@@ -38,7 +38,7 @@ class MemoryLogger(Callback):
 
             with open(self.path, "a") as stream:
                 stream.write(f"{datetime.now()} -- ")
-                stream.write(f"epoch {batch} -- ")
+                stream.write(f"batch {batch} -- ")
                 stream.write(f"current allocated: {current:.2f} GB -- ")
                 stream.write(f"driver allocated: {driver:.2f} GB\n")
 

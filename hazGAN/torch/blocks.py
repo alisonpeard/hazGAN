@@ -56,8 +56,12 @@ class GumbelBlock(nn.Module):
         )
 
     def forward(self, x):
+        print("Gumbel block")
+        print("Before uniform:", x.min(), x.max())
         x = self.make_kind_of_uniform(x)
+        print("After uniform:", x.min(), x.max())
         x = -torch.log(-torch.log(x))
+        print("After Gumbel:", x.min(), x.max())
         return x
 
 

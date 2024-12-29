@@ -28,11 +28,12 @@ class Generator(nn.Module):
         self.width0 = width
         self.width1 = width // 2
         self.width2 = width // 3
-        self.latent_dim = config['latent_dim']
+        self.latent_dim = config['latent_dims']
 
         self.constant_to_features = None # placeholder for later
 
         self.label_to_features = nn.Sequential(
+            # input shape: (batch_size,)
             nn.Embedding(config['nconditions'], config['embedding_depth'], sparse=False),
             nn.Linear(config['embedding_depth'], self.width0 * 5 * 5 * nfields, bias=False),
             nn.Unflatten(-1, (self.width0 * nfields, 5, 5)),
@@ -41,6 +42,7 @@ class Generator(nn.Module):
         ) # output shape: (batch_size, width0 * nfields, 5, 5)
 
         self.condition_to_features = nn.Sequential(
+            # input shape: (batch_size, 1), linear expects 2d input
             nn.Linear(1, config['embedding_depth'], bias=False),
             nn.Linear(config['embedding_depth'], self.width0 * 5 * 5 * nfields, bias=False),
             nn.Unflatten(-1, (self.width0 * nfields, 5, 5)),
@@ -49,6 +51,7 @@ class Generator(nn.Module):
         ) # output shape: (batch_size, width0 * nfields, 5, 5)
 
         self.latent_to_features = nn.Sequential(
+            # input shape: (batch_size, latent_dim)
             nn.Linear(self.latent_dim, self.width0 * 5 * 5 * nfields, bias=False), # custom option
             nn.Unflatten(-1, (self.width0 * nfields, 5, 5)),
             nn.LeakyReLU(config['lrelu']),
@@ -75,6 +78,7 @@ class Generator(nn.Module):
         z = self.latent_to_features(z)
         label = self.label_to_features(label)
         condition = self.condition_to_features(condition)
+
         x = z + label + condition
         # x = torch.cat([z, label, condition], dim=1)
         x = self.features_to_image(x)

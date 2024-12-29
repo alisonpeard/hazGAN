@@ -27,10 +27,15 @@ class ToTensor(object):
     """Convert ndarrays in sample to Tensors."""
     def __call__(self, sample:dict) -> dict:
         sample['uniform'] = torch.tensor(sample['uniform'], dtype=torch.float32)
-        sample['uniform'] = torch.permute(sample['uniform'], (2, 0, 1))
+
+        # permute to (C, H, W)
+        if len(sample['uniform'].shape) == 3:
+            sample['uniform'] = torch.permute(sample['uniform'], (2, 0, 1))
+        elif len(sample['uniform'].shape) == 4:
+            sample['uniform'] = torch.permute(sample['uniform'], (0, 3, 1, 2))
 
         # reshape condition for dense layer
-        sample['condition'] = torch.tensor(sample['condition'], dtype=torch.float32).reshape(1)
+        sample['condition'] = torch.tensor(sample['condition'], dtype=torch.float32).reshape(-1,)
         sample['label'] = torch.tensor(sample['label'], dtype=torch.long)
         sample['weight'] = torch.tensor(sample['weight'], dtype=torch.float32)
         sample['season'] = torch.tensor(sample['season'], dtype=torch.long)
@@ -55,7 +60,7 @@ class Resize(object):
 
 class Pad(object):
     """Pad uniform data."""
-    def __init__(self, padding_mode:str, paddings=(0, 0, 1, 1)):
+    def __init__(self, padding_mode:str, paddings=(1, 1, 1, 1)):
         self.padding_mode = padding_mode
         self.paddings = paddings
 
@@ -91,12 +96,26 @@ class StormDataset(Dataset):
         return self.length
 
     def __getitem__(self, idx):
-        batch = {}
+        # if hasattr(idx, '__iter__'):
+        #     return self.take_many(idx)
+        # else:
+        return self.take(idx)
+    
+    def take(self, idx:int):
+        sample = {}
         for key in self.keys:
-            batch[key] = self.data[key][idx]
+            sample[key] = self.data[key][idx]
         if self.transform:
-            batch = self.transform(batch)
-        return batch
+            sample = self.transform(sample)
+        return sample
+    
+    # def take_many(self, idx:list[int]):
+    #     sample = {}
+    #     for key in self.keys:
+    #         sample[key] = self.data[key][idx]
+    #     if self.transform:
+    #         sample = self.transform(sample)
+    #     return sample
 
 
 
@@ -119,7 +138,7 @@ def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
     transform = transforms.Compose(
         [ToTensor(), Resize(img_size),
          Gumbel(),
-         Pad(padding_mode, (0, 0, 2, 2)),
+         Pad(padding_mode, (1, 1, 1, 1)),
          sendToDevice(device)]
          )
     
@@ -127,6 +146,7 @@ def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
     valid = StormDataset(sample_dict(validdata), transform=transform)
 
     trainsampler = WeightedRandomSampler(train.data['weight'], len(train), replacement=True)
+
     trainloader = DataLoader(train, batch_size=batch_size, pin_memory=True, sampler=trainsampler)
     validloader = DataLoader(valid, batch_size=batch_size, shuffle=False, pin_memory=True)
 

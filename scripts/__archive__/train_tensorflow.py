@@ -2,15 +2,11 @@
 For conditional training (no constant fields yet).
 """
 # %%
-%load_ext autoreload
-%autoreload 2  
-
-# %%
-DRY_RUN_EPOCHS       = 1
-RUN_EAGERLY          = True
-RESTRICT_MEMORY      = True
-MEMORY_GROWTH        = False
+RUN_EAGERLY = True
+RESTRICT_MEMORY = True
+MEMORY_GROWTH = False
 LOG_DEVICE_PLACEMENT = False
+DRY_RUN_EPOCHS = 100
 
 import os
 import sys
@@ -18,20 +14,23 @@ import yaml
 import time
 import argparse
 import wandb
+from wandb import AlertLevel
+
 from environs import Env
 import numpy as np
-import torch
-from torchinfo import summary
+import tensorflow as tf
+from memory_profiler import profile
 
-import hazGAN
+import hazGAN as hazzy
 from hazGAN import plot
-from hazGAN.torch import (
-    unpad,
-    WGANGP,
-    load_data,
-    MemoryLogger,
-    WandbMetricsLogger
-)
+from hazGAN.pytorch.callbacks import WandbMetricsLogger, CountImagesSeen, ImageLogger
+
+
+tf.keras.backend.clear_session()
+tf.debugging.set_log_device_placement(LOG_DEVICE_PLACEMENT)
+tf.config.run_functions_eagerly(RUN_EAGERLY) # for debugging
+
+logfile = open("training.log", "w+")
 
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
@@ -40,8 +39,6 @@ global datadir
 global rundir
 global imdir
 global runname
-global device
-global device_name
 global force_cpu
 
 
@@ -61,22 +58,31 @@ def check_interactive(sys):
         return False
 
 
-def config_devices():
+def config_tf_devices():
     """Use GPU if available and set memory configuration."""
-    if not force_cpu:
-        if torch.mps.is_available():
-            print("Using MPS for memory management")
-            device = "mps"
-
-        elif torch.cuda.is_available():
-            print("Using CUDA")
-            device = "cuda"
-
-        else:
-            print("No MPS available, using CPU")
-            device = "cpu"
-
-        return getattr(torch, device), device
+    gpus = tf.config.list_physical_devices("GPU")
+    if (not gpus) or force_cpu:
+        print("No GPU found, using CPU")
+        cpus = tf.config.list_logical_devices("CPU")
+        device = cpus[0].device_type
+        print(f"Using CPU: {device}")
+    else:
+        try:
+            if RESTRICT_MEMORY:
+                for gpu in gpus:
+                    tf.config.set_logical_device_configuration(
+                        gpu,
+                        [tf.config.LogicalDeviceConfiguration(memory_limit=1024)]
+                    )
+            elif MEMORY_GROWTH:
+                for gpu in gpus:
+                    tf.config.experimental.set_memory_growth(gpu, True)
+        except Exception as e:
+            raise e
+        
+        device = gpus[0].device_type
+        print(f"Using GPU: {device}")
+    return device
 
 
 def update_config(config, key, value):
@@ -118,21 +124,17 @@ def evaluate_results(train, model, label:int, config:dict,
     print("Gathering labels and conditions...")
 
     # filter training data
-    label_indices = (train.dataset.data['label'] == label).nonzero()[0]
-    train_subset = train.dataset[label_indices]
-    condition_subset = train_subset['condition'].cpu().numpy()
-
+    train_extreme = train.take(1000).unbatch().filter(lambda sample: sample['label']==label)
+    condition_train = np.array(list(x['condition'] for x in train_extreme.as_numpy_iterator()))
+    
     # filter generated data
-    x  = np.linspace(0, 100, nsamples)
-    xp = np.linspace(0, 100, len(condition_subset))
-    fp = sorted(condition_subset)
-    condition = np.interp(x, xp, fp).astype(np.float32) # interpolate conditions
-    condition = condition.reshape(-1, 1)
+    x = np.linspace(0, 100, nsamples)
+    xp = np.linspace(0, 100, len(condition_train))
+    fp = sorted(condition_train)
+    condition = np.interp(x, xp, fp) # interpolate conditions
     labels = np.tile(label, nsamples)
-    lower_bound = np.floor(condition_subset.min())
-    upper_bound = np.ceil(condition_subset.max())
-
-    # print specs
+    lower_bound = np.floor(condition_train.min())
+    upper_bound = np.ceil(condition_train.max())
     print(
         "\nConditioning on {} {:.2f} - {:.2f} max wind percentiles with label {}"
         .format(
@@ -142,14 +144,13 @@ def evaluate_results(train, model, label:int, config:dict,
             label
         )
     )
+    
+
 
     print("\nGenerating samples...")
-    fake_u = model(label=labels, condition=condition, nsamples=nsamples).detach().cpu().numpy()
-    fake_u = unpad(fake_u) # now permute
-    fake_u = np.transpose(fake_u, (0, 2, 3, 1))
-    print("fake_u.shape: {}".format(fake_u.shape))
+    paddings = tf.constant([[0, 0], [1, 1], [1, 1], [0, 0]]) 
+    fake_u = hazzy.unpad(model(condition, labels, nsamples=nsamples), paddings=paddings).numpy()
 
-    # get metadata to compate
     print("\nGathering validation data...")
     train_u = metadata['train']['uniform'].data
     train_x = metadata['train']['anomaly'].data
@@ -174,7 +175,7 @@ def evaluate_results(train, model, label:int, config:dict,
     plot.figure_two(fake_u, train_u, valid_u, imdir)
     plot.figure_three(fake_u, train_u, imdir)                  # gumbel
     plot.figure_four(fake_u, train_u, train_x, params, imdir)  # full-scale
-    # plot.figure_five(fake_u, train_u, imdir)                   # augmented    
+    plot.figure_five(fake_u, train_u, imdir)                   # augmented    
     export_sample(fake_u)
     
     print("\nResults:\n--------")
@@ -182,39 +183,59 @@ def evaluate_results(train, model, label:int, config:dict,
     print(f"final_chi_rmse: {final_chi_rmse:.4f}")
 
 
-
+@profile(stream=logfile)
 def main(config, verbose=True):
-    # TODO: choose device
-
     # load data
-    train, valid, metadata = load_data(datadir, config['batch_size'],
-                                       train_size=config['train_size'],
-                                       fields=config['fields'],
-                                       label_ratios=config['label_ratios'],
-                                       device=device_name)
+    with tf.device(device):
+        train, valid, metadata = hazzy.load_data(
+            datadir,
+            label_ratios=config['label_ratios'], 
+            batch_size=config['batch_size'],
+            train_size=config['train_size'],
+            fields=config['fields'],
+            gumbel=config['gumbel']
+            )
+        
+        train = train.prefetch(tf.data.AUTOTUNE)
+        valid = valid.prefetch(tf.data.AUTOTUNE)
     
-    # update config with number of labels
-    config = update_config(config, 'nconditions', len(metadata['labels']))
+        config = update_config(config, 'nconditions', len(metadata['labels']))
 
-    # callbacks
-    memory_logger = MemoryLogger(100, logdir='logs')
-    wandb_logger = WandbMetricsLogger()
-    # image_logger = ImageLogger()
+        # number of epochs calculations (1 step == 1 batch)
+        steps_per_epoch = 5 if dry_run else 200_000 // config['batch_size'] # good rule of thumb
+        total_steps = config['epochs'] * steps_per_epoch
+        images_per_epoch = steps_per_epoch * config['batch_size']
+        total_images = total_steps * config['batch_size']
 
-    # compile model
-    model = WGANGP(config)
-    model.compile()
+        if verbose:
+            print("Training summary:\n-----------------")
+            print("Batch size: {:,.0f}".format(config['batch_size']))
+            print("Steps per epoch: {:,.0f}".format(steps_per_epoch))
+            print("Total steps: {:,.0f}".format(total_steps))
+            print("Images per epoch: {:,.0f}".format(images_per_epoch))
+            print("Total number of epochs: {:,.0f}".format(config['epochs']))
+            print("Total number of training images: {:,.0f}\n".format(total_images))
 
-    # fit model
-    start = time.time()
-    print("\nTraining...\n")
-    history = model.fit(train, epochs=config['epochs'], callbacks=[memory_logger, wandb_logger])
-    # history = model.train_step(next(iter(train))) # single step
+        # callbacks
+        image_count = CountImagesSeen(config['batch_size'])
+        image_logger = ImageLogger()
+        wandb_logger = WandbMetricsLogger()
+
+        # train
+        model = hazzy.conditional.compile_wgan(config, nchannels=len(config['fields']))
+        if run is not None:
+            run.alert(title="Training", text=f"Training started", level=AlertLevel.INFO)
+        start = time.time()
+        print("\nTraining...\n")
+        history = model.fit(train, epochs=config['epochs'],
+                        steps_per_epoch=steps_per_epoch,
+                        validation_data=valid,
+                        callbacks=[image_count, wandb_logger, image_logger])
+
+
     print("\nFinished! Training time: {:.2f} seconds\n".format(time.time() - start))
-
-    evaluate_results(train, model, 2, config, history, metadata)
-
-    return history
+    evaluate_results(train, model, 2, config, history.history, metadata)
+    return history.history
 
 
 if __name__ == "__main__":
@@ -231,16 +252,16 @@ if __name__ == "__main__":
         force_cpu = False
 
     # use GPU if available
-    device, device_name = config_devices()
+    device = config_tf_devices()
 
     # define paths
-    env     = Env()
+    env = Env()
     env.read_env(recurse=True)
     workdir = env.str("WORKINGDIR")
     datadir = env.str('TRAINDIR')
-    imdir   = os.path.join(workdir, "figures", "temp")
+    imdir = os.path.join(workdir, "figures", "temp")
 
-    # intialise config object
+    # intialise configuration
     if dry_run:
         with open(os.path.join(os.path.dirname(__file__), "config-defaults.yaml"), 'r') as stream:
             config = yaml.safe_load(stream)
@@ -253,32 +274,26 @@ if __name__ == "__main__":
         runname = wandb.run.name
         config = wandb.config
     
-    # format config
     config = update_config(config, 'seed', np.random.randint(0, 100))
     config = update_config(
         config,
         'label_ratios',
         {float(k) if k.isnumeric() else k: v for k, v in config['label_ratios'].items()}
         )
-    print("\nSampling ratios: {}".format(config['label_ratios']))
-    
-    # make dir to save results
     rundir = os.path.join(workdir, "_wandb-runs", runname)
     os.makedirs(rundir, exist_ok=True)
+    print("\nSampling ratios: {}".format(config['label_ratios']))
+    
+    # make reproducible
+    tf.keras.utils.set_random_seed(config["seed"])  # sets seeds for base-python, numpy and tf
+    tf.config.experimental.enable_op_determinism()  # removes stochasticity from individual operations
 
     # train
-    device.empty_cache()
     result = main(config)
+    if run:
+        run.alert(title="Finished", text=f"Finished training", level=AlertLevel.INFO)
 
     notify("Process finished", "Python script", "Finished making pretraining data")
 
-
 # %% ---DEBUG BELOW THIS LINE----
 
-from hazGAN.constants import SAMPLE_CONFIG
-
-model = WGANGP(SAMPLE_CONFIG)
-x = model.call(label=1, nsamples=1, condition=1.)
-x_unpadddd = unpad(x)
-print(x_unpadddd.shape)
-# %% ---DEBUG ABOVE THIS LINE----

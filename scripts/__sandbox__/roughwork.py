@@ -4,10 +4,8 @@
 # %%
 from torch import mps
 from environs import Env
-from hazGAN.torch import load_data, WGANGP
+from hazGAN.torch import load_data, WGANGP, MemoryLogger
 from hazGAN.constants import SAMPLE_CONFIG
-from hazGAN.torch import MemoryLogger
-
 
 
 # %%
@@ -34,9 +32,6 @@ if __name__ == "__main__":
     mps.empty_cache()
     model = WGANGP(SAMPLE_CONFIG)
     model.compile()
-
-    # for n, batch in enumerate(train):
-    #     model.train_step(batch)
 
     # %%
     model.fit(train, epochs=1, callbacks=[MemoryLogger(100)])

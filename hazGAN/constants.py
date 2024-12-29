@@ -46,5 +46,7 @@ SAMPLE_CONFIG = {
     'learning_rate': 1e-4,
     'beta_1': 0.9,
     'beta_2': 0.99,
-    'training_balance': 5
+    'training_balance': 5,
+    'latent_dims': 128,
+    'fields': ['u10', 'tp']
 }

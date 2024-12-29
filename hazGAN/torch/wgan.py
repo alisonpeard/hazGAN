@@ -30,18 +30,19 @@ def setup_latents(distribution:str):
 
 class WGANGP(keras.Model):
     """Refernece: https://keras.io/guides/custom_train_step_in_torch/"""
-    def __init__(self, config, nfields=2):
+    def __init__(self, config):
         super(WGANGP, self).__init__()
         self.config = config
-        self.latent_dim = config['latent_dim']
+        self.latent_dim = config['latent_dims']
         self.lambda_gp = config['lambda_gp']
         self.latent_space_distn = setup_latents(config['latent_space_distn'])
         self.augment = partial(DiffAugment, policy=config['augment_policy'])
         self.seed = config['seed']
         self.device = "mps" if torch.mps.is_available() else "cpu"
         self.training_balance = config['training_balance']
-        self.generator = Generator(config, nfields=nfields).to(self.device)
-        self.critic = Critic(config, nfields=nfields).to(self.device)
+        self.nfields = len(config['fields'])
+        self.generator = Generator(config, nfields=self.nfields).to(self.device)
+        self.critic = Critic(config, nfields=self.nfields).to(self.device)
 
         self.trainable_vars = [
             *self.generator.parameters(),
@@ -50,9 +51,9 @@ class WGANGP(keras.Model):
 
         
         if config['gumbel']:
-            self.uniform = lambda x: torch.exp(-torch.exp(-x))
+            self._uniform = lambda x: torch.exp(-torch.exp(-x))
         else:
-            self.uniform = lambda x: x
+            self._uniform = lambda x: x
 
         # stateful metrics
         self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
@@ -91,7 +92,7 @@ class WGANGP(keras.Model):
         super().to(self.device)
 
 
-    def call(self, label, condition, nsamples=5,
+    def call(self, label=1, condition=1., nsamples=1,
              noise=None, temp=1., offset=0, seed=None,
              verbose=False):
         '''Return uniformly distributed samples from the generator.'''
@@ -106,11 +107,13 @@ class WGANGP(keras.Model):
             n = noise.shape[0]
             assert n == nsamples, f"Latent vector must be same length ({n}) as requested number of samples ({nsamples})."
 
-        raw = self.generator(noise, label, condition)
+        label1d = torch.tensor(label, dtype=torch.int64, device=self.device).reshape(-1,)
+        condition2d = torch.tensor(condition, dtype=torch.float32, device=self.device).reshape(-1,1)
+        raw = self.generator(noise, label=label1d, condition=condition2d)
         if verbose:
             print("Minimum before transformation:", ops.min(raw))
             print("Maximum before transformation:", ops.max(raw))
-        return self.uniform(raw)
+        return self._uniform(raw)
     
 
     def evaluate(self, x) -> dict:
@@ -190,7 +193,7 @@ class WGANGP(keras.Model):
         noise = self.latent_space_distn((batch_size, self.latent_dim))
         generated_data = self.generator(noise, label, condition)
         critic_score = self.critic(generated_data, label, condition)
-        chi = self.chi_wrapper(self.uniform(data), self.uniform(generated_data))
+        chi = self.chi_wrapper(self._uniform(data), self._uniform(generated_data))
 
         self.zero_grad()
         loss = -ops.mean(critic_score)
@@ -241,7 +244,7 @@ class WGANGP(keras.Model):
         metrics["critic_grad_norm"] = self.critic_grad_norm.result()
         metrics["generator_grad_norm"] = self.generator_grad_norm.result()
 
-        print('\n') # log metrics on newlines
+        # print('\n') # uncomment to log metrics on newlines
 
         return metrics
 
