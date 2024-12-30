@@ -32,6 +32,7 @@ def upsize(insize, k, s, p) -> tuple:
    
 
 def upsample(x, kernel_size:tuple, stride:int=1, padding:int=0, mode='bilinear') -> torch.Tensor:
+    """Upsample tensor x using interpolation."""
     insize = x.size()[2:]
     kernel_size = tuple_to_torch(kernel_size)
     outsize = upsize(insize, kernel_size, stride, padding)
@@ -40,6 +41,7 @@ def upsample(x, kernel_size:tuple, stride:int=1, padding:int=0, mode='bilinear')
 
 
 def downsample(x, kernel_size:tuple, stride:int=1, padding:int=0) -> torch.Tensor:
+    """Downsample tensor x using average pooling."""
     kernel_size = tuple_to_torch(kernel_size)
     downsampled = F.avg_pool2d(x, kernel_size=kernel_size, stride=stride, padding=padding)
     return downsampled
@@ -48,20 +50,17 @@ def downsample(x, kernel_size:tuple, stride:int=1, padding:int=0) -> torch.Tenso
 
 class GumbelBlock(nn.Module):
     """Total experiment, NOTE: not using."""
-    def __init__(self, num_features):
+    def __init__(self, num_features, epsilon=1e-6):
         super().__init__()
+        self.epsilon = epsilon
         self.make_kind_of_uniform = nn.Sequential(
             nn.BatchNorm2d(num_features),
             nn.Sigmoid()
         )
 
     def forward(self, x):
-        print("Gumbel block")
-        print("Before uniform:", x.min(), x.max())
         x = self.make_kind_of_uniform(x)
-        print("After uniform:", x.min(), x.max())
-        x = -torch.log(-torch.log(x))
-        print("After Gumbel:", x.min(), x.max())
+        x = -torch.log(-torch.log(x + self.epsilon) + self.epsilon)
         return x
 
 

@@ -13,6 +13,7 @@ from .models import Critic, Generator
 from .augment import DiffAugment
 from ..statistics.metrics import chi_rmse
 
+
 def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None, device='mps'):
     """Sample from Gumbel(0, 1)"""
     O = offset
@@ -36,7 +37,14 @@ class WGANGP(keras.Model):
         self.latent_dim = config['latent_dims']
         self.lambda_gp = config['lambda_gp']
         self.latent_space_distn = setup_latents(config['latent_space_distn'])
+        
+        if config['augment_policy'] != '':
+            raise NotImplementedError(
+                "DiffAugment not yet implemented in Pytorch version." +
+                " received policy: " + config['augment_policy']
+                )
         self.augment = partial(DiffAugment, policy=config['augment_policy'])
+        
         self.seed = config['seed']
         self.device = "mps" if torch.mps.is_available() else "cpu"
         self.training_balance = config['training_balance']

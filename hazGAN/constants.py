@@ -39,7 +39,7 @@ SAMPLE_CONFIG = {
     'critic_width': 64,
     'lambda_gp': 10,
     'latent_space_distn': 'gumbel',
-    'augment_policy': 'color,translation',
+    'augment_policy': '',
     'gumbel': True,
     'seed': 42,
     'optimizer': 'Adam',

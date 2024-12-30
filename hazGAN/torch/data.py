@@ -96,34 +96,67 @@ class StormDataset(Dataset):
         return self.length
 
     def __getitem__(self, idx):
-        # if hasattr(idx, '__iter__'):
-        #     return self.take_many(idx)
-        # else:
         return self.take(idx)
     
     def take(self, idx:int):
+        """Works for integers and slices."""
         sample = {}
         for key in self.keys:
             sample[key] = self.data[key][idx]
         if self.transform:
             sample = self.transform(sample)
         return sample
+            
+    @staticmethod
+    def filterdict(datadict, key:str):
+        classes = list(set(datadict[key]))
+        classdicts = []
+        for label in classes:
+            indices = np.array(datadict[key] == label).nonzero()[0]
+            classdict = {key: values[indices] for key, values in datadict.items()}
+            classdicts.append(classdict)
+        return classdicts
+        
+    @staticmethod
+    def subsetdict(datadict, size:int):
+        """Return a subset of a dictionary."""
+        n = len(datadict[list(datadict.keys())[0]])
+        indices = np.random.choice(n, size, replace=True)
+        return {key: datadict[key][indices] for key in datadict.keys()}
     
-    # def take_many(self, idx:list[int]):
-    #     sample = {}
-    #     for key in self.keys:
-    #         sample[key] = self.data[key][idx]
-    #     if self.transform:
-    #         sample = self.transform(sample)
-    #     return sample
+    @staticmethod
+    def concatdicts(classdicts:list):
+        datadict = {}
+        for key in classdicts[0].keys():
+            values = []
+            for classdict in classdicts:
+                values.append(classdict[key]) # check
+            values = np.concatenate(values)
+            datadict[key] = values
+        return datadict
 
-
+    def subset(self, size:int):
+        """Return a subset of the dataset."""
+        n = len(self)
+        if size > n:
+            return self
+        else:
+            classdicts = self.filterdict(self.data, 'label')
+            nclasses = len(classdicts)
+            class_size = size // nclasses
+            newdicts = []
+            for classdict in classdicts:
+                newdict = self.subsetdict(classdict, class_size)
+                newdicts.append(newdict)
+            newdict = self.concatdicts(newdicts)
+            return StormDataset(newdict, transform=self.transform)
+        
 
 def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
               img_size:tuple=(18, 22), device='mps', train_size:float=0.8,
               fields:list=['u10', 'tp'], epoch='1940-01-01', verbose=True,
               label_ratios:dict={'pre':1/3, 15: 1/3, 999:1/3},
-              testyear:int=TEST_YEAR, cache:bool=True) -> tuple[Dataset, Dataset, dict]:
+              testyear:int=TEST_YEAR, cache:bool=True, subset:int=None) -> tuple[Dataset, Dataset, dict]:
     """Load data and return train and valid dataloaders."""
     
     traindata, validdata, metadata = load_xr_data(
@@ -131,9 +164,6 @@ def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
         verbose=verbose, testyear=testyear, label_ratios=label_ratios,
         cache=cache
         )
-    
-    train = StormDataset(sample_dict(traindata))
-    valid = StormDataset(sample_dict(validdata))
 
     transform = transforms.Compose(
         [ToTensor(), Resize(img_size),
@@ -145,6 +175,11 @@ def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
     train = StormDataset(sample_dict(traindata), transform=transform)
     valid = StormDataset(sample_dict(validdata), transform=transform)
 
+    if subset:
+        assert isinstance(subset, int), "subset must be an integer."
+        train = train.subset(subset)
+        valid = valid.subset(subset)
+    
     trainsampler = WeightedRandomSampler(train.data['weight'], len(train), replacement=True)
 
     trainloader = DataLoader(train, batch_size=batch_size, pin_memory=True, sampler=trainsampler)

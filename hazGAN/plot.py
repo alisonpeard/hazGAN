@@ -1,10 +1,12 @@
 import os
 import random
 import numpy as np
+from functools import partial
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 import matplotlib as mpl
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
+
 from .constants import channel_labels
 from .statistics import (
     invPIT,
@@ -110,7 +112,7 @@ def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str, c
 
 
 def figure_three(fake_u:np.array, train_u:np.array, imdir:str, channel=0,
-                 cmap="Spectral_r", levels=20) -> None:
+                 cmap="Spectral_r", levels=20, contour=True) -> None:
     """Plot the 32 most extreme train and generated percentiles."""
     # prep data to plot
     lon = np.linspace(80, 95, 22)
@@ -136,6 +138,12 @@ def figure_three(fake_u:np.array, train_u:np.array, imdir:str, channel=0,
 
     samples = {'Generated samples': fake, "Training samples": real}
 
+    # set up plotting function
+    if contour:
+        plot = lambda ax: partial(ax.contourf, X=lon, Y=lat, levels=levels, cmap=cmap)
+    else:
+        plot = lambda ax: partial(ax.imshow, cmap=cmap)
+
     # set up plot specs
     fig = plt.figure(figsize=(16, 16), layout="tight")
     subfigs = fig.subfigures(2, 1, hspace=0.2)
@@ -147,13 +155,13 @@ def figure_three(fake_u:np.array, train_u:np.array, imdir:str, channel=0,
         sample = item[1]
         vmin = sample.min()
         vmax = sample.max()
+
         for i, ax in enumerate(axs.flat):
-            im = ax.contourf(lon, lat, sample[i, ...],
-                             vmin=vmin, vmax=vmax,
-                             cmap=cmap, levels=levels)
+            im = plot(ax)(sample[i, ...], vmin=vmin, vmax=vmax)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.invert_yaxis()
+
         subfig.suptitle(label, y=1.04, fontsize=24)
         subfig.subplots_adjust(right=.99)
         cbar_ax = subfig.add_axes([1., .02, .02, .9]) 
@@ -164,7 +172,8 @@ def figure_three(fake_u:np.array, train_u:np.array, imdir:str, channel=0,
 
 
 def figure_four(fake_u, train_u, train_x, params, imdir:str,
-                channel=0, cmap="Spectral_r", levels=20) -> None:
+                channel=0, cmap="Spectral_r", levels=20,
+                contour=True) -> None:
     """Plot the 32 most extreme train and generated anomalies."""
     # prep data to plot
     fake = invPIT(fake_u, train_x, params)
@@ -192,6 +201,12 @@ def figure_four(fake_u, train_u, train_x, params, imdir:str,
 
     samples = {'Generated samples': fake, "Training samples": real}
 
+    # set up plotting function
+    if contour:
+        plot = lambda ax: partial(ax.contourf, X=lon, Y=lat, levels=levels, cmap=cmap)
+    else:
+        plot = lambda ax: partial(ax.imshow, cmap=cmap)
+
     # set up plot specs
     fig = plt.figure(figsize=(16, 16), layout="tight")
     subfigs = fig.subfigures(2, 1, hspace=0.2)
@@ -203,19 +218,21 @@ def figure_four(fake_u, train_u, train_x, params, imdir:str,
         sample = item[1]
         vmin = sample.min()
         vmax = sample.max()
+
         for i, ax in enumerate(axs.flat):
-            im = ax.contourf(lon, lat, sample[i, ...],
-                             vmin=vmin, vmax=vmax,
-                             cmap=cmap, levels=levels)
+            im = plot(ax)(sample[i, ...], vmin=vmin, vmax=vmax)
             ax.set_xticks([])
             ax.set_yticks([])
             ax.invert_yaxis()
+        
         subfig.suptitle(label, y=1.04, fontsize=24)
         subfig.subplots_adjust(right=.99)
         cbar_ax = subfig.add_axes([1., .02, .02, .9]) 
         subfig.colorbar(im, cax=cbar_ax)
+
     fig.suptitle('Percentiles')
     log_image_to_wandb(fig, f"max_samples", imdir)
+
     return fig
 
 

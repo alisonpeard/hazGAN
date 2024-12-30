@@ -1,17 +1,13 @@
 """
 For conditional training (no constant fields yet).
 """
-# %%
-%load_ext autoreload
-%autoreload 2  
+# %% quick settings
+DRY_RUN_EPOCHS       = 20
+EVAL_CHANNEL         = 2
+SUBSET_SIZE          = 200
+CONTOUR_PLOT         = False
 
-# %%
-DRY_RUN_EPOCHS       = 1
-RUN_EAGERLY          = True
-RESTRICT_MEMORY      = True
-MEMORY_GROWTH        = False
-LOG_DEVICE_PLACEMENT = False
-
+# %% actual script
 import os
 import sys
 import yaml
@@ -21,7 +17,6 @@ import wandb
 from environs import Env
 import numpy as np
 import torch
-from torchinfo import summary
 
 import hazGAN
 from hazGAN import plot
@@ -172,26 +167,25 @@ def evaluate_results(train, model, label:int, config:dict,
     print("\nGenerating figures...")
     plot.figure_one(fake_u, train_u, valid_u, imdir)
     plot.figure_two(fake_u, train_u, valid_u, imdir)
-    plot.figure_three(fake_u, train_u, imdir)                  # gumbel
-    plot.figure_four(fake_u, train_u, train_x, params, imdir)  # full-scale
+    plot.figure_three(fake_u, train_u, imdir, contour=CONTOUR_PLOT)
+    plot.figure_four(fake_u, train_u, train_x, params, imdir, contour=CONTOUR_PLOT)
     # plot.figure_five(fake_u, train_u, imdir)                   # augmented    
     export_sample(fake_u)
     
-    print("\nResults:\n--------")
-    final_chi_rmse = history['chi_rmse'][-1]
-    print(f"final_chi_rmse: {final_chi_rmse:.4f}")
+    if len(history) > 1:
+        print("\nResults:\n--------")
+        final_chi_rmse = history['chi_rmse'][-1]
+        print(f"final_chi_rmse: {final_chi_rmse:.4f}")
 
 
 
 def main(config, verbose=True):
-    # TODO: choose device
-
     # load data
     train, valid, metadata = load_data(datadir, config['batch_size'],
                                        train_size=config['train_size'],
                                        fields=config['fields'],
                                        label_ratios=config['label_ratios'],
-                                       device=device_name)
+                                       device=device_name, subset=SUBSET_SIZE)
     
     # update config with number of labels
     config = update_config(config, 'nconditions', len(metadata['labels']))
@@ -212,7 +206,7 @@ def main(config, verbose=True):
     # history = model.train_step(next(iter(train))) # single step
     print("\nFinished! Training time: {:.2f} seconds\n".format(time.time() - start))
 
-    evaluate_results(train, model, 2, config, history, metadata)
+    evaluate_results(train, model, EVAL_CHANNEL, config, history.history, metadata)
 
     return history
 

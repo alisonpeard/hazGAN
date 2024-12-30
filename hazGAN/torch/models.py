@@ -60,9 +60,23 @@ class Generator(nn.Module):
 
         self.features_to_image = nn.Sequential(
             ResidualUpBlock(self.width0 * nfields, self.width1, (3, 3), bias=False),
-            # (3,3) kernel: 5x5 -> 15x15
+            # (3, 3; 1) kernel: 5 x 5 -> 7 x 7 -- USING
+            # (2, 2; 2) kernel: 5 x 5 -> 10 x 10
+            ResidualUpBlock(self.width1, self.width1, (2, 4), 2, bias=False),
+            # (3, 4) kernel: 7 x 7 -> 9 x 10
+            # (2, 4; 2) kernel: 7 x 7 -> 14 x 16 -- USING
+            # (2, 2; 2) kernel: 10 x 10 -> 20 x 20
+            # (4, 6; 1) kernel: 10 x 10 -> 13 x 15
             ResidualUpBlock(self.width1, self.width2, (3, 4), bias=False),
-            ResidualUpBlock(self.width2, nfields, (4, 6), 2, bias=False),
+            ResidualUpBlock(self.width2, self.width2, (3, 4), bias=False),
+            # (2, 2; 2) kernel: 9 x 10 -> 18 x 22
+            # (4, 6; 1) kernel: 9 x 10 -> 12 x 15
+            # (4, 6; 2) kernel: 9 x 10 -> 20 x 24
+            # (3, 4; 1) kernel: 14 x 16 -> 16 x 19 -- USING
+            # (3, 4; 1) kernel: 16 x 19 -> 18 x 22 -- USING
+            ResidualUpBlock(self.width2, nfields, (3, 3), bias=False)
+            # nn.ReflectionPad2d((1, 1, 1, 1))
+            # padding 18 x 22 -> 20 x 24
         ) # output shape: (batch_size, 20, 24, nfields)
 
         self.refine_fields = nn.Sequential(

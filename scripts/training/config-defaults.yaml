@@ -1,7 +1,7 @@
 # training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
 epochs:
   desc: Number of epochs to train for
-  value: 0
+  value: 10
 train_size:
   value: 0.8 # 840 # 50
 batch_size:
@@ -16,8 +16,8 @@ label_ratios:
     '15':  0.3333333
     '999': 0.3333333
 augment_policy:
-  desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
-  value: 'color,translation,cutout'
+  desc: NOT IMPLEMENTED! Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
+  value: ''
 condition:
   desc: Whether to use conditioning, bool
   value: True
@@ -62,12 +62,6 @@ critic_width:
 interpolation:
   desc: Interpolation method for upsampling, ['nearest', 'bilinear'] (https://distill.pub/2016/deconv-checkerboard/)
   value: bilinear
-normalize_generator:
-  desc: Whether to batch normalise generator blocks.
-  value: True
-normalize_critic:
-  desc: Whether to layer normalise critic blocks. NB this matters for conditioning.
-  value: True
 
 # optimizer
 optimizer:
@@ -87,7 +81,7 @@ weight_decay:
   value: 0.001
 use_ema:
   desc: Use exponential moving average in training, causes issues when re-loading weights.
-  value: True # only set to true if not loading weights
+  value: False # only set to true if not loading weights
 ema_momentum:
   desc: Momentum of exponential moving average for tf.keras.optimizers.Adam (higher --> smoother)
   value: 0.999
