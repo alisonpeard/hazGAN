@@ -1,14 +1,19 @@
 """
 For conditional training (no constant fields yet).
+
+
+>>> python -m cProfile -o logs/temp.dat train.py
+>>> snakeviz temp.dat
 """
 # %% quick settings
-DRY_RUN_EPOCHS       = 10
+DRY_RUN_EPOCHS       = 100
 EVAL_CHANNEL         = 2
 SUBSET_SIZE          = 100
 CONTOUR_PLOT         = False
 
 # %% actual script
 import os
+os.environ["KERAS_BACKEND"] = "torch"
 import sys
 import yaml
 import time
@@ -25,7 +30,8 @@ from hazGAN.torch import (
     load_data,
     MemoryLogger,
     WandbMetricsLogger,
-    ImageLogger
+    ImageLogger,
+    LRScheduler
 )
 
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
@@ -36,7 +42,6 @@ global rundir
 global imdir
 global runname
 global device
-global device_name
 global force_cpu
 
 
@@ -71,7 +76,7 @@ def config_devices():
             print("No MPS available, using CPU")
             device = "cpu"
 
-        return getattr(torch, device), device
+        return device
 
 
 def update_config(config, key, value):
@@ -120,7 +125,10 @@ def evaluate_results(train, model, label:int, config:dict,
     # filter generated data
     x  = np.linspace(0, 100, nsamples)
     xp = np.linspace(0, 100, len(condition_subset))
-    fp = sorted(condition_subset)
+    fp = np.array(sorted(condition_subset)).reshape(-1)
+    print("x.shape", x.shape)
+    print("xp.shape", xp.shape)
+    print("fp.shape", fp.shape)
     condition = np.interp(x, xp, fp).astype(np.float32) # interpolate conditions
     condition = condition.reshape(-1, 1)
     labels = np.tile(label, nsamples)
@@ -181,33 +189,37 @@ def evaluate_results(train, model, label:int, config:dict,
 
 def main(config, verbose=True):
     # load data
-    train, valid, metadata = load_data(datadir, config['batch_size'],
+    trainloader, validloader, metadata = load_data(datadir, config['batch_size'],
                                        train_size=config['train_size'],
                                        fields=config['fields'],
                                        label_ratios=config['label_ratios'],
-                                       device=device_name, subset=SUBSET_SIZE)
+                                       device=device, subset=SUBSET_SIZE)
     
     # update config with number of labels
     config = update_config(config, 'nconditions', len(metadata['labels']))
+
+    # compile model
+    model = WGANGP(config, device=device)
+    model.compile()
+
 
     # callbacks
     memory_logger = MemoryLogger(100, logdir='logs')
     wandb_logger = WandbMetricsLogger()
     image_logger = ImageLogger()
     callbacks = [memory_logger, wandb_logger, image_logger]
-
-    # compile model
-    model = WGANGP(config)
-    model.compile()
+    if config['scheduler']:
+        scheduler = LEScheduler(config['learning_rate'], config['epochs'], len(train.dataset))
+        callbacks.append(scheduler)
 
     # fit model
     start = time.time()
     print("\nTraining...\n")
-    history = model.fit(train, epochs=config['epochs'], callbacks=callbacks)
+    history = model.fit(trainloader, epochs=config['epochs'], callbacks=callbacks)
     print("\nFinished! Training time: {:.2f} seconds\n".format(time.time() - start))
 
     # evaluate
-    evaluate_results(train, model, EVAL_CHANNEL, config, history.history, metadata)
+    evaluate_results(trainloader, model, EVAL_CHANNEL, config, history.history, metadata)
     return history
 
 
@@ -225,7 +237,7 @@ if __name__ == "__main__":
         force_cpu = False
 
     # use GPU if available
-    device, device_name = config_devices()
+    device = config_devices()
 
     # define paths
     env     = Env()
@@ -261,18 +273,13 @@ if __name__ == "__main__":
     os.makedirs(rundir, exist_ok=True)
 
     # train
-    device.empty_cache()
+    getattr(torch, device).empty_cache()
     result = main(config)
-
+    print(result)
     notify("Process finished", "Python script", "Finished making pretraining data")
 
 
 # %% ---DEBUG BELOW THIS LINE----
 
-from hazGAN.constants import SAMPLE_CONFIG
 
-model = WGANGP(SAMPLE_CONFIG)
-x = model.call(label=1, nsamples=1, condition=1.)
-x_unpadddd = unpad(x)
-print(x_unpadddd.shape)
 # %% ---DEBUG ABOVE THIS LINE----

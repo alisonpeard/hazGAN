@@ -3,18 +3,32 @@ import os
 os.environ["KERAS_BACKEND"] = "torch"
 import keras
 from functools import partial
-from keras import optimizers, ops
-
+from keras import optimizers
+from keras import ops
 import torch
 from torch.autograd import grad
 
+# imports just for for 'fit()' method
+from keras.src import callbacks as callbacks_module
+from keras.src import optimizers as optimizers_module
+from keras.src.utils import traceback_utils
+from keras.src.trainers.data_adapters import array_slicing
+from keras.src.trainers.data_adapters import data_adapter_utils
+from keras.src.trainers.epoch_iterator import EpochIterator
+
 from ..constants import SAMPLE_CONFIG
-from .models import Critic, Generator
+from .models import Critic
+from .models import Generator
 from .augment import DiffAugment
 from ..statistics.metrics import chi_rmse
 
 
-def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None, device='mps'):
+class TorchEpochIterator(EpochIterator):
+    def _get_iterator(self):
+        return self.data_adapter.get_torch_dataloader()
+
+
+def sample_gumbel(shape, eps=1e-20, temperature=1., offset=0., seed=None):
     """Sample from Gumbel(0, 1)"""
     O = offset
     T = temperature
@@ -31,7 +45,7 @@ def setup_latents(distribution:str):
 
 class WGANGP(keras.Model):
     """Refernece: https://keras.io/guides/custom_train_step_in_torch/"""
-    def __init__(self, config):
+    def __init__(self, config, device:str):
         super(WGANGP, self).__init__()
         self.config = config
         self.latent_dim = config['latent_dims']
@@ -47,7 +61,7 @@ class WGANGP(keras.Model):
         self.augment = partial(DiffAugment, policy=config['augment_policy'])
         
         self.seed = config['seed']
-        self.device = "mps" if torch.mps.is_available() else "cpu"
+        self.device = device if getattr(torch, device).is_available() else "cpu"
         self.training_balance = config['training_balance']
         self.nfields = len(config['fields'])
 
@@ -112,10 +126,17 @@ class WGANGP(keras.Model):
                 offset=offset,
                 seed=seed
                 )
-        
-        label1d = torch.tensor(label, dtype=torch.int64, device=self.device).reshape(-1,)
-        condition2d = torch.tensor(condition, dtype=torch.float32, device=self.device).reshape(-1,1)
+            
+        def _tensor(x):
+            if not isinstance(x, torch.Tensor):
+                return torch.tensor(x)
+            else:
+                return x
+            
+        label1d = _tensor(label).to(dtype=torch.int64, device=self.device).reshape(-1,)
+        condition2d = _tensor(condition).to(dtype=torch.float32, device=self.device).reshape(-1,1)
         raw = self.generator(noise, label=label1d, condition=condition2d)
+        
         if verbose:
             print("Minimum before transformation:", ops.min(raw))
             print("Maximum before transformation:", ops.max(raw))
@@ -139,7 +160,11 @@ class WGANGP(keras.Model):
         self.critic_valid_tracker.update_state(score_valid)
         return {'critic': self.critic_valid_tracker.result()}
 
-    
+    def __repr__(self) -> str:
+        out = "\nWasserstein GAN with Gradient Penalty\n"
+        out += "-------------------------------------\n"
+        out += self.config.__repr__()
+        return out
 
     def _gradient_penalty(self, data, fake_data, condition, label):
         eps = keras.random.uniform((data.shape[0], 1, 1, 1))
@@ -284,6 +309,159 @@ class WGANGP(keras.Model):
             self.fake_std,
             self.real_std,
         ]
+
+
+    @traceback_utils.filter_traceback
+    def fit(
+        self,
+        x=None,
+        y=None,
+        batch_size=None,
+        epochs=1,
+        verbose="auto",
+        callbacks=None,
+        validation_split=0.0,
+        validation_data=None,
+        shuffle=True,
+        class_weight=None,
+        sample_weight=None,
+        initial_epoch=0,
+        steps_per_epoch=None,
+        validation_steps=None,
+        validation_batch_size=None,
+        validation_freq=1,
+    ):
+        if not self.compiled:
+            raise ValueError(
+                "You must call `compile()` before calling `fit()`."
+            )
+
+        # TODO: respect compiled trainable state
+        self._eval_epoch_iterator = None
+        if validation_split and validation_data is None:
+            # Create the validation data using the training data. Only supported
+            # for TF/numpy/jax arrays.
+            # TODO: Support torch tensors for validation data.
+            (
+                (x, y, sample_weight),
+                validation_data,
+            ) = array_slicing.train_validation_split(
+                (x, y, sample_weight), validation_split=validation_split
+            )
+
+        if validation_data is not None:
+            (
+                val_x,
+                val_y,
+                val_sample_weight,
+            ) = data_adapter_utils.unpack_x_y_sample_weight(validation_data)
+
+        # Create an iterator that yields batches for one epoch.
+        epoch_iterator = TorchEpochIterator(
+            x=x,
+            y=y,
+            sample_weight=sample_weight,
+            batch_size=batch_size,
+            steps_per_epoch=steps_per_epoch,
+            shuffle=shuffle,
+            class_weight=class_weight,
+            steps_per_execution=self.steps_per_execution,
+        )
+
+        self._symbolic_build(iterator=epoch_iterator)
+        epoch_iterator.reset()
+
+        # Container that configures and calls callbacks.
+        if not isinstance(callbacks, callbacks_module.CallbackList):
+            callbacks = callbacks_module.CallbackList(
+                callbacks,
+                add_history=True,
+                add_progbar=verbose != 0,
+                verbose=verbose,
+                epochs=epochs,
+                steps=epoch_iterator.num_batches,
+                model=self,
+            )
+
+        self.stop_training = False
+        training_logs = {}
+        self.make_train_function()
+        callbacks.on_train_begin()
+        initial_epoch = self._initial_epoch or initial_epoch
+        for epoch in range(initial_epoch, epochs):
+            self.reset_metrics()
+            callbacks.on_epoch_begin(epoch)
+
+            # Switch the torch Module to training mode. Inform torch layers to
+            # do training behavior in case the user did not use `self.training`
+            # when implementing a custom layer with torch layers.
+            self.train()
+
+            logs = {}
+            for step, data in epoch_iterator:
+                # Callbacks
+                callbacks.on_train_batch_begin(step)
+
+                logs = self.train_function(data)
+
+                # Callbacks
+                callbacks.on_train_batch_end(step, logs)
+                if self.stop_training:
+                    break
+
+            # Override with model metrics instead of last step logs if needed.
+            epoch_logs = dict(self._get_metrics_result_or_logs(logs))
+
+            # Switch the torch Module back to testing mode.
+            self.eval()
+
+            # Run validation.
+            if validation_data is not None and self._should_eval(
+                epoch, validation_freq
+            ):
+                # Create TorchEpochIterator for evaluation and cache it.
+                if getattr(self, "_eval_epoch_iterator", None) is None:
+                    self._eval_epoch_iterator = TorchEpochIterator(
+                        x=val_x,
+                        y=val_y,
+                        sample_weight=val_sample_weight,
+                        batch_size=validation_batch_size or batch_size,
+                        steps_per_execution=self.steps_per_execution,
+                        steps_per_epoch=validation_steps,
+                        shuffle=False,
+                    )
+                val_logs = self.evaluate(
+                    x=val_x,
+                    y=val_y,
+                    sample_weight=val_sample_weight,
+                    batch_size=validation_batch_size or batch_size,
+                    steps=validation_steps,
+                    callbacks=callbacks,
+                    return_dict=True,
+                    _use_cached_eval_dataset=True,
+                )
+                val_logs = {
+                    "val_" + name: val for name, val in val_logs.items()
+                }
+                epoch_logs.update(val_logs)
+
+            callbacks.on_epoch_end(epoch, epoch_logs)
+            training_logs = epoch_logs
+            if self.stop_training:
+                break
+
+        if (
+            isinstance(self.optimizer, optimizers_module.Optimizer)
+            and epochs > 0
+        ):
+            self.optimizer.finalize_variable_values(self.trainable_weights)
+
+        # If _eval_epoch_iterator exists, delete it after all epochs are done.
+        if getattr(self, "_eval_epoch_iterator", None) is not None:
+            del self._eval_epoch_iterator
+        callbacks.on_train_end(logs=training_logs)
+        return self.history
+
     
 
 

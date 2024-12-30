@@ -131,5 +131,5 @@ def raw_extremal_coeff_nd(frechets):
     else:
         print("Warning: all zeros in minima array.")
         theta = d
-    return theta.astype(float)
+    return float(theta)
 

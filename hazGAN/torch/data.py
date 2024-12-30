@@ -2,6 +2,7 @@ import time
 import numpy as np
 from collections import Counter
 import torch
+from tqdm import tqdm
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 
@@ -97,13 +98,13 @@ class StormDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.take(idx)
-    
+
     def take(self, idx:int):
         """Works for integers and slices."""
         sample = {}
         for key in self.keys:
             sample[key] = self.data[key][idx]
-        if self.transform:
+        if self.transform and (not sample.get('transformed', False)):
             sample = self.transform(sample)
         return sample
             
@@ -112,7 +113,8 @@ class StormDataset(Dataset):
         classes = list(set(datadict[key]))
         classdicts = []
         for label in classes:
-            indices = np.array(datadict[key] == label).nonzero()[0]
+            # indices = torch.nonzero(datadict[key] == label)
+            indices = np.nonzero(datadict[key] == label)
             classdict = {key: values[indices] for key, values in datadict.items()}
             classdicts.append(classdict)
         return classdicts
@@ -130,9 +132,16 @@ class StormDataset(Dataset):
         for key in classdicts[0].keys():
             values = []
             for classdict in classdicts:
-                values.append(classdict[key]) # check
-            values = np.concatenate(values)
+                values.append(classdict[key])
+
+            if isinstance(values[0], np.ndarray):
+                values = np.concatenate(values)
+
+            elif isinstance(values[0], torch.Tensor):
+                values = torch.stack(values)
+                    
             datadict[key] = values
+
         return datadict
 
     def subset(self, size:int):
@@ -150,7 +159,19 @@ class StormDataset(Dataset):
                 newdicts.append(newdict)
             newdict = self.concatdicts(newdicts)
             return StormDataset(newdict, transform=self.transform)
+    
+    def pretransform(self, transform=None):
+        """Pre-transform data"""
+        transformed_data = []
+        for idx in (pbar := tqdm(range(self.length))):
+            pbar.set_description('Pre-transforming data')
+            sample = self[idx]
+            sample['transformed'] = True
+            transformed_data.append(sample)
+        newdict = self.concatdicts(transformed_data)
+        return StormDataset(newdict, transform=transform)
         
+
 
 def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
               img_size:tuple=(18, 22), device='mps', train_size:float=0.8,
@@ -165,21 +186,26 @@ def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
         cache=cache
         )
 
-    transform = transforms.Compose(
-        [ToTensor(), Resize(img_size),
-         Gumbel(),
-         Pad(padding_mode, (1, 1, 1, 1)),
-         sendToDevice(device)]
-         )
+    pretransforms = transforms.Compose([
+        ToTensor(),
+        Resize(img_size),
+        Gumbel(),
+        Pad(padding_mode, (1, 1, 1, 1)),
+        sendToDevice(device)
+        ])
     
-    train = StormDataset(sample_dict(traindata), transform=transform)
-    valid = StormDataset(sample_dict(validdata), transform=transform)
+    train = StormDataset(sample_dict(traindata), transform=pretransforms)
+    valid = StormDataset(sample_dict(validdata), transform=pretransforms)
 
     if subset:
         assert isinstance(subset, int), "subset must be an integer."
         train = train.subset(subset)
         valid = valid.subset(subset)
-    
+
+    train = train.pretransform()
+    valid = valid.pretransform()
+
+    # had to modify this to not make weights double automatically
     trainsampler = WeightedRandomSampler(train.data['weight'], len(train), replacement=True)
 
     trainloader = DataLoader(train, batch_size=batch_size, pin_memory=True, sampler=trainsampler)

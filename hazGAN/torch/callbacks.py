@@ -1,15 +1,40 @@
 import os
-from datetime import datetime
 os.environ["KERAS_BACKEND"] = "torch"
+from datetime import datetime
 import wandb
 import numpy as np
 from torch import mps
+from keras import ops, callbacks
+from keras.optimizers.schedules import CosineDecay
 from keras.callbacks import Callback
 from IPython.display import clear_output
 
 from .utils import unpad
 
-__all__ = ["WandbMetricsLogger", "MemoryLogger", "ImageLogger"]
+
+__all__ = ["WandbMetricsLogger", "MemoryLogger", "ImageLogger", "LRScheduler"]
+
+
+class LRScheduler(callbacks.LearningRateScheduler):
+    def __init__(self, lr:float, epochs:int, samples:int, warmup_steps=100, alpha=0., initial_lr=0.):
+        total_steps = epochs * samples
+        decay_steps = total_steps - warmup_steps
+        
+        cosine_scheduler = CosineDecay(
+            initial_lr,
+            decay_steps,
+            alpha=alpha,
+            name="CosineDecay",
+            warmup_target=lr,
+            warmup_steps=warmup_steps
+        )
+
+        def float_scheduler(epoch):
+            """Requires scheduler returns a float."""
+            return float(cosine_scheduler(epoch))
+        
+        super().__init__(float_scheduler)
+
 
 
 class WandbMetricsLogger(Callback):
@@ -101,3 +126,4 @@ class ImageLogger(Callback):
                 "generated_images": wandb_images,
                 "epoch": epoch
                 })
+

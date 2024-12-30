@@ -1,11 +1,11 @@
 # training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
 epochs:
   desc: Number of epochs to train for
-  value: 10
+  value: 100
 train_size:
   value: 0.8  # 840 # 50
 batch_size:
-  value: 128 # for GPU constraints
+  value: 64 # for GPU constraints
 fields:
   desc: Which fields to model, subsets of ['u10', 'tp', 'mslp']
   value: ['u10', 'mslp']
@@ -44,6 +44,9 @@ lambda_gp:
   value: 10.
 lambda_var:
   value: 5.
+scheduler:
+  desc: Learning rate scheduler, [True, False]
+  value: False
 
 # architecture
 input_policy:
@@ -71,7 +74,7 @@ optimizer:
   value: Adam
 learning_rate:
   desc: Gulrajani et al. 2017 use 0.0001 (Appendix B)
-  value: 0.001
+  value: 0.01
 beta_1:
   desc: Gulrajani et al. 2017 use 0.5, [0, 0.5]
   value: 0.5
