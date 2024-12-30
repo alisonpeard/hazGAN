@@ -6,16 +6,29 @@ References:
 ..[2] Harris (2022) - application
 """
 # %%
-from torch import nn
+from functools import partial
+from torch import nn, cat
 from .blocks import (
     ResidualUpBlock,
     ResidualDownBlock,
     GumbelBlock
 )
 
+__all__ = ['Generator', 'Critic']
+
+    
+def _combine(x, label, condition, policy='add'):
+    if policy == 'add':
+        x += label + condition
+    elif policy == 'concat':
+        x = cat([x, label, condition], dim=1)
+    else:
+        raise ValueError(f"Unknown policy {policy}, try 'add', or 'concat'.")
+    return x
+
 
 class Generator(nn.Module):
-    def __init__(self, config, nfields=2):
+    def __init__(self, config, nfields=2, K=16):
         super(Generator, self).__init__()
 
         # set up feature widths
@@ -29,6 +42,10 @@ class Generator(nn.Module):
         self.width1 = width // 2
         self.width2 = width // 3
         self.latent_dim = config['latent_dims']
+
+        # input handling
+        self.input_factor = 1 if config['input_policy'] == 'add' else 3
+        self.combine_inputs = partial(_combine, policy=config['input_policy'])
 
         self.constant_to_features = None # placeholder for later
 
@@ -58,8 +75,9 @@ class Generator(nn.Module):
             nn.BatchNorm2d(self.width0 *  nfields)
         ) # output shape: (batch_size, width0 * nfields, 5, 5)
 
+        # f(x) = (x-1)*s + k
         self.features_to_image = nn.Sequential(
-            ResidualUpBlock(self.width0 * nfields, self.width1, (3, 3), bias=False),
+            ResidualUpBlock(self.input_factor * self.width0 * nfields, self.width1, (3, 3), bias=False),
             # (3, 3; 1) kernel: 5 x 5 -> 7 x 7 -- USING
             # (2, 2; 2) kernel: 5 x 5 -> 10 x 10
             ResidualUpBlock(self.width1, self.width1, (2, 4), 2, bias=False),
@@ -80,10 +98,10 @@ class Generator(nn.Module):
         ) # output shape: (batch_size, 20, 24, nfields)
 
         self.refine_fields = nn.Sequential(
-            nn.Conv2d(nfields, nfields, kernel_size=4, padding="same", groups=nfields),
+            nn.Conv2d(nfields, K * nfields, kernel_size=4, padding="same", groups=nfields),
             nn.LeakyReLU(config['lrelu']),
-            nn.BatchNorm2d(nfields),
-            nn.Conv2d(nfields, nfields, kernel_size=3, padding="same", groups=nfields),
+            nn.BatchNorm2d(K * nfields),
+            nn.Conv2d(K * nfields, nfields, kernel_size=3, padding="same"),
             GumbelBlock(nfields)
         ) # output shape: (batch_size, 20, 24, nfields)
 
@@ -92,9 +110,7 @@ class Generator(nn.Module):
         z = self.latent_to_features(z)
         label = self.label_to_features(label)
         condition = self.condition_to_features(condition)
-
-        x = z + label + condition
-        # x = torch.cat([z, label, condition], dim=1)
+        x = self.combine_inputs(z, label, condition)
         x = self.features_to_image(x)
         x = self.refine_fields(x)
         return x
@@ -113,6 +129,10 @@ class Critic(nn.Module):
         self.width0 = width // 3
         self.width1 = width // 2
         self.width2 = width
+
+        # input handling
+        self.input_factor = 1 if config['input_policy'] == 'add' else 3
+        self.combine_inputs = partial(_combine, policy=config['input_policy'])
 
         self.process_fields = nn.Sequential(
             nn.Conv2d(nfields, self.width0 * nfields, kernel_size=4, padding="same", groups=nfields),
@@ -135,11 +155,17 @@ class Critic(nn.Module):
             nn.LayerNorm((self.width0 * nfields, 20, 24))
         ) # output shape: (batch_size, width0 * nfields, 20, 24)
 
+        # f(x) = (x-k)/s + 1
         self.image_to_features = nn.Sequential(
-            ResidualDownBlock(self.width0 * nfields, self.width1, (4, 5), 2, bias=False),
-            ResidualDownBlock(self.width1, self.width2, (3, 4), bias=False),
+            # ResidualDownBlock(self.input_factor * self.width0 * nfields, self.width1, (4, 5), 2, bias=False),
+            # ResidualDownBlock(self.width1, self.width2, (3, 4), bias=False),
+            # ResidualDownBlock(self.width2, self.width2, (3, 3), bias=False),
+            ResidualDownBlock(self.input_factor * self.width0 * nfields, self.width0, (3, 3), bias=False),
+            ResidualDownBlock(self.width0, self.width1, (3, 4), bias=False),
+            ResidualDownBlock(self.width1, self.width1, (3, 4), bias=False),
+            ResidualDownBlock(self.width1, self.width2, (2, 4), 2, bias=False),
             ResidualDownBlock(self.width2, self.width2, (3, 3), bias=False),
-        ) # output shape: (batch_size, width2, 1, 1)
+        ) # output shape: (batch_size, width2, 5, 5)
 
 
         self.features_to_score = nn.Sequential(
@@ -155,7 +181,7 @@ class Critic(nn.Module):
         x = self.process_fields(x)
         label = self.label_to_features(label)
         condition = self.condition_to_features(condition)
-        x = x + label + condition
+        x = self.combine_inputs(x, label, condition)
         x = self.image_to_features(x)
         x = self.features_to_score(x)
         return x

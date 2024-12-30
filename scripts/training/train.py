@@ -2,9 +2,9 @@
 For conditional training (no constant fields yet).
 """
 # %% quick settings
-DRY_RUN_EPOCHS       = 20
+DRY_RUN_EPOCHS       = 10
 EVAL_CHANNEL         = 2
-SUBSET_SIZE          = 200
+SUBSET_SIZE          = 100
 CONTOUR_PLOT         = False
 
 # %% actual script
@@ -18,14 +18,14 @@ from environs import Env
 import numpy as np
 import torch
 
-import hazGAN
 from hazGAN import plot
 from hazGAN.torch import (
     unpad,
     WGANGP,
     load_data,
     MemoryLogger,
-    WandbMetricsLogger
+    WandbMetricsLogger,
+    ImageLogger
 )
 
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
@@ -193,7 +193,8 @@ def main(config, verbose=True):
     # callbacks
     memory_logger = MemoryLogger(100, logdir='logs')
     wandb_logger = WandbMetricsLogger()
-    # image_logger = ImageLogger()
+    image_logger = ImageLogger()
+    callbacks = [memory_logger, wandb_logger, image_logger]
 
     # compile model
     model = WGANGP(config)
@@ -202,12 +203,11 @@ def main(config, verbose=True):
     # fit model
     start = time.time()
     print("\nTraining...\n")
-    history = model.fit(train, epochs=config['epochs'], callbacks=[memory_logger, wandb_logger])
-    # history = model.train_step(next(iter(train))) # single step
+    history = model.fit(train, epochs=config['epochs'], callbacks=callbacks)
     print("\nFinished! Training time: {:.2f} seconds\n".format(time.time() - start))
 
+    # evaluate
     evaluate_results(train, model, EVAL_CHANNEL, config, history.history, metadata)
-
     return history
 
 

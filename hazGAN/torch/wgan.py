@@ -36,6 +36,7 @@ class WGANGP(keras.Model):
         self.config = config
         self.latent_dim = config['latent_dims']
         self.lambda_gp = config['lambda_gp']
+        self.lambda_var = config['lambda_var']
         self.latent_space_distn = setup_latents(config['latent_space_distn'])
         
         if config['augment_policy'] != '':
@@ -49,6 +50,7 @@ class WGANGP(keras.Model):
         self.device = "mps" if torch.mps.is_available() else "cpu"
         self.training_balance = config['training_balance']
         self.nfields = len(config['fields'])
+
         self.generator = Generator(config, nfields=self.nfields).to(self.device)
         self.critic = Critic(config, nfields=self.nfields).to(self.device)
 
@@ -57,7 +59,6 @@ class WGANGP(keras.Model):
             *self.critic.parameters()
         ]
 
-        
         if config['gumbel']:
             self._uniform = lambda x: torch.exp(-torch.exp(-x))
         else:
@@ -111,10 +112,7 @@ class WGANGP(keras.Model):
                 offset=offset,
                 seed=seed
                 )
-        else:
-            n = noise.shape[0]
-            assert n == nsamples, f"Latent vector must be same length ({n}) as requested number of samples ({nsamples})."
-
+        
         label1d = torch.tensor(label, dtype=torch.int64, device=self.device).reshape(-1,)
         condition2d = torch.tensor(condition, dtype=torch.float32, device=self.device).reshape(-1,1)
         raw = self.generator(noise, label=label1d, condition=condition2d)
@@ -140,6 +138,7 @@ class WGANGP(keras.Model):
         score_valid = score_valid / (n + 1)
         self.critic_valid_tracker.update_state(score_valid)
         return {'critic': self.critic_valid_tracker.result()}
+
     
 
     def _gradient_penalty(self, data, fake_data, condition, label):
@@ -156,6 +155,15 @@ class WGANGP(keras.Model):
         return gradient_penalty
     
 
+    def _variance_penalty(self, data, fake_data):
+        """Maximise variance or minimise variance difference."""
+        train_batch_var = torch.var(data, dim=0)
+        gen_batch_var = torch.var(fake_data, dim=0)
+        variance_diff = train_batch_var - gen_batch_var # later
+        variance_penalty = torch.sqrt(torch.sum(torch.square(variance_diff)))
+        return variance_penalty
+    
+
     def _train_critic(self, data, label, condition, batch_size) -> None:
         noise = self.latent_space_distn((batch_size, self.latent_dim))
         fake_data = self.generator(noise, label, condition)
@@ -163,10 +171,12 @@ class WGANGP(keras.Model):
         score_fake = self.critic(fake_data, label, condition)
 
         gradient_penalty = self._gradient_penalty(data, fake_data, condition, label)
+        variance_penalty = self._variance_penalty(data, fake_data)
 
         self.zero_grad()
         loss = ops.mean(score_fake) - ops.mean(score_real)
         loss += self.lambda_gp * gradient_penalty
+        loss += self.lambda_var * variance_penalty
         loss.backward()
 
         grads = [v.value.grad for v in self.critic.trainable_weights]

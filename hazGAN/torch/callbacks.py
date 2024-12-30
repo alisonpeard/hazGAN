@@ -2,11 +2,14 @@ import os
 from datetime import datetime
 os.environ["KERAS_BACKEND"] = "torch"
 import wandb
+import numpy as np
 from torch import mps
 from keras.callbacks import Callback
+from IPython.display import clear_output
 
+from .utils import unpad
 
-__all__ = ["WandbMetricsLogger", "MemoryLogger"]
+__all__ = ["WandbMetricsLogger", "MemoryLogger", "ImageLogger"]
 
 
 class WandbMetricsLogger(Callback):
@@ -46,3 +49,55 @@ class MemoryLogger(Callback):
 
             if self.clear_cache:
                 mps.empty_cache()
+
+
+class ImageLogger(Callback):
+    """Log images every n epochs"""
+    def __init__(self, frequency:int=1, field:int=0, nsamples:int=8,
+                 conditions:np.array=None, labels:list=None, noise:np.array=None
+                 ) -> None:
+        super().__init__()
+        self.frequency = frequency
+        self.field = field
+
+        if conditions is None:
+            conditions = np.linspace(20, 60, nsamples)
+        
+        if labels is None:
+            labels = np.array([2] * nsamples)
+   
+        self.nsamples = nsamples
+        self.conditions = conditions
+        self.labels = labels
+        self.seed = 42
+        self.noise = noise
+
+    def _sample(self) -> np.array:
+        generated = self.model(label=self.labels, condition=self.conditions, noise=self.noise)
+        generated = generated.detach().cpu().numpy()
+        generated = unpad(generated)
+        generated = generated[:, self.field, ::-1, :]
+        return generated
+
+    def on_train_begin(self, logs:dict={}) -> None:
+        """Initialise fixed noise."""
+        if self.noise is None:
+            self.noise = self.model.latent_space_distn(
+                (self.nsamples, self.model.latent_dim),
+                seed=self.seed
+                )
+    
+    def on_epoch_end(self, epoch:int, logs:dict={}) -> None:
+        if (epoch % self.frequency == 0):
+            clear_output(wait=True)
+            generated = self._sample()
+            generated = generated * 127.5 + 127.5
+            images = np.clip(generated, 0, 255)
+            images = images.astype(np.int64)
+            wandb_images = [wandb.Image(img) for img in images]
+
+            if wandb.run is not None:
+                wandb.log({
+                "generated_images": wandb_images,
+                "epoch": epoch
+                })

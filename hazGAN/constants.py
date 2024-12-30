@@ -38,6 +38,8 @@ SAMPLE_CONFIG = {
     'lrelu': 0.2,
     'critic_width': 64,
     'lambda_gp': 10,
+    'lambda_var': 1,
+    'input_policy': 'concat',
     'latent_space_distn': 'gumbel',
     'augment_policy': '',
     'gumbel': True,
