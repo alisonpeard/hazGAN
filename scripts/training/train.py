@@ -6,9 +6,9 @@ For conditional training (no constant fields yet).
 >>> snakeviz temp.dat
 """
 # %% quick settings
-DRY_RUN_EPOCHS       = 100
+DRY_RUN_EPOCHS       = 10
 EVAL_CHANNEL         = 2
-SUBSET_SIZE          = 100
+SUBSET_SIZE          = 1000
 CONTOUR_PLOT         = False
 
 # %% actual script
@@ -209,14 +209,12 @@ def main(config, verbose=True):
     image_logger = ImageLogger()
     callbacks = [memory_logger, wandb_logger, image_logger]
     if config['scheduler']:
-        scheduler = LEScheduler(config['learning_rate'], config['epochs'], len(train.dataset))
+        scheduler = LRScheduler(config['learning_rate'], config['epochs'], len(trainloader.dataset))
         callbacks.append(scheduler)
 
     # fit model
-    start = time.time()
     print("\nTraining...\n")
     history = model.fit(trainloader, epochs=config['epochs'], callbacks=callbacks)
-    print("\nFinished! Training time: {:.2f} seconds\n".format(time.time() - start))
 
     # evaluate
     evaluate_results(trainloader, model, EVAL_CHANNEL, config, history.history, metadata)

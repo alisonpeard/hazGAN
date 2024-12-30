@@ -288,7 +288,7 @@ class WGANGP(keras.Model):
         metrics["critic_grad_norm"] = self.critic_grad_norm.result()
         metrics["generator_grad_norm"] = self.generator_grad_norm.result()
 
-        # print('\n') # uncomment to log metrics on newlines
+        print('\n') # uncomment to log metrics on newlines
 
         return metrics
 
@@ -311,6 +311,7 @@ class WGANGP(keras.Model):
             self.real_std,
         ]
 
+    # - - - - - - - - - BELOW HERE IS A CUSTOM FIT METHOD - - - - - - - - - - - - - - - - - - - - - - - |
     @staticmethod
     def get_initial_weights(labels) -> torch.Tensor:
         counts = torch.bincount(labels)
@@ -321,8 +322,8 @@ class WGANGP(keras.Model):
     @staticmethod
     def interpolate_weights(
             initial_weights,
-            epochs,
-            target_weights=torch.tensor([0., 0., 1.])
+            target_weights=torch.tensor([0., 0., 1.]),
+            epochs=1
             ) -> callable:
         weight_matrix = torch.empty((epochs, len(initial_weights)))
         for i in range(len(initial_weights)):
@@ -361,6 +362,7 @@ class WGANGP(keras.Model):
         validation_steps=None,
         validation_batch_size=None,
         validation_freq=1,
+        target_weights=torch.tensor([0., 0., 1.]),
     ):
         if not self.compiled:
             raise ValueError(
@@ -399,30 +401,18 @@ class WGANGP(keras.Model):
             steps_per_execution=self.steps_per_execution
             )
 
-        target_weights = torch.tensor([0., 0., 1.])
+        target_weights = target_weights
         initial_weights = self.get_initial_weights(x.dataset.data['label'])
         weight_iterator = self.interpolate_weights(initial_weights, target_weights, epochs)
 
-        def update_dataloader(epoch, weight_iterator) -> TorchEpochIterator:
+        def update_dataloader(x, epoch, weight_iterator) -> TorchEpochIterator:
             weights = weight_iterator(epoch)
             x = self.update_dataloader_weights(x, weights)
-            return x
+            return x, weights
         
         x = self.update_dataloader_weights(x, initial_weights)
+        weights = initial_weights
         epoch_iterator = update_epoch_iterator(x)
-        
-        # # old
-        # epoch_iterator = TorchEpochIterator(
-        #     x=x,
-        #     y=y,
-        #     sample_weight=sample_weight,
-        #     batch_size=batch_size,
-        #     steps_per_epoch=steps_per_epoch,
-        #     shuffle=shuffle,
-        #     class_weight=class_weight,
-        #     steps_per_execution=self.steps_per_execution,
-        # )
-
         self._symbolic_build(iterator=epoch_iterator)
         epoch_iterator.reset()
 
@@ -459,6 +449,8 @@ class WGANGP(keras.Model):
                 callbacks.on_train_batch_begin(step)
 
                 logs = self.train_function(data)
+                for i, weight in enumerate(weights):
+                    logs[f"weight_{i}"] = weight
 
                 # Callbacks
                 callbacks.on_train_batch_end(step, logs)
@@ -467,10 +459,6 @@ class WGANGP(keras.Model):
 
             # Override with model metrics instead of last step logs if needed.
             epoch_logs = dict(self._get_metrics_result_or_logs(logs))
-
-            # Update dataloader to new resampling weights
-            x = update_dataloader(epoch, weight_iterator)
-            epoch_iterator = update_epoch_iterator(x)
 
             # Switch the torch Module back to testing mode.
             self.eval()
@@ -506,6 +494,13 @@ class WGANGP(keras.Model):
                 epoch_logs.update(val_logs)
 
             callbacks.on_epoch_end(epoch, epoch_logs)
+
+            # Update dataloader to new resampling weights
+            x, weights = update_dataloader(x, epoch, weight_iterator)
+            epoch_iterator = update_epoch_iterator(x)
+            self._symbolic_build(iterator=epoch_iterator)
+            epoch_iterator.reset()
+
             training_logs = epoch_logs
             if self.stop_training:
                 break
@@ -521,6 +516,8 @@ class WGANGP(keras.Model):
             del self._eval_epoch_iterator
         callbacks.on_train_end(logs=training_logs)
         return self.history
+
+    # - - - - - - - - - END OF CUSTOM FIT METHOD - - - - - - - - - - - - - - - - - - - - - - - |
 
     
 
