@@ -15,6 +15,7 @@ from keras.src.utils import traceback_utils
 from keras.src.trainers.data_adapters import array_slicing
 from keras.src.trainers.data_adapters import data_adapter_utils
 from keras.src.trainers.epoch_iterator import EpochIterator
+from torch.utils.data import WeightedRandomSampler
 
 from ..constants import SAMPLE_CONFIG
 from .models import Critic
@@ -310,6 +311,36 @@ class WGANGP(keras.Model):
             self.real_std,
         ]
 
+    @staticmethod
+    def get_initial_weights(labels) -> torch.Tensor:
+        counts = torch.bincount(labels)
+        weights = counts / counts.sum()
+        return weights
+
+
+    @staticmethod
+    def interpolate_weights(
+            initial_weights,
+            epochs,
+            target_weights=torch.tensor([0., 0., 1.])
+            ) -> callable:
+        weight_matrix = torch.empty((epochs, len(initial_weights)))
+        for i in range(len(initial_weights)):
+            weight_matrix[:, i] = torch.linspace(
+                initial_weights[i],
+                target_weights[i],
+                epochs
+            )
+        def get_weights(epoch) -> torch.Tensor:
+            return weight_matrix[epoch]
+        return get_weights
+
+
+    @staticmethod
+    def update_dataloader_weights(dataloader:WeightedRandomSampler, weights) -> WeightedRandomSampler:
+        dataloader.weights = weights
+        return dataloader
+
 
     @traceback_utils.filter_traceback
     def fit(
@@ -357,16 +388,40 @@ class WGANGP(keras.Model):
             ) = data_adapter_utils.unpack_x_y_sample_weight(validation_data)
 
         # Create an iterator that yields batches for one epoch.
-        epoch_iterator = TorchEpochIterator(
-            x=x,
+        update_epoch_iterator = partial(
+            TorchEpochIterator,
             y=y,
             sample_weight=sample_weight,
             batch_size=batch_size,
             steps_per_epoch=steps_per_epoch,
             shuffle=shuffle,
             class_weight=class_weight,
-            steps_per_execution=self.steps_per_execution,
-        )
+            steps_per_execution=self.steps_per_execution
+            )
+
+        target_weights = torch.tensor([0., 0., 1.])
+        initial_weights = self.get_initial_weights(x.dataset.data['label'])
+        weight_iterator = self.interpolate_weights(initial_weights, target_weights, epochs)
+
+        def update_dataloader(epoch, weight_iterator) -> TorchEpochIterator:
+            weights = weight_iterator(epoch)
+            x = self.update_dataloader_weights(x, weights)
+            return x
+        
+        x = self.update_dataloader_weights(x, initial_weights)
+        epoch_iterator = update_epoch_iterator(x)
+        
+        # # old
+        # epoch_iterator = TorchEpochIterator(
+        #     x=x,
+        #     y=y,
+        #     sample_weight=sample_weight,
+        #     batch_size=batch_size,
+        #     steps_per_epoch=steps_per_epoch,
+        #     shuffle=shuffle,
+        #     class_weight=class_weight,
+        #     steps_per_execution=self.steps_per_execution,
+        # )
 
         self._symbolic_build(iterator=epoch_iterator)
         epoch_iterator.reset()
@@ -389,6 +444,7 @@ class WGANGP(keras.Model):
         callbacks.on_train_begin()
         initial_epoch = self._initial_epoch or initial_epoch
         for epoch in range(initial_epoch, epochs):
+
             self.reset_metrics()
             callbacks.on_epoch_begin(epoch)
 
@@ -411,6 +467,10 @@ class WGANGP(keras.Model):
 
             # Override with model metrics instead of last step logs if needed.
             epoch_logs = dict(self._get_metrics_result_or_logs(logs))
+
+            # Update dataloader to new resampling weights
+            x = update_dataloader(epoch, weight_iterator)
+            epoch_iterator = update_epoch_iterator(x)
 
             # Switch the torch Module back to testing mode.
             self.eval()

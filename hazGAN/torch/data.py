@@ -4,9 +4,12 @@ from collections import Counter
 import torch
 from tqdm import tqdm
 from torchvision import transforms
-from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+from torch.utils.data import WeightedRandomSampler
 
-from ..data import load_xr_data, sample_dict
+from ..data import load_xr_data
+from ..data import sample_dict
 from ..constants import TEST_YEAR
 
 __all__ = ['load_data', 'test_sampling_ratios', 'test_iter_time']
