@@ -1,7 +1,7 @@
 # training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
 epochs:
   desc: Number of epochs to train for
-  value: 100
+  value: 20
 train_size:
   value: 0.8  # 840 # 50
 batch_size:
@@ -43,10 +43,10 @@ gumbel:
 lambda_gp:
   value: 10.
 lambda_var:
-  value: 5.
+  value: 0.
 scheduler:
   desc: Learning rate scheduler, [True, False]
-  value: False
+  value: True
 
 # architecture
 input_policy:

@@ -16,6 +16,7 @@ from keras.src.trainers.data_adapters import array_slicing
 from keras.src.trainers.data_adapters import data_adapter_utils
 from keras.src.trainers.epoch_iterator import EpochIterator
 from torch.utils.data import WeightedRandomSampler
+import math
 
 from ..constants import SAMPLE_CONFIG
 from .models import Critic
@@ -320,7 +321,7 @@ class WGANGP(keras.Model):
 
 
     @staticmethod
-    def interpolate_weights(
+    def linear_weights(
             initial_weights,
             target_weights=torch.tensor([0., 0., 1.]),
             epochs=1
@@ -332,6 +333,27 @@ class WGANGP(keras.Model):
                 target_weights[i],
                 epochs
             )
+        def get_weights(epoch) -> torch.Tensor:
+            return weight_matrix[epoch]
+        return get_weights
+    
+
+    @staticmethod
+    def cosine_decay(x, y, steps):
+        weights = []
+        for step in range(steps):
+            weights.append(y + (x - y) * (1 + ops.cos(math.pi * step / steps)) / 2)
+        return torch.tensor(weights)
+
+    @staticmethod
+    def cosine_weights(
+            initial_weights,
+            target_weights=torch.tensor([0., 0., 1.]),
+            epochs=1
+            ) -> callable:
+        weight_matrix = torch.empty((epochs, len(initial_weights)))
+        for i in range(len(initial_weights)):
+            weight_matrix[:, i] = WGANGP.cosine_decay(initial_weights[i], target_weights[i], epochs)
         def get_weights(epoch) -> torch.Tensor:
             return weight_matrix[epoch]
         return get_weights
@@ -403,7 +425,7 @@ class WGANGP(keras.Model):
 
         target_weights = target_weights
         initial_weights = self.get_initial_weights(x.dataset.data['label'])
-        weight_iterator = self.interpolate_weights(initial_weights, target_weights, epochs)
+        weight_iterator = self.cosine_weights(initial_weights, target_weights, epochs)
 
         def update_dataloader(x, epoch, weight_iterator) -> TorchEpochIterator:
             weights = weight_iterator(epoch)

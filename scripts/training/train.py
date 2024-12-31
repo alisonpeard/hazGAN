@@ -6,9 +6,9 @@ For conditional training (no constant fields yet).
 >>> snakeviz temp.dat
 """
 # %% quick settings
-DRY_RUN_EPOCHS       = 10
+DRY_RUN_EPOCHS       = 20
 EVAL_CHANNEL         = 2
-SUBSET_SIZE          = 1000
+SUBSET_SIZE          = 20_000
 CONTOUR_PLOT         = False
 
 # %% actual script
@@ -16,23 +16,22 @@ import os
 os.environ["KERAS_BACKEND"] = "torch"
 import sys
 import yaml
-import time
 import argparse
 import wandb
 from environs import Env
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
 
 from hazGAN import plot
-from hazGAN.torch import (
-    unpad,
-    WGANGP,
-    load_data,
-    MemoryLogger,
-    WandbMetricsLogger,
-    ImageLogger,
-    LRScheduler
-)
+from hazGAN.torch import unpad
+from hazGAN.torch import WGANGP
+from hazGAN.torch import load_data
+from hazGAN.torch import MemoryLogger
+from hazGAN.torch import WandbMetricsLogger
+from hazGAN.torch import ImageLogger
+from hazGAN.torch import LRScheduler
+
 
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
@@ -172,6 +171,16 @@ def evaluate_results(train, model, label:int, config:dict,
     print("fake_u.shape: {}".format(fake_u.shape))
     print("params.shape: {}".format(params.shape))
 
+    # Quick plot of sampling rates
+    fig, ax = plt.subplots(figsize=(12, 6), layout='tight')
+    ax.plot(history['weight_0'], label="normal climate")
+    ax.plot(history['weight_1'], linestyle='dashed', label="stormy")
+    ax.plot(history['weight_2'], label='very stormy')
+    ax.legend()
+    ax.set_ylabel("Sampling rate")
+    ax.set_xlabel("Epoch")
+    fig.savefig(os.path.join(rundir, "sampling_rates.png"), **plot_kwargs)
+
     print("\nGenerating figures...")
     plot.figure_one(fake_u, train_u, valid_u, imdir)
     plot.figure_two(fake_u, train_u, valid_u, imdir)
@@ -187,7 +196,7 @@ def evaluate_results(train, model, label:int, config:dict,
 
 
 
-def main(config, verbose=True):
+def main(config):
     # load data
     trainloader, validloader, metadata = load_data(datadir, config['batch_size'],
                                        train_size=config['train_size'],
@@ -274,6 +283,7 @@ if __name__ == "__main__":
     getattr(torch, device).empty_cache()
     result = main(config)
     print(result)
+
     notify("Process finished", "Python script", "Finished making pretraining data")
 
 
