@@ -380,7 +380,7 @@ class WGANGP(keras.Model):
         validation_steps=None,
         validation_batch_size=None,
         validation_freq=1,
-        target_weights=torch.tensor([0., 0., 1.]),
+        target_weights=torch.tensor([0., .5, .5]),
     ):
         if not self.compiled:
             raise ValueError(

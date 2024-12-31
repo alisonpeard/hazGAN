@@ -6,7 +6,7 @@ For conditional training (no constant fields yet).
 >>> snakeviz temp.dat
 """
 # %% quick settings
-DRY_RUN_EPOCHS       = 10
+DRY_RUN_EPOCHS       = 100
 EVAL_CHANNEL         = 2
 SUBSET_SIZE          = 1000
 TRAIN_SUBSET_SIZE    = 20_000 # up to 200_000

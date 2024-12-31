@@ -17,7 +17,8 @@ __all__ = ["WandbMetricsLogger", "MemoryLogger", "ImageLogger", "LRScheduler"]
 
 
 class LRScheduler(callbacks.LearningRateScheduler):
-    def __init__(self, lr:float, epochs:int, samples:int, warmup_steps=100, alpha=0., initial_lr=0.):
+    def __init__(self, lr:float, epochs:int, samples:int, warmup_steps=20,
+                 alpha=1e-5, initial_lr=1e-6):
         total_steps = epochs * samples
 
         if total_steps > warmup_steps:
