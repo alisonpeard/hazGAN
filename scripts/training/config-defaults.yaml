@@ -33,7 +33,7 @@ seed:
 # training features
 training_balance:
   desc: Gulrajani et al. 2017 use 5
-  value: 2
+  value: 5
 latent_space_distn:
   desc: Distribution of latent space, ['normal', 'uniform', 'gumbel']
   value: gumbel
@@ -57,7 +57,7 @@ lrelu:
   value: 0.2
 dropout:
   desc: Gulrajani et al. 2017 don't use dropout, neither does Shruti
-  value: 0.
+  value: 0.2
 latent_dims:
   desc: Gulrajani et al. 2017 use 128
   value: 128
@@ -73,7 +73,7 @@ optimizer:
   desc: Optimizer to use, ['SGD', 'Adam']
   value: Adam
 learning_rate:
-  desc: Gulrajani et al. 2017 use 0.0001 (Appendix B)
+  desc: (Max) Gulrajani et al. 2017 use 0.0001 (Appendix B)
   value: 0.01
 beta_1:
   desc: Gulrajani et al. 2017 use 0.5, [0, 0.5]
@@ -86,7 +86,7 @@ weight_decay:
   value: 0.001
 use_ema:
   desc: Use exponential moving average in training, causes issues when re-loading weights.
-  value: False # only set to true if not loading weights
+  value: True # only set to true if not loading weights
 ema_momentum:
   desc: Momentum of exponential moving average for tf.keras.optimizers.Adam (higher --> smoother)
   value: 0.999

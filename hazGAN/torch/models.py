@@ -174,7 +174,7 @@ class Critic(nn.Module):
             nn.LeakyReLU(config['lrelu']),
             nn.LayerNorm((nfields * 5 * 5)),
             nn.Linear(nfields * 5 * 5, 1),
-            nn.Sigmoid() # maybe
+            # nn.Sigmoid() # maybe, makes generator and critic very different scales
         ) # output shape: (batch_size, 1)
 
     def forward(self, x, label, condition):

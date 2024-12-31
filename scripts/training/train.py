@@ -6,9 +6,9 @@ For conditional training (no constant fields yet).
 >>> snakeviz temp.dat
 """
 # %% quick settings
-DRY_RUN_EPOCHS       = 100
+DRY_RUN_EPOCHS       = 20
 EVAL_CHANNEL         = 2
-SUBSET_SIZE          = 1000
+SAMPLES_PER_EPOCH    = 5000   # samples per epoch
 TRAIN_SUBSET_SIZE    = 20_000 # up to 200_000
 CONTOUR_PLOT         = False
 
@@ -220,7 +220,7 @@ def main(config):
     # fit model
     print("\nTraining...\n")
     history = model.fit(trainloader, epochs=config['epochs'], callbacks=callbacks,
-                        steps_per_epoch=(SUBSET_SIZE // config['batch_size']))
+                        steps_per_epoch=(SAMPLES_PER_EPOCH // config['batch_size']))
 
     # evaluate
     evaluate_results(trainloader, model, EVAL_CHANNEL, config, history.history, metadata)
