@@ -85,7 +85,7 @@ def sample_dict(data, condition="maxwind") -> dict:
             'uniform': data['uniform'].data.astype(np.float32),
             'condition': data[condition].data.astype(np.float32),
             'label': labels,
-            'weight': weight_labels(labels),
+            'weight': np.array([1.] * len(labels)), # 0 * weight_labels(labels), # TODO: made even weighting to start
             'season': encode_strings(data, "season"),
             'days_since_epoch': data['time'].data.astype(int),
             }

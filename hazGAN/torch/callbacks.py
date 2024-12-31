@@ -1,6 +1,6 @@
 import os
 os.environ["KERAS_BACKEND"] = "torch"
-
+from warnings import warn 
 from datetime import datetime
 import wandb
 import numpy as np
@@ -19,16 +19,26 @@ __all__ = ["WandbMetricsLogger", "MemoryLogger", "ImageLogger", "LRScheduler"]
 class LRScheduler(callbacks.LearningRateScheduler):
     def __init__(self, lr:float, epochs:int, samples:int, warmup_steps=100, alpha=0., initial_lr=0.):
         total_steps = epochs * samples
-        decay_steps = total_steps - warmup_steps
-        
-        cosine_scheduler = CosineDecay(
-            initial_lr,
-            decay_steps,
-            alpha=alpha,
-            name="CosineDecay",
-            warmup_target=lr,
-            warmup_steps=warmup_steps
-        )
+
+        if total_steps > warmup_steps:
+            decay_steps = total_steps - warmup_steps
+            cosine_scheduler = CosineDecay(
+                initial_lr,
+                decay_steps,
+                alpha=alpha,
+                name="CosineDecay",
+                warmup_target=lr,
+                warmup_steps=warmup_steps
+            )
+        else:
+            warn("Total steps are less than warmup steps. Skipping warmup.")
+            decay_steps = total_steps
+            cosine_scheduler = CosineDecay(
+                lr,
+                decay_steps,
+                alpha=alpha,
+                name="CosineDecay"
+            )
 
         def float_scheduler(epoch):
             """Requires scheduler returns a float."""

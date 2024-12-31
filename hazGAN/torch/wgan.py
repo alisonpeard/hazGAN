@@ -314,11 +314,10 @@ class WGANGP(keras.Model):
 
     # - - - - - - - - - BELOW HERE IS A CUSTOM FIT METHOD - - - - - - - - - - - - - - - - - - - - - - - |
     @staticmethod
-    def get_initial_weights(labels) -> torch.Tensor:
+    def get_initial_weights(labels:torch.Tensor) -> torch.Tensor:
         counts = torch.bincount(labels)
         weights = counts / counts.sum()
         return weights
-
 
     @staticmethod
     def linear_weights(
@@ -337,7 +336,6 @@ class WGANGP(keras.Model):
             return weight_matrix[epoch]
         return get_weights
     
-
     @staticmethod
     def cosine_decay(x, y, steps):
         weights = []
@@ -358,12 +356,10 @@ class WGANGP(keras.Model):
             return weight_matrix[epoch]
         return get_weights
 
-
     @staticmethod
     def update_dataloader_weights(dataloader:WeightedRandomSampler, weights) -> WeightedRandomSampler:
         dataloader.weights = weights
         return dataloader
-
 
     @traceback_utils.filter_traceback
     def fit(

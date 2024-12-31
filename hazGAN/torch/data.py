@@ -154,10 +154,13 @@ class StormDataset(Dataset):
             return self
         else:
             classdicts = self.filterdict(self.data, 'label')
+            # class_size = size // nclasses # even sampling
             nclasses = len(classdicts)
-            class_size = size // nclasses
+            class_props = [len(classdicts[i]['label']) / n for i in range(nclasses)]
+            class_sizes = [int(size * prop) for prop in class_props]
+            
             newdicts = []
-            for classdict in classdicts:
+            for classdict, class_size in zip(classdicts, class_sizes):
                 newdict = self.subsetdict(classdict, class_size)
                 newdicts.append(newdict)
             newdict = self.concatdicts(newdicts)
@@ -169,7 +172,7 @@ class StormDataset(Dataset):
         for idx in (pbar := tqdm(range(self.length))):
             pbar.set_description('Pre-transforming data')
             sample = self[idx]
-            sample['transformed'] = True
+            sample['transformed'] = torch.tensor(True)
             transformed_data.append(sample)
         newdict = self.concatdicts(transformed_data)
         return StormDataset(newdict, transform=transform)

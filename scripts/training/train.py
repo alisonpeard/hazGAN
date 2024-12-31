@@ -6,9 +6,10 @@ For conditional training (no constant fields yet).
 >>> snakeviz temp.dat
 """
 # %% quick settings
-DRY_RUN_EPOCHS       = 20
+DRY_RUN_EPOCHS       = 10
 EVAL_CHANNEL         = 2
-SUBSET_SIZE          = 20_000
+SUBSET_SIZE          = 1000
+TRAIN_SUBSET_SIZE    = 20_000 # up to 200_000
 CONTOUR_PLOT         = False
 
 # %% actual script
@@ -25,8 +26,8 @@ import matplotlib.pyplot as plt
 
 from hazGAN import plot
 from hazGAN.torch import unpad
-from hazGAN.torch import WGANGP
 from hazGAN.torch import load_data
+from hazGAN.torch import WGANGP
 from hazGAN.torch import MemoryLogger
 from hazGAN.torch import WandbMetricsLogger
 from hazGAN.torch import ImageLogger
@@ -34,6 +35,7 @@ from hazGAN.torch import LRScheduler
 
 
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
+
 
 global run
 global datadir
@@ -117,20 +119,14 @@ def evaluate_results(train, model, label:int, config:dict,
     print("Gathering labels and conditions...")
 
     # filter training data
-    label_indices = (train.dataset.data['label'] == label).nonzero()[0]
-    train_subset = train.dataset[label_indices]
+    label_indices = (train.dataset.data['label'] == label).nonzero().reshape(-1)
+    train_subset = train.dataset[label_indices.tolist()]
     condition_subset = train_subset['condition'].cpu().numpy()
 
-    # filter generated data
-    x  = np.linspace(0, 100, nsamples)
-    xp = np.linspace(0, 100, len(condition_subset))
-    fp = np.array(sorted(condition_subset)).reshape(-1)
-    print("x.shape", x.shape)
-    print("xp.shape", xp.shape)
-    print("fp.shape", fp.shape)
-    condition = np.interp(x, xp, fp).astype(np.float32) # interpolate conditions
-    condition = condition.reshape(-1, 1)
-    labels = np.tile(label, nsamples)
+    # make generated data for same labels and conditions
+    nsamples = len(condition_subset)
+    condition = condition_subset
+    labels = np.tile(label, len(condition))
     lower_bound = np.floor(condition_subset.min())
     upper_bound = np.ceil(condition_subset.max())
 
@@ -173,6 +169,7 @@ def evaluate_results(train, model, label:int, config:dict,
 
     # Quick plot of sampling rates
     fig, ax = plt.subplots(figsize=(12, 6), layout='tight')
+
     ax.plot(history['weight_0'], label="normal climate")
     ax.plot(history['weight_1'], linestyle='dashed', label="stormy")
     ax.plot(history['weight_2'], label='very stormy')
@@ -202,7 +199,7 @@ def main(config):
                                        train_size=config['train_size'],
                                        fields=config['fields'],
                                        label_ratios=config['label_ratios'],
-                                       device=device, subset=SUBSET_SIZE)
+                                       device=device, subset=TRAIN_SUBSET_SIZE)
     
     # update config with number of labels
     config = update_config(config, 'nconditions', len(metadata['labels']))
@@ -210,7 +207,6 @@ def main(config):
     # compile model
     model = WGANGP(config, device=device)
     model.compile()
-
 
     # callbacks
     memory_logger = MemoryLogger(100, logdir='logs')
@@ -223,7 +219,8 @@ def main(config):
 
     # fit model
     print("\nTraining...\n")
-    history = model.fit(trainloader, epochs=config['epochs'], callbacks=callbacks)
+    history = model.fit(trainloader, epochs=config['epochs'], callbacks=callbacks,
+                        steps_per_epoch=(SUBSET_SIZE // config['batch_size']))
 
     # evaluate
     evaluate_results(trainloader, model, EVAL_CHANNEL, config, history.history, metadata)
