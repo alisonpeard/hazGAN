@@ -147,17 +147,21 @@ class StormDataset(Dataset):
 
         return datadict
 
-    def subset(self, size:int):
+
+    def subset(self, size:int, equal_sampling=False):
         """Return a subset of the dataset."""
         n = len(self)
         if size > n:
             return self
         else:
             classdicts = self.filterdict(self.data, 'label')
-            # class_size = size // nclasses # even sampling
-            nclasses = len(classdicts)
-            class_props = [len(classdicts[i]['label']) / n for i in range(nclasses)]
-            class_sizes = [int(size * prop) for prop in class_props]
+            if equal_sampling:
+                class_size = size // nclasses # even sampling
+                class_sizes = [class_size] * nclasses
+            else:
+                nclasses = len(classdicts)
+                class_props = [len(classdicts[i]['label']) / n for i in range(nclasses)]
+                class_sizes = [int(size * prop) for prop in class_props]
             
             newdicts = []
             for classdict, class_size in zip(classdicts, class_sizes):
@@ -166,6 +170,7 @@ class StormDataset(Dataset):
             newdict = self.concatdicts(newdicts)
             return StormDataset(newdict, transform=self.transform)
     
+
     def pretransform(self, transform=None):
         """Pre-transform data"""
         transformed_data = []
@@ -182,13 +187,13 @@ class StormDataset(Dataset):
 def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
               img_size:tuple=(18, 22), device='mps', train_size:float=0.8,
               fields:list=['u10', 'tp'], epoch='1940-01-01', verbose=True,
-              label_ratios:dict={'pre':1/3, 15: 1/3, 999:1/3},
-              testyear:int=TEST_YEAR, cache:bool=True, subset:int=None) -> tuple[Dataset, Dataset, dict]:
+              thresholds:list=[15, np.inf], testyear:int=TEST_YEAR,
+              cache:bool=True, subset:int=None) -> tuple[Dataset, Dataset, dict]:
     """Load data and return train and valid dataloaders."""
     
     traindata, validdata, metadata = load_xr_data(
         datadir, train_size=train_size, fields=fields, epoch=epoch,
-        verbose=verbose, testyear=testyear, label_ratios=label_ratios,
+        verbose=verbose, testyear=testyear, thresholds=thresholds,
         cache=cache
         )
 

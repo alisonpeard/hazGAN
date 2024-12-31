@@ -42,7 +42,6 @@ def encode_strings(ds:xr.Dataset, variable:str) -> ArrayLike:
     return encoded
 
 
-
 def numeric(mylist:list) -> list[float]:
     """Return a list of floats from a list of strings."""
     def is_numeric(item):
@@ -51,23 +50,15 @@ def numeric(mylist:list) -> list[float]:
             return True
         except ValueError:
             return False
-    
     return [float(item) for item in mylist if is_numeric(item)]
 
 
-def label_data(data:xr.DataArray, label_ratios:dict={'pre':1/3., 7:1/3, 20:1/3}
-               ) -> xr.DataArray:
-    """Apply labels to storm data using user-provided dict."""
-    ratios = list(label_ratios.values())
-    assert np.isclose(sum(ratios), 1), "Ratios must sum to one, received {}.".format(sum(ratios))
-
-    labels = numeric(list(label_ratios.keys()))
-    labels = sorted(labels)
-    data_labels = 0 * data['maxwind'] + 1
-
-    for label, lower_bound in enumerate(labels):
-        data_labels = data_labels.where(data['maxwind'] < lower_bound, int(label + 2))
-
+def label_data(data:xr.DataArray, thresholds:list=[15, np.inf]) -> xr.DataArray:
+    thresholds = sorted(thresholds)
+    data_labels = 0 * data['maxwind'] + 1 # initialise with normal climate label
+    for i, lower_bound in enumerate(thresholds):
+        # Returns elements from ‘DataArray’, where ‘cond’ is True, otherwise fill in ‘other’.
+        data_labels = data_labels.where(data['maxwind'] < lower_bound, int(i + 2))
     return data_labels
 
 
@@ -76,7 +67,7 @@ def weight_labels(x:np.ndarray) -> np.ndarray:
     counts = Counter(x)
     weights = np.vectorize(counts.__getitem__)(x)
     weights = 1.0 / weights
-    return weights
+    return weights * 0 + 1. # NOTE: made all ones!!
 
 
 def sample_dict(data, condition="maxwind") -> dict:
@@ -85,7 +76,7 @@ def sample_dict(data, condition="maxwind") -> dict:
             'uniform': data['uniform'].data.astype(np.float32),
             'condition': data[condition].data.astype(np.float32),
             'label': labels,
-            'weight': np.array([1.] * len(labels)), # 0 * weight_labels(labels), # TODO: made even weighting to start
+            'weight': weight_labels(labels), # TODO: made even weighting to start
             'season': encode_strings(data, "season"),
             'days_since_epoch': data['time'].data.astype(int),
             }
@@ -106,9 +97,10 @@ def check_validity(dataset, name:str) -> None:
         print("GOOD: Uniform data in {} dataset is in [0, 1] range.".format(name))
 
 
-def prep_xr_data(datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
-         train_size=0.8, fields=['u10', 'tp'], epoch='1940-01-01',
-         verbose=True, testyear=TEST_YEAR) -> tuple[xr.Dataset, xr.Dataset, dict]:
+def prep_xr_data(
+        datadir:str, thresholds:list=[15, np.inf], train_size=0.8, fields=['u10', 'tp'],
+        epoch='1940-01-01', verbose=True, testyear=TEST_YEAR
+        ) -> tuple[xr.Dataset, xr.Dataset, dict]:
     """Library-agnostic data loader for training.
 
     Returns:
@@ -145,7 +137,7 @@ def prep_xr_data(datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
     # conditioning & sampling variables
     metadata['epoch'] = np.datetime64(epoch)
     data['maxwind'] = data.sel(field='u10')['anomaly'].max(dim=['lon', 'lat'])
-    data['label'] = label_data(data, label_ratios)
+    data['label'] = label_data(data, thresholds)
     data['season'] = data['time.season']
     data['time'] = (data['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
     data = data.sel(field=fields)
@@ -227,6 +219,8 @@ def equal(a, b, verbose=False) -> bool:
         return (a == b)
 
     if isinstance(a, dict) and isinstance(b, dict):
+        if list(a.keys()) != list(b.keys()):
+            return False
         return all(equal(a[key], b[key]) for key in a.keys())
     
     if hasattr(a, '__iter__') and hasattr(b, '__iter__'):
@@ -299,7 +293,7 @@ def cache_xr_data(train, valid, metadata, **kwargs):
         print("Data cached to {}".format(cachedir))
 
 
-def load_xr_data(datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
+def load_xr_data(datadir:str, thresholds:list=[15, np.inf],
          train_size=0.8, fields=['u10', 'tp'], epoch='1940-01-01',
          verbose=True, testyear=TEST_YEAR, cache=True) -> tuple[xr.Dataset, xr.Dataset, dict]:
     """Library-agnostic data loader for training.
@@ -322,7 +316,7 @@ def load_xr_data(datadir:str, label_ratios={'pre':1/3, 15: 1/3, 999:1/3},
             return train, valid, metadata
     
     # if there's no cached data, load and (optionally) cache
-    train, valid, metadata = prep_xr_data(datadir, label_ratios, train_size, fields, epoch, verbose, testyear)
+    train, valid, metadata = prep_xr_data(datadir, thresholds, train_size, fields, epoch, verbose, testyear)
     cache_xr_data(train, valid, metadata, **kwargs)
     return train, valid, metadata
 # %%

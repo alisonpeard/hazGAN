@@ -6,10 +6,10 @@ For conditional training (no constant fields yet).
 >>> snakeviz temp.dat
 """
 # %% quick settings
-DRY_RUN_EPOCHS       = 20
+DRY_RUN_EPOCHS       = 1
 EVAL_CHANNEL         = 2
-SAMPLES_PER_EPOCH    = 5000   # samples per epoch
-TRAIN_SUBSET_SIZE    = 20_000 # up to 200_000
+SAMPLES_PER_EPOCH    = 100   # samples per epoch
+TRAIN_SUBSET_SIZE    = 10_000 # up to 200_000
 CONTOUR_PLOT         = False
 
 # %% actual script
@@ -198,7 +198,7 @@ def main(config):
     trainloader, validloader, metadata = load_data(datadir, config['batch_size'],
                                        train_size=config['train_size'],
                                        fields=config['fields'],
-                                       label_ratios=config['label_ratios'],
+                                       thresholds=config['thresholds'],
                                        device=device, subset=TRAIN_SUBSET_SIZE)
     
     # update config with number of labels
@@ -220,7 +220,8 @@ def main(config):
     # fit model
     print("\nTraining...\n")
     history = model.fit(trainloader, epochs=config['epochs'], callbacks=callbacks,
-                        steps_per_epoch=(SAMPLES_PER_EPOCH // config['batch_size']))
+                        steps_per_epoch=(SAMPLES_PER_EPOCH // config['batch_size']),
+                        target_weights=torch.tensor(config['target_weights']))
 
     # evaluate
     evaluate_results(trainloader, model, EVAL_CHANNEL, config, history.history, metadata)
@@ -265,12 +266,6 @@ if __name__ == "__main__":
     
     # format config
     config = update_config(config, 'seed', np.random.randint(0, 100))
-    config = update_config(
-        config,
-        'label_ratios',
-        {float(k) if k.isnumeric() else k: v for k, v in config['label_ratios'].items()}
-        )
-    print("\nSampling ratios: {}".format(config['label_ratios']))
     
     # make dir to save results
     rundir = os.path.join(workdir, "_wandb-runs", runname)
