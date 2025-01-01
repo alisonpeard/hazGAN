@@ -151,7 +151,7 @@ class WGANGP(keras.Model):
         return self._uniform(raw)
     
 
-    def evaluate(self, x) -> dict:
+    def evaluate(self, x:dict, *args, **kwargs) -> dict:
         '''Overwrite evaluation function for custom data.'''
         score_valid = 0
         for n, batch in enumerate(x):
@@ -261,7 +261,7 @@ class WGANGP(keras.Model):
         self.generator_steps.update_state(1)
 
 
-    def train_step(self, batch) -> dict:
+    def train_step(self, batch:dict) -> dict:
         data = batch['uniform']
         condition = batch['condition']
         label = batch['label']
