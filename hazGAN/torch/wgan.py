@@ -540,23 +540,4 @@ class WGANGP(keras.Model):
         return self.history
 
     # - - - - - - - - - END OF CUSTOM FIT METHOD - - - - - - - - - - - - - - - - - - - - - - - |
-
-    
-
-
-if __name__ == "__main__":
-    import torch
-
-    model = WGANGP(SAMPLE_CONFIG)
-    device = 'mps'
-    z = torch.rand(1, SAMPLE_CONFIG['latent_dim'], device=device)
-    label = torch.randint(0, SAMPLE_CONFIG['nconditions'], (1,), device=device)
-    condition = torch.rand(1, 1, device=device)
-    x = torch.rand(1, 2, 20, 24, device=device)
-    model.compile()
-
-    batch = {'uniform': x, 'condition': condition, 'label': label}
-    model.fit(batch, epochs=1, verbose=1)
-
-
 # %%

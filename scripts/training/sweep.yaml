@@ -1,7 +1,7 @@
-project: hazGAN
+project: hazGAN-torch
 program: train.py
 method: bayes
-name: first-conditional
+name: first-sweep
 metric:
   goal: minimize
   name: chi_rmse
