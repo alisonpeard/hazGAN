@@ -8,8 +8,8 @@ For conditional training (no constant fields yet).
 # %% quick settings
 DRY_RUN_EPOCHS       = 1
 EVAL_CHANNEL         = 2
-SAMPLES_PER_EPOCH    = 100   # samples per epoch
-TRAIN_SUBSET_SIZE    = 10_000 # up to 200_000
+SAMPLES_PER_EPOCH    = 10_000   # samples per epoch
+TRAIN_SUBSET_SIZE    = 50_000 # up to 200_000
 CONTOUR_PLOT         = False
 
 # %% actual script

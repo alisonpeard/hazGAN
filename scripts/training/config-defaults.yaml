@@ -1,11 +1,11 @@
 # training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
 epochs:
   desc: Number of epochs to train for
-  value: 100
+  value: 1000
 train_size:
   value: 0.8  # 840 # 50
 batch_size:
-  value: 128 # for GPU constraints
+  value: 256 # for GPU constraints
 fields:
   desc: Which fields to model, subsets of ['u10', 'tp', 'mslp']
   value: ['u10', 'mslp']
@@ -14,7 +14,7 @@ thresholds:
   value: [15., 999]
 target_weights:
   desc: Target ratios for each class [0, 1, 2]
-  value: [0., 0.2, 0.8]
+  value: [0., 0.4, 0.6]
 augment_policy:
   desc: NOT IMPLEMENTED! Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
   value: ''
