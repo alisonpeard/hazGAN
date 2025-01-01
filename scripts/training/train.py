@@ -1,15 +1,11 @@
 """
 For conditional training (no constant fields yet).
-
-
->>> python -m cProfile -o logs/temp.dat train.py
->>> snakeviz temp.dat
 """
 # %% quick settings
-DRY_RUN_EPOCHS       = 1
+DRY_RUN_EPOCHS       = 10
 EVAL_CHANNEL         = 2
-SAMPLES_PER_EPOCH    = 10_000   # samples per epoch
-TRAIN_SUBSET_SIZE    = 50_000   # up to 200_000
+SAMPLES_PER_EPOCH    = 10   # samples per epoch
+TRAIN_SUBSET_SIZE    = 100   # up to 200_000
 CONTOUR_PLOT         = False
 
 # %% actual script
@@ -23,6 +19,7 @@ from environs import Env
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+from keras.callbacks import ModelCheckpoint
 
 from hazGAN import plot
 from hazGAN.torch import unpad
@@ -185,6 +182,7 @@ def evaluate_results(train, model, label:int, config:dict,
     plot.figure_four(fake_u, train_u, train_x, params, imdir, contour=CONTOUR_PLOT)
     # plot.figure_five(fake_u, train_u, imdir)                   # augmented    
     export_sample(fake_u)
+
     
     if len(history) > 1:
         print("\nResults:\n--------")
@@ -199,7 +197,7 @@ def main(config):
                                        train_size=config['train_size'],
                                        fields=config['fields'],
                                        thresholds=config['thresholds'],
-                                       device=device, subset=100)
+                                       device=device, subset=TRAIN_SUBSET_SIZE)
     
     # update config with number of labels
     config = update_config(config, 'nconditions', len(metadata['labels']))
@@ -212,7 +210,16 @@ def main(config):
     memory_logger = MemoryLogger(100, logdir='logs')
     wandb_logger = WandbMetricsLogger()
     image_logger = ImageLogger()
-    callbacks = [memory_logger, wandb_logger, image_logger]
+    checkpointer = ModelCheckpoint(
+        os.path.join(rundir, "checkpoint.weights.h5"),
+        monitor="chi_rmse",
+        save_best_only=True,
+        save_weights_only=True,
+        mode="min",
+        verbose=True
+        )
+    
+    callbacks = [memory_logger, wandb_logger, image_logger, checkpointer]
     if config['scheduler']:
         scheduler = LRScheduler(config['learning_rate'], config['epochs'], len(trainloader.dataset))
         callbacks.append(scheduler)

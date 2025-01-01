@@ -148,8 +148,10 @@ class StormDataset(Dataset):
         return datadict
 
 
-    def subset(self, size:int, sampling:str='pre_only'):
+    def subset(self, size:int, sampling:str='equal', verbose:bool=True) -> 'StormDataset':
         """Return a subset of the dataset."""
+        if verbose:
+            print(f"\nSubsetting dataset to size {size} using {sampling} sampling.\n")
         n = len(self)
         if size > n:
             return self
@@ -158,7 +160,8 @@ class StormDataset(Dataset):
         nclasses = len(classdicts)
 
         if sampling == 'pre_only':
-            class_size = size // nclasses
+            class_size = size
+            print(f"\nSampling {class_size} samples from the first class only.\n")
             newdict = self.subsetdict(classdicts[0], class_size)
             
             newdicts = [newdict]
@@ -177,6 +180,11 @@ class StormDataset(Dataset):
             for classdict, class_size in zip(classdicts, class_sizes):
                 newdict = self.subsetdict(classdict, class_size)
                 newdicts.append(newdict)
+
+        if verbose:
+            for newdict in newdicts:
+                print(f"Label: {newdict['label'][0]}")
+                print(f"Class size: {len(newdict['label'])}")
         
         newdict = self.concatdicts(newdicts)
         return StormDataset(newdict, transform=self.transform)

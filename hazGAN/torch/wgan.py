@@ -45,6 +45,12 @@ def setup_latents(distribution:str):
     return getattr(keras.random, distribution)
 
 
+class infInitialisedMean(keras.metrics.Mean):
+    def reset_states(self):
+        super().reset_states()
+        self.update_state(float('inf'))
+
+
 class WGANGP(keras.Model):
     """Refernece: https://keras.io/guides/custom_train_step_in_torch/"""
     def __init__(self, config, device:str):
@@ -81,7 +87,7 @@ class WGANGP(keras.Model):
             self._uniform = lambda x: x
 
         # stateful metrics
-        self.chi_rmse_tracker = keras.metrics.Mean(name="chi_rmse")
+        self.chi_rmse_tracker = infInitialisedMean(name="chi_rmse")
         self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
         self.critic_loss_tracker = keras.metrics.Mean(name="critic_loss")
         self.value_function_tracker = keras.metrics.Mean(name="value_function")
@@ -211,7 +217,7 @@ class WGANGP(keras.Model):
             self.critic_optimizer.apply(grads, self.critic.trainable_weights)
         grad_norms = [ops.norm(grad) for grad in grads]
 
-        self.critic_loss_tracker(loss)
+        self.critic_loss_tracker.update_state(loss)
         self.value_function_tracker.update_state(-loss)
         self.critic_real_tracker.update_state(ops.mean(score_real))
         self.critic_fake_tracker.update_state(ops.mean(score_fake))
@@ -226,7 +232,7 @@ class WGANGP(keras.Model):
         self.real_std.update_state(ops.std(data))
 
 
-    def chi_wrapper(self, real, fake):
+    def _chi_wrapper(self, real, fake):
         """Torch wrapper for chi_rmse."""
         real = real.detach().cpu()
         fake = fake.detach().cpu()
@@ -238,7 +244,7 @@ class WGANGP(keras.Model):
         noise = self.latent_space_distn((batch_size, self.latent_dim))
         generated_data = self.generator(noise, label, condition)
         critic_score = self.critic(generated_data, label, condition)
-        chi = self.chi_wrapper(self._uniform(data), self._uniform(generated_data))
+        chi = self._chi_wrapper(self._uniform(data), self._uniform(generated_data))
 
         self.zero_grad()
         loss = -ops.mean(critic_score)
@@ -249,8 +255,8 @@ class WGANGP(keras.Model):
             self.generator_optimizer.apply(grads, self.generator.trainable_weights)
         grad_norms = [ops.norm(grad) for grad in grads]
 
-        self.generator_loss_tracker(loss)
-        self.chi_rmse_tracker(chi)
+        self.generator_loss_tracker.update_state(loss)
+        self.chi_rmse_tracker.update_state(chi)
         self.generator_grad_norm.update_state(ops.norm(grad_norms))
         self.generator_steps.update_state(1)
 
@@ -277,17 +283,16 @@ class WGANGP(keras.Model):
         
         if self.critic_steps.result() % self.training_balance == 0:
             self._train_generator(data, label, condition, batch_size)
+            metrics['chi_rmse'] = self.chi_rmse_tracker.result()
+            metrics["generator_grad_norm"] = self.generator_grad_norm.result()
+            metrics['generator_steps'] = self.generator_steps.result()
+            metrics["generator_loss"] = self.generator_loss_tracker.result()
 
         # update metrics
         self.images_seen.update_state(batch_size)
-        metrics["generator_loss"] = self.generator_loss_tracker.result()
-        metrics['critic_steps'] = self.critic_steps.result()
-        metrics['generator_steps'] = self.generator_steps.result()
-        metrics["images_seen"] = self.images_seen.result()
-
-        metrics['chi_rmse'] = self.chi_rmse_tracker.result()
         metrics["critic_grad_norm"] = self.critic_grad_norm.result()
-        metrics["generator_grad_norm"] = self.generator_grad_norm.result()
+        metrics['critic_steps'] = self.critic_steps.result()
+        metrics["images_seen"] = self.images_seen.result()
 
         print('\n') # uncomment to log metrics on newlines
 
