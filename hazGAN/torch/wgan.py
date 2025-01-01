@@ -308,7 +308,6 @@ class WGANGP(keras.Model):
             self.critic_loss_tracker,
             self.generator_loss_tracker,
             self.value_function_tracker,
-            self.chi_rmse_tracker,
             self.critic_grad_norm,
             self.generator_grad_norm,
             self.fake_mean,

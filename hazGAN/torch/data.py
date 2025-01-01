@@ -148,7 +148,7 @@ class StormDataset(Dataset):
         return datadict
 
 
-    def subset(self, size:int, sampling:str='equal', verbose:bool=True) -> 'StormDataset':
+    def subset(self, size:int, sampling:str='pre_only', verbose:bool=True) -> 'StormDataset':
         """Return a subset of the dataset."""
         if verbose:
             print(f"\nSubsetting dataset to size {size} using {sampling} sampling.\n")

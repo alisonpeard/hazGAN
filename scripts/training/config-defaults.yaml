@@ -1,11 +1,11 @@
 # training settings -- defaults from Gulrajani et al. 2017 (CFAR-10 model)
 epochs:
   desc: Number of epochs to train for
-  value: 1000
+  value: 400
 train_size:
   value: 0.8  # 840 # 50
 batch_size:
-  value: 256 # for GPU constraints
+  value: 128 # for GPU constraints
 fields:
   desc: Which fields to model, subsets of ['u10', 'tp', 'mslp']
   value: ['u10', 'mslp']
