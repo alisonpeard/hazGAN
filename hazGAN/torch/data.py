@@ -148,27 +148,38 @@ class StormDataset(Dataset):
         return datadict
 
 
-    def subset(self, size:int, equal_sampling=False):
+    def subset(self, size:int, sampling:str='pre_only'):
         """Return a subset of the dataset."""
         n = len(self)
         if size > n:
             return self
+        
+        classdicts = self.filterdict(self.data, 'label')
+        nclasses = len(classdicts)
+
+        if sampling == 'pre_only':
+            class_size = size // nclasses
+            newdict = self.subsetdict(classdicts[0], class_size)
+            
+            newdicts = [newdict]
+            for i in range(len(classdicts) - 1):
+                newdicts.append(classdicts[i + 1])
         else:
-            classdicts = self.filterdict(self.data, 'label')
-            if equal_sampling:
+            if sampling == 'equal':
                 class_size = size // nclasses # even sampling
                 class_sizes = [class_size] * nclasses
-            else:
-                nclasses = len(classdicts)
+
+            elif sampling == 'proportional':
                 class_props = [len(classdicts[i]['label']) / n for i in range(nclasses)]
                 class_sizes = [int(size * prop) for prop in class_props]
-            
+                
             newdicts = []
             for classdict, class_size in zip(classdicts, class_sizes):
                 newdict = self.subsetdict(classdict, class_size)
                 newdicts.append(newdict)
-            newdict = self.concatdicts(newdicts)
-            return StormDataset(newdict, transform=self.transform)
+        
+        newdict = self.concatdicts(newdicts)
+        return StormDataset(newdict, transform=self.transform)
     
 
     def pretransform(self, transform=None):
@@ -211,7 +222,6 @@ def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
     if subset:
         assert isinstance(subset, int), "subset must be an integer."
         train = train.subset(subset)
-        valid = valid.subset(subset)
 
     train = train.pretransform()
     valid = valid.pretransform()

@@ -9,7 +9,7 @@ For conditional training (no constant fields yet).
 DRY_RUN_EPOCHS       = 1
 EVAL_CHANNEL         = 2
 SAMPLES_PER_EPOCH    = 10_000   # samples per epoch
-TRAIN_SUBSET_SIZE    = 50_000 # up to 200_000
+TRAIN_SUBSET_SIZE    = 50_000   # up to 200_000
 CONTOUR_PLOT         = False
 
 # %% actual script
@@ -199,7 +199,7 @@ def main(config):
                                        train_size=config['train_size'],
                                        fields=config['fields'],
                                        thresholds=config['thresholds'],
-                                       device=device, subset=TRAIN_SUBSET_SIZE)
+                                       device=device, subset=100)
     
     # update config with number of labels
     config = update_config(config, 'nconditions', len(metadata['labels']))
