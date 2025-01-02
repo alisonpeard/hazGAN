@@ -28,8 +28,10 @@ def _combine(x, label, condition, policy='add'):
 
 
 class Generator(nn.Module):
-    def __init__(self, config, nfields=2, K=16):
+    def __init__(self, config, nfields=2):
         super(Generator, self).__init__()
+
+        K = config['channel_multiplier']
 
         # set up feature widths
         self.nfields = nfields
@@ -120,6 +122,8 @@ class Critic(nn.Module):
     def __init__(self, config, nfields=2):
         super(Critic, self).__init__()
 
+        K = config['channel_multiplier']
+
         # set up feature widths
         self.nfields = nfields
         width = config['critic_width']
@@ -135,8 +139,12 @@ class Critic(nn.Module):
         self.combine_inputs = partial(_combine, policy=config['input_policy'])
 
         self.process_fields = nn.Sequential(
-            nn.Conv2d(nfields, self.width0 * nfields, kernel_size=4, padding="same", groups=nfields),
+            nn.Conv2d(nfields, K * self.width0 * nfields, kernel_size=4, padding="same", groups=nfields),
             nn.LeakyReLU(config['lrelu']),
+            nn.LayerNorm((K * self.width0 * nfields, 20, 24)),
+            nn.Conv2d(K * self.width0 * nfields, self.input_factor * self.width0 * nfields, kernel_size=3, padding="same"),
+            nn.LeakyReLU(config['lrelu']),
+            nn.LayerNorm((self.width0 * nfields, 20, 24))
         ) # output shape: (batch_size, width0 * nfields, 20, 24)
 
         self.label_to_features = nn.Sequential(

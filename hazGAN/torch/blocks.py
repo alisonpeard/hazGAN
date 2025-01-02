@@ -73,6 +73,8 @@ class ResidualUpBlock(nn.Module):
                  stride:int=1,
                  padding:int=0,
                  upsample_mode:str='bilinear',
+                 dropout:Union[None, float]=None,
+                 noise_sd:Union[None, float]=None, 
                  **kwargs
                  ) -> None:
         super().__init__()
@@ -84,11 +86,24 @@ class ResidualUpBlock(nn.Module):
         self.norm = nn.BatchNorm2d(out_channels)
         self.upsample = lambda x: upsample(x, kernel_size, stride, padding, upsample_mode)
         self.project = nn.Conv2d(self.in_channels, self.out_channels, 1, 1)
+
+        # regularisation attributes
+        self.dropout = nn.Dropout2d(dropout) if dropout is not None else nn.Identity()
+        self.noise_sd = noise_sd
+    
+    def regularise(self, x):
+        x = self.dropout(x)
+        if self.training and self.noise_sd is not None:
+            noise = torch.randn_like(x) * self.noise_sd
+            x = x + noise
+        return x
+
     
     def forward(self, x) -> torch.Tensor:
         identity = self.upsample(x)
         identity = self.project(identity)
         x = self.deconv(x)
+        x = self.regularise(x)
         x = self.activation(x)
         x = self.norm(x)
         return x + identity
@@ -100,6 +115,8 @@ class ResidualDownBlock(nn.Module):
                  kernel_size:Union[int, Tuple[int, int]],
                  stride:Union[int, Tuple[int, int]]=1,
                  padding:Union[int, Tuple[int, int]]=0,
+                 dropout:Union[None, float]=None,
+                 noise_sd:Union[None, float]=None, 
                  **kwargs) -> None:
         super().__init__()
         self.in_channels = in_channels
@@ -110,9 +127,22 @@ class ResidualDownBlock(nn.Module):
         self.downsample = lambda x: downsample(x, kernel_size, stride, padding)
         self.project = nn.Conv2d(self.in_channels, self.out_channels, 1, 1)
 
+        # regularisation attributes
+        self.dropout = nn.Dropout2d(dropout) if dropout is not None else nn.Identity()
+        self.noise_sd = noise_sd
+
+    def regularise(self, x):
+        x = self.dropout(x)
+        if self.training and self.noise_sd is not None:
+            noise = torch.randn_like(x) * self.noise_sd
+            x = x + noise
+        return x
+    
+    
     def forward(self, x) -> torch.Tensor:
         identity = self.project(self.downsample(x))
         x = self.conv(x)
+        x = self.regularise(x)
         x = self.activation(x)
         return x + identity
 

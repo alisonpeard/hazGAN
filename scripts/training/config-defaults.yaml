@@ -57,10 +57,16 @@ lrelu:
   value: 0.2
 dropout:
   desc: Gulrajani et al. 2017 don't use dropout, neither does Shruti
-  value: 0.2
+  value: None
+noise_sd:
+  desc: Standard deviation of noise added to input
+  value: 0.01
 latent_dims:
   desc: Gulrajani et al. 2017 use 128
   value: 128
+channel_multiplier:
+  desc: Extra dimensions to add to the input channels
+  value: 16
 generator_width:
   desc: Maximum filters in any layer of the generator. 
   value: 256
