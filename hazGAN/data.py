@@ -13,6 +13,9 @@ from collections import Counter
 from .constants import TEST_YEAR
 
 
+__all__ = ['print_if_verbose', 'label_data', 'sample_dict', 'check_validity', 'make_xr_grid', 'load_xr_data']
+
+
 def print_if_verbose(string:str, verbose=True) -> None:
     """Self-explanatory"""
     if verbose:
@@ -97,7 +100,19 @@ def check_validity(dataset, name:str) -> None:
         print("GOOD: Uniform data in {} dataset is in [0, 1] range.".format(name))
 
 
-def prep_xr_data(
+def make_xr_grid(ds, x='lon', y='lat', varname='x') -> xr.Dataset:
+    if isinstance(ds, xr.DataArray):
+        ds = ds.to_dataset(name=varname)
+    h, w = ds.dims[y], ds.dims[x]
+    grid = np.arange(0, h * w, 1).reshape(h, w)
+    grid = xr.DataArray(
+        grid, dims=[y, x], coords={y: ds[y][::-1], x: ds[x]}
+    )
+    ds['grid'] = grid
+    return ds
+
+
+def _prep_xr_data(
         datadir:str, thresholds:list=[15, np.inf], train_size=0.8, fields=['u10', 'tp'],
         epoch='1940-01-01', verbose=True, testyear=TEST_YEAR
         ) -> tuple[xr.Dataset, xr.Dataset, dict]:
@@ -198,7 +213,7 @@ def prep_xr_data(
     return train, valid, metadata
 
 # %%
-def equal(a, b, verbose=False) -> bool:
+def _equal(a, b, verbose=False) -> bool:
     """Recursively check if two objects are equal.
     
     Examples:
@@ -221,15 +236,15 @@ def equal(a, b, verbose=False) -> bool:
     if isinstance(a, dict) and isinstance(b, dict):
         if list(a.keys()) != list(b.keys()):
             return False
-        return all(equal(a[key], b[key]) for key in a.keys())
+        return all(_equal(a[key], b[key]) for key in a.keys())
     
     if hasattr(a, '__iter__') and hasattr(b, '__iter__'):
-        return all([equal(i, j) for i, j in zip(a, b)])
+        return all([_equal(i, j) for i, j in zip(a, b)])
     
     return (a == b)
 
 
-def load_xr_cached(**kwargs) -> tuple[xr.Dataset, xr.Dataset, dict]:
+def _load_xr_cached(**kwargs) -> tuple[xr.Dataset, xr.Dataset, dict]:
     """Cache prepped data for faster loading."""
     if kwargs.get('cache'):
         datadir = kwargs.get('datadir')
@@ -245,7 +260,7 @@ def load_xr_cached(**kwargs) -> tuple[xr.Dataset, xr.Dataset, dict]:
                 cached_kwargs = {key: value[()] for key, value in cached_kwargs.items()}
 
                 # args_match = all([kwargs.get(key) == cached_kwargs.get(key) for key in kwargs.keys()])
-                args_match = equal(kwargs, cached_kwargs)
+                args_match = _equal(kwargs, cached_kwargs)
                 
                 if args_match:
                     print("Arguments match cached arguments. Loading data...")
@@ -262,7 +277,7 @@ def load_xr_cached(**kwargs) -> tuple[xr.Dataset, xr.Dataset, dict]:
     return None, None, None
 
 
-def cache_xr_data(train, valid, metadata, **kwargs):
+def _cache_xr_data(train, valid, metadata, **kwargs):
     """Cache prepped data for faster loading."""
     if kwargs.get('cache'):
         datadir = kwargs.get('datadir')
@@ -309,14 +324,14 @@ def load_xr_data(datadir:str, thresholds:list=[15, np.inf],
     """
     kwargs = locals()
     if cache:
-        train, valid, metadata = load_xr_cached(**kwargs)
+        train, valid, metadata = _load_xr_cached(**kwargs)
         if train is not None:
             # load from cache if available
             print("Data loaded from cache.")
             return train, valid, metadata
     
     # if there's no cached data, load and (optionally) cache
-    train, valid, metadata = prep_xr_data(datadir, thresholds, train_size, fields, epoch, verbose, testyear)
-    cache_xr_data(train, valid, metadata, **kwargs)
+    train, valid, metadata = _prep_xr_data(datadir, thresholds, train_size, fields, epoch, verbose, testyear)
+    _cache_xr_data(train, valid, metadata, **kwargs)
     return train, valid, metadata
 # %%

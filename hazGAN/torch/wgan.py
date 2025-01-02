@@ -8,7 +8,7 @@ from keras import ops
 import torch
 from torch.autograd import grad
 
-# imports just for for 'fit()' method
+# imports for 'fit()' overwrite
 from keras.src import callbacks as callbacks_module
 from keras.src import optimizers as optimizers_module
 from keras.src.utils import traceback_utils
@@ -156,17 +156,20 @@ class WGANGP(keras.Model):
 
     def evaluate(self, x:dict, *args, **kwargs) -> dict:
         '''Overwrite evaluation function for custom data.'''
-        score_valid = 0
-        for n, batch in enumerate(x):
-            try:
-                data = batch['uniform']
-                condition = batch["condition"]
-                label = batch["label"]
-                critic_score = self.critic([data, condition, label], training=False)
-                score_valid += ops.mean(critic_score)
-            except Exception as e:
-                print(e)
-                break
+        score_valid = 0.
+        with torch.no_grad():
+            for n, batch in enumerate(x):
+                try:
+                    data = batch['uniform']
+                    condition = batch["condition"]
+                    label = batch["label"]
+                    critic_score = self.critic(data, label, condition)
+                    score_valid += ops.mean(critic_score)
+
+                except Exception as e:
+                    print(e)
+                    break
+
         score_valid = score_valid / (n + 1)
         self.critic_valid_tracker.update_state(score_valid)
         return {'critic': self.critic_valid_tracker.result()}
