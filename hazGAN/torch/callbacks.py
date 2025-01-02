@@ -6,6 +6,8 @@ import wandb
 import numpy as np
 from torch import mps
 from keras import ops, callbacks
+from keras.src import backend
+from keras.src.utils import io_utils
 from keras.optimizers.schedules import CosineDecay
 from keras.callbacks import Callback
 from IPython.display import clear_output
@@ -18,7 +20,8 @@ __all__ = ["WandbMetricsLogger", "MemoryLogger", "ImageLogger", "LRScheduler"]
 
 class LRScheduler(callbacks.LearningRateScheduler):
     def __init__(self, lr:float, epochs:int, samples:int, warmup_steps=20,
-                 alpha=1e-5, initial_lr=1e-6):
+                 alpha=1e-5, initial_lr=1e-6, verbose=1):
+
         total_steps = epochs * samples
 
         if total_steps > warmup_steps:
@@ -45,8 +48,31 @@ class LRScheduler(callbacks.LearningRateScheduler):
             """Requires scheduler returns a float."""
             return float(cosine_scheduler(epoch))
         
-        super().__init__(float_scheduler)
+        super().__init__(float_scheduler, verbose=verbose)
 
+
+    def on_epoch_begin(self, epoch, logs=None):
+        for optimizer in [self.model.generator_optimizer, self.model.critic_optimizer]:
+            try:  # new API
+                learning_rate = float(
+                    backend.convert_to_numpy(optimizer.learning_rate)
+                )
+                learning_rate = self.schedule(epoch, learning_rate)
+            except TypeError:  # Support for old API for backward compatibility
+                learning_rate = self.schedule(epoch)
+
+            if not isinstance(learning_rate, (float, np.float32, np.float64)):
+                raise ValueError(
+                    "The output of the `schedule` function should be a float. "
+                    f"Got: {learning_rate}"
+                )
+
+            optimizer.learning_rate = learning_rate
+        if self.verbose > 0:
+            io_utils.print_msg(
+                f"\nEpoch {epoch + 1}: LearningRateScheduler setting learning "
+                f"rate to {learning_rate}."
+            )
 
 
 class WandbMetricsLogger(Callback):
@@ -68,8 +94,8 @@ class MemoryLogger(Callback):
         self.frequency = frequency
         with open(self.path, "w") as stream:
             stream.write("MPS Memory Logger\n------------------\n")
-    
-    def on_batch_end(self, batch, logs=None):
+
+    def on_batch_begin(self, batch, logs=None):
         if batch % self.frequency == 0:
             current = mps.current_allocated_memory() / 1e9
             driver  = mps.driver_allocated_memory() / 1e9
@@ -78,7 +104,7 @@ class MemoryLogger(Callback):
 
             with open(self.path, "a") as stream:
                 stream.write(f"{datetime.now()} -- ")
-                stream.write(f"batch {batch} -- ")
+                stream.write(f"batch {batch} end -- ")
                 stream.write(f"current allocated: {current:.2f} GB -- ")
                 stream.write(f"driver allocated: {driver:.2f} GB\n")
 

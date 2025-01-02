@@ -317,6 +317,9 @@ class WGANGP(keras.Model):
         ]
 
     # - - - - - - - - - BELOW HERE IS A CUSTOM FIT METHOD - - - - - - - - - - - - - - - - - - - - - - - |
+    # Replaces fit() method in keras.Model such the sampling ratios of classes decays from the initial
+    # data distribution to a target distribution. We use a cosine decay function so the model spends
+    # more time in the initial and target distributions.
     @staticmethod
     def get_initial_weights(labels:torch.Tensor) -> torch.Tensor:
         counts = torch.bincount(labels)

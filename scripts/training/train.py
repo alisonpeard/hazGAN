@@ -4,22 +4,23 @@ For conditional training (no constant fields yet).
 # %% quick settings
 DRY_RUN_EPOCHS       = 10
 EVAL_CHANNEL         = 2
-SAMPLES_PER_EPOCH    = 100 # 5000   # samples per epoch
-TRAIN_SUBSET_SIZE    = 100# 10_000 # up to 200_000
+SAMPLES_PER_EPOCH    = 5000   # samples per epoch
+TRAIN_SUBSET_SIZE    = 10_000 # up to 200_000
 CONTOUR_PLOT         = False
-PROJECT              = "hazGAN"
+PROJECT              = 'hazGAN'
 
 # %% actual script
 import os
-os.environ["KERAS_BACKEND"] = "torch"
 import sys
 import yaml
 import argparse
 import wandb
 from environs import Env
 import numpy as np
-import torch
 import matplotlib.pyplot as plt
+
+import torch
+os.environ["KERAS_BACKEND"] = "torch"
 from keras.callbacks import ModelCheckpoint
 
 from hazGAN import plot
@@ -32,9 +33,6 @@ from hazGAN.torch import ImageLogger
 from hazGAN.torch import LRScheduler
 
 
-plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
-
-
 global run
 global datadir
 global rundir
@@ -42,6 +40,9 @@ global imdir
 global runname
 global device
 global force_cpu
+
+
+plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
 
 
 def notify(title, subtitle, message):
@@ -76,6 +77,17 @@ def config_devices():
             device = "cpu"
 
         return device
+
+
+def summarise_mps_memory():
+        current = torch.mps.current_allocated_memory() / 1e9
+        driver  = torch.mps.driver_allocated_memory()  / 1e9
+
+        print("\nMemory:\n-------")
+        print(f"current allocated: {current:.2f} GB")
+        print(f"driver allocated: {driver:.2f} GB\n")
+        
+        torch.mps.empty_cache()
 
 
 def update_config(config, key, value):
@@ -183,7 +195,6 @@ def evaluate_results(train, model, label:int, config:dict,
     plot.figure_four(fake_u, train_u, train_x, params, imdir, contour=CONTOUR_PLOT)
     # plot.figure_five(fake_u, train_u, imdir)                   # augmented    
     export_sample(fake_u)
-
     
     if len(history) > 1:
         print("\nResults:\n--------")
@@ -225,12 +236,17 @@ def main(config):
         scheduler = LRScheduler(config['learning_rate'], config['epochs'], len(trainloader.dataset))
         callbacks.append(scheduler)
 
+
+    # check memory before starting
+    summarise_mps_memory()
+
     # fit model
     print("\nTraining...\n")
     history = model.fit(trainloader, epochs=config['epochs'], callbacks=callbacks,
                         steps_per_epoch=(SAMPLES_PER_EPOCH // config['batch_size']),
                         target_weights=torch.tensor(config['target_weights']),
-                        validation_data=validloader)
+                        validation_data=validloader,
+                        )
 
     # evaluate
     evaluate_results(trainloader, model, EVAL_CHANNEL, config, history.history, metadata)

@@ -91,6 +91,7 @@ class ResidualUpBlock(nn.Module):
         self.dropout = nn.Dropout2d(dropout) if dropout is not None else nn.Identity()
         self.noise_sd = noise_sd
     
+    
     def regularise(self, x):
         x = self.dropout(x)
         if self.training and self.noise_sd is not None:
@@ -131,15 +132,15 @@ class ResidualDownBlock(nn.Module):
         self.dropout = nn.Dropout2d(dropout) if dropout is not None else nn.Identity()
         self.noise_sd = noise_sd
 
-    def regularise(self, x):
+    def regularise(self, x:torch.Tensor) -> torch.Tensor:
         x = self.dropout(x)
         if self.training and self.noise_sd is not None:
             noise = torch.randn_like(x) * self.noise_sd
             x = x + noise
         return x
     
-    
-    def forward(self, x) -> torch.Tensor:
+
+    def forward(self, x:torch.Tensor) -> torch.Tensor:
         identity = self.project(self.downsample(x))
         x = self.conv(x)
         x = self.regularise(x)

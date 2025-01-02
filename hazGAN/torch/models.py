@@ -142,7 +142,7 @@ class Critic(nn.Module):
             nn.Conv2d(nfields, K * self.width0 * nfields, kernel_size=4, padding="same", groups=nfields),
             nn.LeakyReLU(config['lrelu']),
             nn.LayerNorm((K * self.width0 * nfields, 20, 24)),
-            nn.Conv2d(K * self.width0 * nfields, self.input_factor * self.width0 * nfields, kernel_size=3, padding="same"),
+            nn.Conv2d(K * self.width0 * nfields, self.width0 * nfields, kernel_size=3, padding="same"),
             nn.LeakyReLU(config['lrelu']),
             nn.LayerNorm((self.width0 * nfields, 20, 24))
         ) # output shape: (batch_size, width0 * nfields, 20, 24)
