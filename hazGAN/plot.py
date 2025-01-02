@@ -176,6 +176,9 @@ def figure_four(fake_u, train_u, train_x, params, imdir:str,
                 contour=True) -> None:
     """Plot the 32 most extreme train and generated anomalies."""
     # prep data to plot
+    fake_maxima = np.max(fake[..., channel], axis=(1, 2))
+    real_maxima = np.max(real[..., channel], axis=(1, 2))
+
     fake = invPIT(fake_u, train_x, params)
     real = invPIT(train_u, train_x, params)
     fake = fake[..., channel]
@@ -186,16 +189,15 @@ def figure_four(fake_u, train_u, train_x, params, imdir:str,
     lon, lat = np.meshgrid(lon, lat)
     
     if fake.shape[0] < 32:
+        print("Not enough fake samples for figure four, duplicating.")
         fake = np.tile(
             fake,
             reps=(int(np.ceil(32 / fake.shape[0])), 1, 1)
             )
 
-    fake_maxima = np.max(fake, axis=(1, 2))
     fake_sorting = np.argsort(fake_maxima)[::-1]
     fake = fake[fake_sorting, ...]
 
-    real_maxima = np.max(real, axis=(1, 2))
     real_sorting = np.argsort(real_maxima)[::-1]
     real = real[real_sorting, ...]
 
