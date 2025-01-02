@@ -123,10 +123,13 @@ class WGANGP(keras.Model):
         super().to(self.device)
 
 
-    def call(self, label=1, condition=1., nsamples=1,
+    def call(self, label=[1], condition=[1.], nsamples=None,
              noise=None, temp=1., offset=0, seed=None,
              verbose=False):
         '''Return uniformly distributed samples from the generator.'''
+        if nsamples is None:
+            nsamples = len(label)
+        
         if noise is None:
             noise = self.latent_space_distn(
                 (nsamples, self.latent_dim),

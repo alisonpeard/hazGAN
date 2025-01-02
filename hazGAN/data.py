@@ -55,10 +55,10 @@ def numeric(mylist:list) -> list[float]:
 
 def label_data(data:xr.DataArray, thresholds:list=[15, np.inf]) -> xr.DataArray:
     thresholds = sorted(thresholds)
-    data_labels = 0 * data['maxwind'] + 1 # initialise with normal climate label
+    data_labels = 0 * data + 1 # initialise with normal climate label
     for i, lower_bound in enumerate(thresholds):
         # Returns elements from ‘DataArray’, where ‘cond’ is True, otherwise fill in ‘other’.
-        data_labels = data_labels.where(data['maxwind'] < lower_bound, int(i + 2))
+        data_labels = data_labels.where(data < lower_bound, int(i + 2))
     return data_labels
 
 
@@ -137,7 +137,7 @@ def prep_xr_data(
     # conditioning & sampling variables
     metadata['epoch'] = np.datetime64(epoch)
     data['maxwind'] = data.sel(field='u10')['anomaly'].max(dim=['lon', 'lat'])
-    data['label'] = label_data(data, thresholds)
+    data['label'] = label_data(data['maxwind'], thresholds)
     data['season'] = data['time.season']
     data['time'] = (data['time'].values - metadata['epoch']).astype('timedelta64[D]').astype(np.int64)
     data = data.sel(field=fields)

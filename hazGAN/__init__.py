@@ -1,5 +1,5 @@
-# from .utils import *
-# from .plot import *
+from .utils import *
+from .plot import *
 from .data import *
 # from .tensorflow import *
 # from . import conditional

@@ -1,5 +1,6 @@
 """Helper functions for running evtGAN in TensorFlow."""
 import os
+import yaml
 import numpy as np
 import xarray as xr
 
@@ -9,6 +10,14 @@ def notify(title, subtitle, message):
     os.system("""
               osascript -e 'display notification "{}" with title "{}" subtitle "{}" beep'
               """.format(message, title, subtitle))
+
+
+def load_config_from_yaml(configfile:str) -> dict:
+    """Load configuration from a YAML file."""
+    with open(configfile, 'r') as file:
+        config = yaml.load(file, Loader=yaml.FullLoader)
+    config = {key: value['value'] for key, value in config.items()}
+    return config
 
 
 def rescale(x:np.ndarray) -> np.ndarray:

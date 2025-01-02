@@ -7,6 +7,7 @@ EVAL_CHANNEL         = 2
 SAMPLES_PER_EPOCH    = 5000   # samples per epoch
 TRAIN_SUBSET_SIZE    = 10_000 # up to 200_000
 CONTOUR_PLOT         = False
+PROJECT              = "hazGAN"
 
 # %% actual script
 import os
@@ -268,7 +269,7 @@ if __name__ == "__main__":
         config = update_config(config, 'epochs', DRY_RUN_EPOCHS)
         runname = "dry-run"
     else:
-        run = wandb.init(allow_val_change=True, settings=wandb.Settings(_service_wait=300))  # saves snapshot of code as artifact
+        run = wandb.init(project=PROJECT, allow_val_change=True, settings=wandb.Settings(_service_wait=300))  # saves snapshot of code as artifact
         runname = wandb.run.name
         config = wandb.config
     
