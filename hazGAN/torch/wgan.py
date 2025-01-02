@@ -60,12 +60,6 @@ class WGANGP(keras.Model):
         self.lambda_gp = config['lambda_gp']
         self.lambda_var = config['lambda_var']
         self.latent_space_distn = setup_latents(config['latent_space_distn'])
-        
-        if config['augment_policy'] != '':
-            raise NotImplementedError(
-                "DiffAugment not yet implemented in Pytorch version." +
-                " received policy: " + config['augment_policy']
-                )
         self.augment = partial(DiffAugment, policy=config['augment_policy'])
         
         self.seed = config['seed']
@@ -206,8 +200,8 @@ class WGANGP(keras.Model):
     def _train_critic(self, data, label, condition, batch_size) -> None:
         noise = self.latent_space_distn((batch_size, self.latent_dim))
         fake_data = self.generator(noise, label, condition)
-        score_real = self.critic(data, label, condition)
-        score_fake = self.critic(fake_data, label, condition)
+        score_real = self.critic(self.augment(data), label, condition)
+        score_fake = self.critic(self.augment(fake_data), label, condition)
 
         gradient_penalty = self._gradient_penalty(data, fake_data, condition, label)
         variance_penalty = self._variance_penalty(data, fake_data)
@@ -249,7 +243,7 @@ class WGANGP(keras.Model):
     def _train_generator(self, data, label, condition, batch_size) -> None:
         noise = self.latent_space_distn((batch_size, self.latent_dim))
         generated_data = self.generator(noise, label, condition)
-        critic_score = self.critic(generated_data, label, condition)
+        critic_score = self.critic(self.augment(generated_data), label, condition)
         chi = self._chi_wrapper(self._uniform(data), self._uniform(generated_data))
 
         self.zero_grad()

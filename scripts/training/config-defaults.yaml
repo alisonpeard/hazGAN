@@ -16,8 +16,8 @@ target_weights:
   desc: Target ratios for each class [0, 1, 2]
   value: [0., 0.2, 0.8]
 augment_policy:
-  desc: NOT IMPLEMENTED! Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
-  value: ''
+  desc: Augmentation policies (https://arxiv.org/pdf/2006.10738),  ['color,translation,cutout', '']
+  value: 'color,translation,cutout'
 condition:
   desc: Whether to use conditioning, bool
   value: True
