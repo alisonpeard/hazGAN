@@ -176,8 +176,8 @@ def figure_four(fake_u, train_u, train_x, params, imdir:str,
                 contour=True) -> None:
     """Plot the 32 most extreme train and generated anomalies."""
     # prep data to plot
-    fake_maxima = np.max(fake[..., channel], axis=(1, 2))
-    real_maxima = np.max(real[..., channel], axis=(1, 2))
+    fake_maxima = np.max(fake_u[..., channel], axis=(1, 2))
+    real_maxima = np.max(train_u[..., channel], axis=(1, 2))
 
     fake = invPIT(fake_u, train_x, params)
     real = invPIT(train_u, train_x, params)
