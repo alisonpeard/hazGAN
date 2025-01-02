@@ -194,6 +194,12 @@ def figure_four(fake_u, train_u, train_x, params, imdir:str,
             fake,
             reps=(int(np.ceil(32 / fake.shape[0])), 1, 1)
             )
+    if real.shape[0] < 32:
+        print("Not enough real samples for figure four, duplicating.")
+        real = np.tile(
+            real,
+            reps=(int(np.ceil(32 / real.shape[0])), 1, 1)
+            )
 
     fake_sorting = np.argsort(fake_maxima)[::-1]
     fake = fake[fake_sorting, ...]
@@ -239,7 +245,7 @@ def figure_four(fake_u, train_u, train_x, params, imdir:str,
 
 
 
-## ----Older stuff (decide if needed later)---- ##
+## - - - - Older stuff (decide if needed later) - - - - - - - - - - - - - - - - - - |
 def add_watermark(ax, text):
         ax.text(-1, 0.01, text,
         fontsize=8, color='k', alpha=0.5,

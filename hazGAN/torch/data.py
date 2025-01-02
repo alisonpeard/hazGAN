@@ -12,6 +12,8 @@ from ..data import load_xr_data
 from ..data import sample_dict
 from ..constants import TEST_YEAR
 
+SUBSET_METHOD = 'equal' # should be pre_only, change to equal on machines with low RAM
+
 __all__ = ['load_data', 'test_sampling_ratios', 'test_iter_time']
 
 # Transforms
@@ -148,7 +150,7 @@ class StormDataset(Dataset):
         return datadict
 
 
-    def subset(self, size:int, sampling:str='pre_only', verbose:bool=True) -> 'StormDataset':
+    def subset(self, size:int, sampling:str=SUBSET_METHOD, verbose:bool=True) -> 'StormDataset':
         """Return a subset of the dataset."""
         if verbose:
             print(f"\nSubsetting dataset to size {size} using {sampling} sampling.\n")

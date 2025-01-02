@@ -19,7 +19,7 @@ __all__ = ["WandbMetricsLogger", "MemoryLogger", "ImageLogger", "LRScheduler"]
 
 
 class LRScheduler(callbacks.LearningRateScheduler):
-    def __init__(self, lr:float, epochs:int, samples:int, warmup_steps=20,
+    def __init__(self, lr:float, epochs:int, samples:int, warmup_steps=0,
                  alpha=1e-5, initial_lr=1e-6, verbose=1):
 
         total_steps = epochs * samples
@@ -73,6 +73,15 @@ class LRScheduler(callbacks.LearningRateScheduler):
                 f"\nEpoch {epoch + 1}: LearningRateScheduler setting learning "
                 f"rate to {learning_rate}."
             )
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        logs["learning_rate_critic"] = float(
+            backend.convert_to_numpy(self.model.critic_optimizer.learning_rate)
+        )
+        logs["learning_rate_generator"] = float(
+            backend.convert_to_numpy(self.model.generator_optimizer.learning_rate)
+        )
 
 
 class WandbMetricsLogger(Callback):

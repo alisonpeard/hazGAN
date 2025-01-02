@@ -4,8 +4,8 @@ For conditional training (no constant fields yet).
 # %% quick settings
 DRY_RUN_EPOCHS       = 10
 EVAL_CHANNEL         = 2
-SAMPLES_PER_EPOCH    = 5000   # samples per epoch
-TRAIN_SUBSET_SIZE    = 10_000 # up to 200_000
+SAMPLES_PER_EPOCH    = 1000   # samples per epoch
+TRAIN_SUBSET_SIZE    = 10_000   # 10_000 seems good
 CONTOUR_PLOT         = False
 PROJECT              = 'hazGAN'
 
@@ -177,9 +177,8 @@ def evaluate_results(train, model, label:int, config:dict,
     print("fake_u.shape: {}".format(fake_u.shape))
     print("params.shape: {}".format(params.shape))
 
-    # Quick plot of sampling rates
+    # Quick plot of sampling rates -- delete later
     fig, ax = plt.subplots(figsize=(12, 6), layout='tight')
-
     ax.plot(history['weight_0'], label="normal climate")
     ax.plot(history['weight_1'], linestyle='dashed', label="stormy")
     ax.plot(history['weight_2'], label='very stormy')
@@ -188,19 +187,30 @@ def evaluate_results(train, model, label:int, config:dict,
     ax.set_xlabel("Epoch")
     fig.savefig(os.path.join(rundir, "sampling_rates.png"), **plot_kwargs)
 
-    print("\nGenerating figures...")
-    plot.figure_one(fake_u, train_u, valid_u, imdir)
-    plot.figure_two(fake_u, train_u, valid_u, imdir)
-    plot.figure_three(fake_u, train_u, imdir, contour=CONTOUR_PLOT)
-    plot.figure_four(fake_u, train_u, train_x, params, imdir, contour=CONTOUR_PLOT)
-    # plot.figure_five(fake_u, train_u, imdir)                   # augmented    
-    export_sample(fake_u)
-    
-    if len(history) > 1:
-        print("\nResults:\n--------")
-        final_chi_rmse = history['chi_rmse'][-1]
-        print(f"final_chi_rmse: {final_chi_rmse:.4f}")
+    # Quick plot of learning rate -- delete later
+    fig, ax = plt.subplots(figsize=(12, 6), layout='tight')
+    ax.plot(history['learning_rate_generator'], label="generator")
+    ax.plot(history['learning_rate_critic'], label="discriminator")
+    ax.legend()
+    ax.set_ylabel("Learning rate")
+    ax.set_xlabel("Epoch")
+    fig.savefig(os.path.join(rundir, "learning_rate.png"), **plot_kwargs)
 
+    print("\nGenerating figures...")
+    try:
+        plot.figure_one(fake_u, train_u, valid_u, imdir)
+        plot.figure_two(fake_u, train_u, valid_u, imdir)
+        plot.figure_three(fake_u, train_u, imdir, contour=CONTOUR_PLOT)
+        plot.figure_four(fake_u, train_u, train_x, params, imdir, contour=CONTOUR_PLOT)
+        # plot.figure_five(fake_u, train_u, imdir)                   # augmented    
+        export_sample(fake_u)
+        
+        if len(history) > 1:
+            print("\nResults:\n--------")
+            final_chi_rmse = history['chi_rmse'][-1]
+            print(f"final_chi_rmse: {final_chi_rmse:.4f}")
+    except Exception as e:
+        print(f"Error generating figures: {e}")
 
 
 def main(config):
