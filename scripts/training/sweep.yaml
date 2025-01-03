@@ -10,8 +10,6 @@ parameters:
   # meta-parameters
   epochs:
     values: [100, 200, 300, 400, 500, 600]
-  train_size:
-    values: [0.6, 0.7, 0.8, 0.9]
   fields:
     values:
       - ['u10']
@@ -31,9 +29,9 @@ parameters:
   augment_policy:
     values: ['color,translation,cutout', '', 'color', 'translation', 'cutout']
   noise_sd:
-    values: [None, 0.01, 0.02]
+    values: [0, 0.01, 0.02]
   dropout:
-    values: [None, 0.1, 0.2]
+    values: [0, 0.1, 0.2]
   embedding_depth:
     values: [16, 32, 64]
   channel_multiplier:

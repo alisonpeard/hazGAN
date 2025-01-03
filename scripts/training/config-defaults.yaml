@@ -64,7 +64,7 @@ gumbel:
 lambda_gp:
   value: 10.
 lookahead:
-  desc: Lookahead optimizer, [True, False]
+  desc: Add predictor step (saddles), [True, False]
   value: True
 
 # optimizer
