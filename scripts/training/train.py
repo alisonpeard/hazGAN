@@ -2,7 +2,7 @@
 For conditional training (no constant fields yet).
 """
 # %% quick settings
-DRY_RUN_EPOCHS       = 3
+DRY_RUN_EPOCHS       = 100
 EVAL_CHANNEL         = 2
 SAMPLES_PER_EPOCH    = 64   # samples per epoch
 TRAIN_SUBSET_SIZE    = 10   # 10_000 seems good
@@ -244,7 +244,7 @@ def main(config):
     
     callbacks = [memory_logger, wandb_logger, image_logger, checkpointer]
     if config['scheduler']:
-        scheduler = LRScheduler(config['learning_rate'], config['epochs'], SAMPLES_PER_EPOCH)
+        scheduler = LRScheduler(config['learning_rate'], config['epochs'])
         callbacks.append(scheduler)
 
 
