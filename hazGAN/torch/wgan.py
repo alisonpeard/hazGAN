@@ -51,67 +51,109 @@ class infInitialisedMean(keras.metrics.Mean):
         self.update_state(float('inf'))
 
 
-class WGANGP(keras.Model):
-    """Refernece: https://keras.io/guides/custom_train_step_in_torch/"""
-    def __init__(self, config, device:str):
-        super(WGANGP, self).__init__()
-        self.config = config
-        self.latent_dim = config['latent_dims']
-        self.lambda_gp = config['lambda_gp']
-        self.lambda_var = config['lambda_var']
-        self.latent_space_distn = setup_latents(config['latent_space_distn'])
-        self.augment = partial(DiffAugment, policy=config['augment_policy'])
-        
-        self.seed = config['seed']
-        self.device = device if getattr(torch, device).is_available() else "cpu"
-        self.training_balance = config['training_balance']
-        self.nfields = len(config['fields'])
+def locals_to_config(locals):
+    """Convert local variables to a dictionary."""
+    del locals['self']
+    del locals['__class__']
+    del locals['kwargs']
+    return locals
 
-        self.generator = Generator(config, nfields=self.nfields).to(self.device)
-        self.critic = Critic(config, nfields=self.nfields).to(self.device)
+class WGANGP(keras.Model):
+    """Reference: https://keras.io/guides/custom_train_step_in_torch/"""
+    def __init__(self, latent_dims=64, fields=['u10', 'mslp'], lambda_gp=10,
+                 seed=42, gumbel=True, latent_space_distn='gumbel',
+                 input_policy='add', augment_policy='', 
+                 training_balance=5, device='mps', nconditions=3,
+                 channel_multiplier=16, embedding_depth=16,
+                 generator_width=128, critic_width=128,
+                 relu=0.2, dropout=None, noise_sd=None, bias=False,
+                 # optimizer kwargs
+                 optimizer='Adam', learning_rate=1e-4, beta_1=0.5, beta_2=0.9,
+                 weight_decay=0., use_ema=False, ema_momentum=None, ema_overwrite_frequency=None,
+                 **kwargs) -> None:
+        """Initialise the Wasserstein GAN with Gradient Penalty."""
+        super(WGANGP, self).__init__()
+        self.config = locals_to_config(locals())
+
+        self.latent_dim = latent_dims
+        self.lambda_gp = lambda_gp
+        self.latent_space_distn = setup_latents(latent_space_distn)
+        self.augment = partial(DiffAugment, policy=augment_policy)
+        self.gumbel = gumbel
+        
+        self.seed = seed
+        self.device = device if getattr(torch, device).is_available() else "cpu"
+        self.training_balance = training_balance
+
+        self.nfields = len(fields)
+
+        # optimizer settings
+        self._optimizer = optimizer
+        self.learning_rate = learning_rate
+        self.beta_1 = beta_1
+        self.beta_2 = beta_2
+        self.weight_decay = weight_decay
+        self.use_ema = use_ema
+        self.ema_momentum = ema_momentum
+        self.ema_overwrite_frequency = ema_overwrite_frequency
+        
+        # initialise models
+        modelkws = dict(
+            nfields=self.nfields, channel_multiplier=channel_multiplier, input_policy=input_policy,
+            latent_dims=latent_dims, nconditions=nconditions, embedding_depth=embedding_depth,
+            relu=relu, dropout=dropout, noise_sd=noise_sd, bias=bias)
+        
+        self.generator = Generator(width=generator_width, **modelkws).to(self.device)
+        self.critic    = Critic(width=critic_width, **modelkws).to(self.device)
 
         self.trainable_vars = [
             *self.generator.parameters(),
             *self.critic.parameters()
         ]
 
-        if config['gumbel']:
+        # set up final transformation
+        if self.gumbel:
             self._uniform = lambda x: torch.exp(-torch.exp(-x))
         else:
             self._uniform = lambda x: x
 
         # stateful metrics
-        self.chi_rmse_tracker = infInitialisedMean(name="chi_rmse")
-        self.generator_loss_tracker = keras.metrics.Mean(name="generator_loss")
-        self.critic_loss_tracker = keras.metrics.Mean(name="critic_loss")
-        self.value_function_tracker = keras.metrics.Mean(name="value_function")
-        self.critic_real_tracker = keras.metrics.Mean(name="critic_real")
-        self.critic_fake_tracker = keras.metrics.Mean(name="critic_fake")
-        self.critic_valid_tracker = keras.metrics.Mean(name="critic_valid")
+        self.chi_rmse_tracker         = infInitialisedMean(name="chi_rmse")
+        self.generator_loss_tracker   = keras.metrics.Mean(name="generator_loss")
+        self.critic_loss_tracker      = keras.metrics.Mean(name="critic_loss")
+        self.value_function_tracker   = keras.metrics.Mean(name="value_function")
+        self.critic_real_tracker      = keras.metrics.Mean(name="critic_real")
+        self.critic_fake_tracker      = keras.metrics.Mean(name="critic_fake")
+        self.critic_valid_tracker     = keras.metrics.Mean(name="critic_valid")
         self.gradient_penalty_tracker = keras.metrics.Mean(name="gradient_penalty")
 
         # training statistics # ? setting dtype=tf.int32 fails ?
-        self.images_seen = keras.metrics.Sum(name="images_seen")
-        self.critic_steps = keras.metrics.Sum(name="critic_steps")
-        self.generator_steps = keras.metrics.Sum(name="generator_steps")
-        self.critic_grad_norm = keras.metrics.Mean(name="critic_grad_norm")
+        self.images_seen         = keras.metrics.Sum(name="images_seen")
+        self.critic_steps        = keras.metrics.Sum(name="critic_steps")
+        self.generator_steps     = keras.metrics.Sum(name="generator_steps")
+        self.critic_grad_norm    = keras.metrics.Mean(name="critic_grad_norm")
         self.generator_grad_norm = keras.metrics.Mean(name="generator_grad_norm")
 
         # image statistcs
         self.fake_mean = keras.metrics.Mean(name="fake_mean")
         self.real_mean = keras.metrics.Mean(name="real_mean")
-        self.fake_std = keras.metrics.Mean(name="fake_std")
-        self.real_std = keras.metrics.Mean(name="real_std")
+        self.fake_std  = keras.metrics.Mean(name="fake_std")
+        self.real_std  = keras.metrics.Mean(name="real_std")
 
         self.built = True
 
+
     def compile(self, *args, **kwargs) -> None:
         super().compile(*args, **kwargs)
-        config = self.config
-        optimizer = getattr(optimizers, config['optimizer'])
-        opt_kwargs = {'learning_rate': config['learning_rate'],
-                  'beta_1': config['beta_1'],
-                  'beta_2': config['beta_2']}
+        optimizer = getattr(optimizers, self._optimizer)
+        opt_kwargs = {'learning_rate': self.learning_rate,
+                  'beta_1': self.beta_1,
+                  'beta_2': self.beta_2,
+                  'weight_decay': self.weight_decay,
+                  'use_ema': self.use_ema,
+                  'ema_momentum': self.ema_momentum,
+                  'ema_overwrite_frequency': self.ema_overwrite_frequency,
+                  }
         self.critic_optimizer = optimizer(**opt_kwargs)
         self.generator_optimizer = optimizer(**opt_kwargs)
         super().to(self.device)
@@ -204,12 +246,10 @@ class WGANGP(keras.Model):
         score_fake = self.critic(self.augment(fake_data), label, condition)
 
         gradient_penalty = self._gradient_penalty(data, fake_data, condition, label)
-        variance_penalty = self._variance_penalty(data, fake_data)
 
         self.zero_grad()
         loss = ops.mean(score_fake) - ops.mean(score_real)
         loss += self.lambda_gp * gradient_penalty
-        loss += self.lambda_var * variance_penalty
         loss.backward()
 
         grads = [v.value.grad for v in self.critic.trainable_weights]

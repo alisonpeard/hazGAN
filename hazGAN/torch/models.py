@@ -28,14 +28,17 @@ def _combine(x, label, condition, policy='add'):
 
 
 class Generator(nn.Module):
-    def __init__(self, config, nfields=2):
+    def __init__(self, nfields, channel_multiplier, width,
+    input_policy, relu, embedding_depth, nconditions,
+    latent_dims,
+    dropout=None, noise_sd=None, bias=False,
+    **kwargs) -> None:
         super(Generator, self).__init__()
 
-        K = config['channel_multiplier']
+        K = channel_multiplier
 
         # set up feature widths
         self.nfields = nfields
-        width = config['generator_width']
 
         assert width % 8 == 0, "generator width must be divisible by 8"
         assert width >= 64, "generator width must be at least 64"
@@ -43,65 +46,66 @@ class Generator(nn.Module):
         self.width0 = width
         self.width1 = width // 2
         self.width2 = width // 3
-        self.latent_dim = config['latent_dims']
+        self.latent_dim = latent_dims
 
         # input handling
-        self.input_factor = 1 if config['input_policy'] == 'add' else 3
-        self.combine_inputs = partial(_combine, policy=config['input_policy'])
+        self.input_factor = 1 if input_policy == 'add' else 3
+        self.combine_inputs = partial(_combine, policy=input_policy)
 
         self.constant_to_features = None # placeholder for later
 
         self.label_to_features = nn.Sequential(
             # input shape: (batch_size,)
-            nn.Embedding(config['nconditions'], config['embedding_depth'], sparse=False),
-            nn.Linear(config['embedding_depth'], self.width0 * 5 * 5 * nfields, bias=False),
+            nn.Embedding(nconditions, embedding_depth, sparse=False),
+            nn.Linear(embedding_depth, self.width0 * 5 * 5 * nfields, bias=bias),
             nn.Unflatten(-1, (self.width0 * nfields, 5, 5)),
-            nn.LeakyReLU(config['lrelu']),
+            nn.LeakyReLU(relu),
             nn.BatchNorm2d(self.width0 * nfields),
         ) # output shape: (batch_size, width0 * nfields, 5, 5)
 
         self.condition_to_features = nn.Sequential(
             # input shape: (batch_size, 1), linear expects 2d input
-            nn.Linear(1, config['embedding_depth'], bias=False),
-            nn.Linear(config['embedding_depth'], self.width0 * 5 * 5 * nfields, bias=False),
+            nn.Linear(1, embedding_depth, bias=bias),
+            nn.Linear(embedding_depth, self.width0 * 5 * 5 * nfields, bias=bias),
             nn.Unflatten(-1, (self.width0 * nfields, 5, 5)),
-            nn.LeakyReLU(config['lrelu']),
+            nn.LeakyReLU(relu),
             nn.BatchNorm2d(self.width0 * nfields)
         ) # output shape: (batch_size, width0 * nfields, 5, 5)
 
         self.latent_to_features = nn.Sequential(
             # input shape: (batch_size, latent_dim)
-            nn.Linear(self.latent_dim, self.width0 * 5 * 5 * nfields, bias=False), # custom option
+            nn.Linear(self.latent_dim, self.width0 * 5 * 5 * nfields, bias=bias), # custom option
             nn.Unflatten(-1, (self.width0 * nfields, 5, 5)),
-            nn.LeakyReLU(config['lrelu']),
+            nn.LeakyReLU(relu),
             nn.BatchNorm2d(self.width0 *  nfields)
         ) # output shape: (batch_size, width0 * nfields, 5, 5)
 
         # f(x) = (x-1)*s + k
+        reskws = dict(bias=bias, dropout=dropout, noise_sd=noise_sd)
         self.features_to_image = nn.Sequential(
-            ResidualUpBlock(self.input_factor * self.width0 * nfields, self.width1, (3, 3), bias=False),
+            ResidualUpBlock(self.input_factor * self.width0 * nfields, self.width1, (3, 3), **reskws),
             # (3, 3; 1) kernel: 5 x 5 -> 7 x 7 -- USING
             # (2, 2; 2) kernel: 5 x 5 -> 10 x 10
-            ResidualUpBlock(self.width1, self.width1, (2, 4), 2, bias=False),
+            ResidualUpBlock(self.width1, self.width1, (2, 4), 2, **reskws),
             # (3, 4) kernel: 7 x 7 -> 9 x 10
             # (2, 4; 2) kernel: 7 x 7 -> 14 x 16 -- USING
             # (2, 2; 2) kernel: 10 x 10 -> 20 x 20
             # (4, 6; 1) kernel: 10 x 10 -> 13 x 15
-            ResidualUpBlock(self.width1, self.width2, (3, 4), bias=False),
-            ResidualUpBlock(self.width2, self.width2, (3, 4), bias=False),
+            ResidualUpBlock(self.width1, self.width2, (3, 4), **reskws),
+            ResidualUpBlock(self.width2, self.width2, (3, 4), **reskws),
             # (2, 2; 2) kernel: 9 x 10 -> 18 x 22
             # (4, 6; 1) kernel: 9 x 10 -> 12 x 15
             # (4, 6; 2) kernel: 9 x 10 -> 20 x 24
             # (3, 4; 1) kernel: 14 x 16 -> 16 x 19 -- USING
             # (3, 4; 1) kernel: 16 x 19 -> 18 x 22 -- USING
-            ResidualUpBlock(self.width2, nfields, (3, 3), bias=False)
+            ResidualUpBlock(self.width2, nfields, (3, 3), **reskws)
             # nn.ReflectionPad2d((1, 1, 1, 1))
             # padding 18 x 22 -> 20 x 24
         ) # output shape: (batch_size, 20, 24, nfields)
 
         self.refine_fields = nn.Sequential(
             nn.Conv2d(nfields, K * nfields, kernel_size=4, padding="same", groups=nfields),
-            nn.LeakyReLU(config['lrelu']),
+            nn.LeakyReLU(relu),
             nn.BatchNorm2d(K * nfields),
             nn.Conv2d(K * nfields, nfields, kernel_size=3, padding="same"),
             GumbelBlock(nfields)
@@ -119,14 +123,17 @@ class Generator(nn.Module):
 
 
 class Critic(nn.Module):
-    def __init__(self, config, nfields=2):
+    def __init__(self, nfields, channel_multiplier, width,
+    input_policy, relu, embedding_depth, nconditions,
+    latent_dims,
+    dropout=None, noise_sd=None, bias=False,
+    **kwargs) -> None:
         super(Critic, self).__init__()
 
-        K = config['channel_multiplier']
+        K = channel_multiplier
 
         # set up feature widths
         self.nfields = nfields
-        width = config['critic_width']
         assert width % 8 == 0, "critic width must be divisible by 8"
         assert width >= 64, "critic width must be at least 64"
         
@@ -135,51 +142,52 @@ class Critic(nn.Module):
         self.width2 = width
 
         # input handling
-        self.input_factor = 1 if config['input_policy'] == 'add' else 3
-        self.combine_inputs = partial(_combine, policy=config['input_policy'])
+        self.input_factor = 1 if input_policy == 'add' else 3
+        self.combine_inputs = partial(_combine, policy=input_policy)
 
         self.process_fields = nn.Sequential(
             nn.Conv2d(nfields, K * self.width0 * nfields, kernel_size=4, padding="same", groups=nfields),
-            nn.LeakyReLU(config['lrelu']),
+            nn.LeakyReLU(relu),
             nn.LayerNorm((K * self.width0 * nfields, 20, 24)),
             nn.Conv2d(K * self.width0 * nfields, self.width0 * nfields, kernel_size=3, padding="same"),
-            nn.LeakyReLU(config['lrelu']),
+            nn.LeakyReLU(relu),
             nn.LayerNorm((self.width0 * nfields, 20, 24))
         ) # output shape: (batch_size, width0 * nfields, 20, 24)
 
         self.label_to_features = nn.Sequential(
-            nn.Embedding(config['nconditions'], config['embedding_depth'], sparse=False),
-            nn.Linear(config['embedding_depth'], self.width0 * 20 * 24 * nfields, bias=False),
+            nn.Embedding(nconditions, embedding_depth, sparse=False),
+            nn.Linear(embedding_depth, self.width0 * 20 * 24 * nfields, bias=bias),
             nn.Unflatten(-1, (self.width0 * nfields, 20, 24)),
-            nn.LeakyReLU(config['lrelu']),
+            nn.LeakyReLU(relu),
             nn.LayerNorm((self.width0 * nfields, 20, 24))
         ) # output shape: (batch_size, width0 * nfields, 20, 24)
 
         self.condition_to_features = nn.Sequential(
-            nn.Linear(1, config['embedding_depth'], bias=False),
-            nn.Linear(config['embedding_depth'], self.width0 * 20 * 24 * nfields, bias=False),
+            nn.Linear(1, embedding_depth, bias=bias),
+            nn.Linear(embedding_depth, self.width0 * 20 * 24 * nfields, bias=bias),
             nn.Unflatten(-1, (self.width0 * nfields, 20, 24)),
-            nn.LeakyReLU(config['lrelu']),
+            nn.LeakyReLU(relu),
             nn.LayerNorm((self.width0 * nfields, 20, 24))
         ) # output shape: (batch_size, width0 * nfields, 20, 24)
 
         # f(x) = (x-k)/s + 1
+        reskws = dict(bias=bias, dropout=dropout, noise_sd=noise_sd)
         self.image_to_features = nn.Sequential(
             # ResidualDownBlock(self.input_factor * self.width0 * nfields, self.width1, (4, 5), 2, bias=False),
             # ResidualDownBlock(self.width1, self.width2, (3, 4), bias=False),
             # ResidualDownBlock(self.width2, self.width2, (3, 3), bias=False),
-            ResidualDownBlock(self.input_factor * self.width0 * nfields, self.width0, (3, 3), bias=False),
-            ResidualDownBlock(self.width0, self.width1, (3, 4), bias=False),
-            ResidualDownBlock(self.width1, self.width1, (3, 4), bias=False),
-            ResidualDownBlock(self.width1, self.width2, (2, 4), 2, bias=False),
-            ResidualDownBlock(self.width2, self.width2, (3, 3), bias=False),
+            ResidualDownBlock(self.input_factor * self.width0 * nfields, self.width0, (3, 3), **reskws),
+            ResidualDownBlock(self.width0, self.width1, (3, 4), **reskws),
+            ResidualDownBlock(self.width1, self.width1, (3, 4), **reskws),
+            ResidualDownBlock(self.width1, self.width2, (2, 4), 2, **reskws),
+            ResidualDownBlock(self.width2, self.width2, (3, 3), **reskws),
         ) # output shape: (batch_size, width2, 5, 5)
 
 
         self.features_to_score = nn.Sequential(
-            nn.Conv2d(self.width2, nfields, kernel_size=4, groups=nfields, bias=False, padding='same'),
+            nn.Conv2d(self.width2, nfields, kernel_size=4, groups=nfields, bias=bias, padding='same'),
             nn.Flatten(1, -1),
-            nn.LeakyReLU(config['lrelu']),
+            nn.LeakyReLU(relu),
             nn.LayerNorm((nfields * 5 * 5)),
             nn.Linear(nfields * 5 * 5, 1),
             # nn.Sigmoid() # maybe, makes generator and critic very different scales

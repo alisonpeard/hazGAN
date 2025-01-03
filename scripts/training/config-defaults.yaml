@@ -29,7 +29,7 @@ augment_policy:
   value: 'color,translation,cutout'
 dropout:
   desc: Ensemble of simpler models, [None, 0.1, 0.2]
-  value: None
+  value:
 noise_sd:
   desc: Makes weights more robust, [None, 0.01, 0.02]
   value: 0.01

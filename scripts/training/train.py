@@ -2,10 +2,10 @@
 For conditional training (no constant fields yet).
 """
 # %% quick settings
-DRY_RUN_EPOCHS       = 10
+DRY_RUN_EPOCHS       = 3
 EVAL_CHANNEL         = 2
-SAMPLES_PER_EPOCH    = 1000   # samples per epoch
-TRAIN_SUBSET_SIZE    = 10_000   # 10_000 seems good
+SAMPLES_PER_EPOCH    = 64   # samples per epoch
+TRAIN_SUBSET_SIZE    = 10   # 10_000 seems good
 CONTOUR_PLOT         = False
 PROJECT              = 'hazGAN'
 
@@ -209,6 +209,7 @@ def evaluate_results(train, model, label:int, config:dict,
             print("\nResults:\n--------")
             final_chi_rmse = history['chi_rmse'][-1]
             print(f"final_chi_rmse: {final_chi_rmse:.4f}")
+
     except Exception as e:
         print(f"Error generating figures: {e}")
 
@@ -225,7 +226,7 @@ def main(config):
     config = update_config(config, 'nconditions', len(metadata['labels']))
 
     # compile model
-    model = WGANGP(config, device=device)
+    model = WGANGP( device=device, **config)
     model.compile()
 
     # callbacks

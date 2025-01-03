@@ -91,7 +91,7 @@ class ResidualUpBlock(nn.Module):
         self.dropout = nn.Dropout2d(dropout) if dropout is not None else nn.Identity()
         self.noise_sd = noise_sd
     
-    
+
     def regularise(self, x):
         x = self.dropout(x)
         if self.training and self.noise_sd is not None:
