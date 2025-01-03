@@ -18,6 +18,7 @@ from keras.src.trainers.epoch_iterator import EpochIterator
 from torch.utils.data import WeightedRandomSampler
 import math
 
+from .decorators import lookahead
 from ..constants import SAMPLE_CONFIG
 from .models import Critic
 from .models import Generator
@@ -239,6 +240,7 @@ class WGANGP(keras.Model):
         return variance_penalty
     
 
+    @lookahead('generator')
     def _train_critic(self, data, label, condition, batch_size) -> None:
         noise = self.latent_space_distn((batch_size, self.latent_dim))
         fake_data = self.generator(noise, label, condition)
@@ -280,6 +282,7 @@ class WGANGP(keras.Model):
         return torch.tensor(chi, dtype=torch.float32)
 
 
+    @lookahead('critic')
     def _train_generator(self, data, label, condition, batch_size) -> None:
         noise = self.latent_space_distn((batch_size, self.latent_dim))
         generated_data = self.generator(noise, label, condition)

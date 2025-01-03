@@ -8,11 +8,10 @@ References:
 # %%
 from functools import partial
 from torch import nn, cat
-from .blocks import (
-    ResidualUpBlock,
-    ResidualDownBlock,
-    GumbelBlock
-)
+
+from .blocks import ResidualUpBlock
+from .blocks import ResidualDownBlock
+from .blocks import GumbelBlock
 
 __all__ = ['Generator', 'Critic']
 
