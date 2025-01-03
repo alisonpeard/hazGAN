@@ -317,38 +317,15 @@ class WGANGP(keras.Model):
         ]
 
     # - - - - - - - - - BELOW HERE IS A CUSTOM FIT METHOD - - - - - - - - - - - - - - - - - - - - - - - |
-    # Replaces fit() method in keras.Model such the sampling ratios of classes decays from the initial
+    # Replaces fit() method in keras.Model so the sampling ratios of classes decays from the initial
     # data distribution to a target distribution. We use a cosine decay function so the model spends
     # more time in the initial and target distributions.
     @staticmethod
     def get_initial_weights(labels:torch.Tensor) -> torch.Tensor:
+        """Calculate initial class weights for resampling."""
         counts = torch.bincount(labels)
         weights = counts / counts.sum()
         return weights
-
-    @staticmethod
-    def linear_weights(
-            initial_weights,
-            target_weights=torch.tensor([0., 0., 1.]),
-            epochs=1
-            ) -> callable:
-        weight_matrix = torch.empty((epochs, len(initial_weights)))
-        for i in range(len(initial_weights)):
-            weight_matrix[:, i] = torch.linspace(
-                initial_weights[i],
-                target_weights[i],
-                epochs
-            )
-        def get_weights(epoch) -> torch.Tensor:
-            return weight_matrix[epoch]
-        return get_weights
-    
-    @staticmethod
-    def cosine_decay(x, y, steps):
-        weights = []
-        for step in range(steps):
-            weights.append(y + (x - y) * (1 + ops.cos(math.pi * step / steps)) / 2)
-        return torch.tensor(weights)
 
     @staticmethod
     def cosine_weights(
@@ -356,15 +333,26 @@ class WGANGP(keras.Model):
             target_weights=torch.tensor([0., 0., 1.]),
             epochs=1
             ) -> callable:
+        """Cosine decay function for resampling weights."""
+        
+        def cosine_decay(x, y, steps):
+            weights = []
+            for step in range(steps):
+                weights.append(y + (x - y) * (1 + ops.cos(math.pi * step / steps)) / 2)
+            return torch.tensor(weights)
+    
         weight_matrix = torch.empty((epochs, len(initial_weights)))
         for i in range(len(initial_weights)):
-            weight_matrix[:, i] = WGANGP.cosine_decay(initial_weights[i], target_weights[i], epochs)
+            weight_matrix[:, i] = cosine_decay(initial_weights[i], target_weights[i], epochs)
+
         def get_weights(epoch) -> torch.Tensor:
             return weight_matrix[epoch]
+        
         return get_weights
 
     @staticmethod
     def update_dataloader_weights(dataloader:WeightedRandomSampler, weights) -> WeightedRandomSampler:
+        """Update the weights of a dataloader."""
         dataloader.weights = weights
         return dataloader
 
