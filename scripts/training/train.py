@@ -243,7 +243,7 @@ def main(config):
     
     callbacks = [memory_logger, wandb_logger, image_logger, checkpointer]
     if config['scheduler']:
-        scheduler = LRScheduler(config['learning_rate'], config['epochs'], len(trainloader.dataset))
+        scheduler = LRScheduler(config['learning_rate'], config['epochs'], SAMPLES_PER_EPOCH)
         callbacks.append(scheduler)
 
 
