@@ -65,7 +65,7 @@ def config_devices():
     """Use GPU if available and set memory configuration."""
     if not force_cpu:
         if torch.mps.is_available():
-            print("Using MPS for memory management")
+            print("Using MPS")
             device = "mps"
 
         elif torch.cuda.is_available():
@@ -230,7 +230,7 @@ def main(config):
     model.compile()
 
     # callbacks
-    memory_logger = MemoryLogger(100, logdir='logs')
+    # memory_logger = MemoryLogger(100, logdir='logs')
     wandb_logger = WandbMetricsLogger()
     image_logger = ImageLogger()
     checkpointer = ModelCheckpoint(
@@ -242,14 +242,14 @@ def main(config):
         verbose=True
         )
     
-    callbacks = [memory_logger, wandb_logger, image_logger, checkpointer]
+    callbacks = [wandb_logger, image_logger, checkpointer]
     if config['scheduler']:
         scheduler = LRScheduler(config['learning_rate'], config['epochs'])
         callbacks.append(scheduler)
 
 
     # check memory before starting
-    summarise_mps_memory()
+    # summarise_mps_memory()
 
     # fit model
     print("\nTraining...\n")
