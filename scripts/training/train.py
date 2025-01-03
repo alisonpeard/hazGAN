@@ -2,10 +2,10 @@
 For conditional training (no constant fields yet).
 """
 # %% quick settings
-DRY_RUN_EPOCHS       = 100
+DRY_RUN_EPOCHS       = 50
 EVAL_CHANNEL         = 2
-SAMPLES_PER_EPOCH    = 64   # samples per epoch
-TRAIN_SUBSET_SIZE    = 10   # 10_000 seems good
+SAMPLES_PER_EPOCH    = 1280     # 1000   # samples per epoch
+TRAIN_SUBSET_SIZE    = 10_000   # 10_000 seems good
 CONTOUR_PLOT         = False
 PROJECT              = 'hazGAN'
 

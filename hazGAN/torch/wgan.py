@@ -59,6 +59,7 @@ def locals_to_config(locals):
     del locals['kwargs']
     return locals
 
+
 class WGANGP(keras.Model):
     """Reference: https://keras.io/guides/custom_train_step_in_torch/"""
     def __init__(self, latent_dims=64, fields=['u10', 'mslp'], lambda_gp=10,

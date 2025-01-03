@@ -12,7 +12,7 @@ from ..data import load_xr_data
 from ..data import sample_dict
 from ..constants import TEST_YEAR
 
-SUBSET_METHOD = 'equal' # should be pre_only, change to equal on machines with low RAM
+SUBSET_METHOD = 'pre_only' # should be pre_only, change to equal on machines with low RAM
 
 __all__ = ['load_data', 'test_sampling_ratios', 'test_iter_time']
 
