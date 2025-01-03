@@ -68,6 +68,7 @@ class WGANGP(keras.Model):
                  channel_multiplier=16, embedding_depth=16,
                  generator_width=128, critic_width=128,
                  relu=0.2, dropout=None, noise_sd=None, bias=False,
+                 lookahead=False,
                  # optimizer kwargs
                  optimizer='Adam', learning_rate=1e-4, beta_1=0.5, beta_2=0.9,
                  weight_decay=0., use_ema=False, ema_momentum=None, ema_overwrite_frequency=None,
@@ -85,6 +86,7 @@ class WGANGP(keras.Model):
         self.seed = seed
         self.device = device if getattr(torch, device).is_available() else "cpu"
         self.training_balance = training_balance
+        self.lookahead = lookahead
 
         self.nfields = len(fields)
 

@@ -63,6 +63,9 @@ gumbel:
   value: True
 lambda_gp:
   value: 10.
+lookahead:
+  desc: Lookahead optimizer, [True, False]
+  value: True
 
 # optimizer
 optimizer:

@@ -18,21 +18,24 @@ __all__ = ["lookahead"]
 def lookahead(model_name):
     def decorator(func):
         def wrapper(self, *args, **kwargs):
+            
+            if self.lookahead:
+                model = getattr(self, model_name)
+                original_weights = list(model.trainable_weights)
 
-            model = getattr(self, model_name)
-            original_weights = list(model.trainable_weights)
-
-            if hasattr(model, "_last_weights"):
-                for i, weight in enumerate(model.trainable_weights):
-                    delta_w = weight - model._last_weights[i]
-                    weight.assign(weight + delta_w)
-                    
+                if hasattr(model, "_last_weights"):
+                    for i, weight in enumerate(model.trainable_weights):
+                        delta_w = weight - model._last_weights[i]
+                        weight.assign(weight + delta_w)
+            
+            # run the function
             result = func(self, *args, **kwargs)
 
-            for i, weight in enumerate(model.trainable_weights):
-                weight.assign(original_weights[i])
-            
-            model._last_weights = list(model.trainable_weights)
+            if self.lookahead:
+                for i, weight in enumerate(model.trainable_weights):
+                    weight.assign(original_weights[i])
+                
+                model._last_weights = list(model.trainable_weights)
             
             return result
         return wrapper

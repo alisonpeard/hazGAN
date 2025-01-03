@@ -52,6 +52,8 @@ parameters:
     values: [32, 64, 128]
   lambda_gp:
     values: [1, 5, 10, 15, 20]
+  lookahead:
+    values: [True, False]
 
   # optimizer
   beta_1:
