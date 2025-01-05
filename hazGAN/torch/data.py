@@ -153,7 +153,7 @@ class StormDataset(Dataset):
     def subset(self, size:int, sampling:str=SUBSET_METHOD, verbose:bool=True) -> 'StormDataset':
         """Return a subset of the dataset."""
         if verbose:
-            print(f"\nSubsetting dataset to size {size} using {sampling} sampling.\n")
+            print(f"\nSubsetting dataset to size {size} using '{sampling}' sampling.\n")
         n = len(self)
         if size > n:
             return self
