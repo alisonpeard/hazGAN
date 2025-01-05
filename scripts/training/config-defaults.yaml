@@ -28,10 +28,11 @@ gumbel:
   value: True
 lambda_gp:
   value: 10.
+lambda_var:
+  value: 1.
 lookahead:
   desc: Add predictor step (saddles), [True, False]
   value: True
-
 
 # optimizer
 optimizer:
@@ -43,6 +44,9 @@ learning_rate:
 scheduler:
   desc: Learning rate scheduler, [True, False]
   value: True
+warmup:
+  desc: Number of warmup steps for learning rate
+  value: 0
 beta_1:
   desc: Gulrajani et al. 2017 use 0.5, [0, 0.5]
   value: 0.5

@@ -62,14 +62,16 @@ def locals_to_config(locals):
 
 class WGANGP(keras.Model):
     """Reference: https://keras.io/guides/custom_train_step_in_torch/"""
-    def __init__(self, latent_dims=64, fields=['u10', 'mslp'], lambda_gp=10,
-                 seed=42, gumbel=True, latent_space_distn='gumbel',
-                 input_policy='add', augment_policy='', 
-                 training_balance=5, device='mps', nconditions=3,
-                 channel_multiplier=16, embedding_depth=16,
+    def __init__(self,
+                 fields=['u10', 'mslp'],
+                 seed=42, device='mps',
+                 gumbel=True, latent_space_distn='gumbel',
+                 lambda_gp=10, lambda_var=0.,
+                 input_policy='add', augment_policy='',
+                 channel_multiplier=16, embedding_depth=16, latent_dims=64,
+                 nconditions=3, training_balance=5, lookahead=False,
                  generator_width=128, critic_width=128,
                  relu=0.2, dropout=None, noise_sd=None, bias=False,
-                 lookahead=False,
                  # optimizer kwargs
                  optimizer='Adam', learning_rate=1e-4, beta_1=0.5, beta_2=0.9,
                  weight_decay=0., use_ema=False, ema_momentum=None, ema_overwrite_frequency=None,
@@ -80,6 +82,7 @@ class WGANGP(keras.Model):
 
         self.latent_dim = latent_dims
         self.lambda_gp = lambda_gp
+        self.lambda_var = lambda_var
         self.latent_space_distn = setup_latents(latent_space_distn)
         self.augment = partial(DiffAugment, policy=augment_policy)
         self.gumbel = gumbel
@@ -251,10 +254,12 @@ class WGANGP(keras.Model):
         score_fake = self.critic(self.augment(fake_data), label, condition)
 
         gradient_penalty = self._gradient_penalty(data, fake_data, condition, label)
+        variance_penalty = self._variance_penalty(data, fake_data)
 
         self.zero_grad()
         loss = ops.mean(score_fake) - ops.mean(score_real)
         loss += self.lambda_gp * gradient_penalty
+        loss += self.lambda_var * variance_penalty
         loss.backward()
 
         grads = [v.value.grad for v in self.critic.trainable_weights]

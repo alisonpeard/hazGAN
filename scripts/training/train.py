@@ -25,7 +25,7 @@ from keras.callbacks import ModelCheckpoint
 
 from hazGAN import plot
 from hazGAN.torch import unpad
-from hazGAN.torch import load_data
+from hazGAN.torch import load_data # type: ignore
 from hazGAN.torch import WGANGP
 from hazGAN.torch import MemoryLogger
 from hazGAN.torch import WandbMetricsLogger
@@ -230,7 +230,7 @@ def main(config):
     model.compile()
 
     # callbacks
-    # memory_logger = MemoryLogger(100, logdir='logs')
+    memory_logger = MemoryLogger(100, logdir='logs')
     wandb_logger = WandbMetricsLogger()
     image_logger = ImageLogger()
     checkpointer = ModelCheckpoint(
@@ -244,7 +244,11 @@ def main(config):
     
     callbacks = [wandb_logger, image_logger, checkpointer]
     if config['scheduler']:
-        scheduler = LRScheduler(config['learning_rate'], config['epochs'])
+        scheduler = LRScheduler(
+            config['learning_rate'],
+            config['epochs'],
+            warmup=config['warmup']
+            )
         callbacks.append(scheduler)
 
 
