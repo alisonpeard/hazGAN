@@ -247,7 +247,7 @@ def main(config):
         scheduler = LRScheduler(
             config['learning_rate'],
             config['epochs'],
-            warmup=config['warmup']
+            warmup_steps=config['warmup']
             )
         callbacks.append(scheduler)
 

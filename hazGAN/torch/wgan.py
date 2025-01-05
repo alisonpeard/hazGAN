@@ -258,8 +258,12 @@ class WGANGP(keras.Model):
 
         self.zero_grad()
         loss = ops.mean(score_fake) - ops.mean(score_real)
-        loss += self.lambda_gp * gradient_penalty
-        loss += self.lambda_var * variance_penalty
+        
+        # add penalties if they're switched on 
+        if self.lambda_gp > 0:
+            loss += self.lambda_gp * gradient_penalty
+        if self.lambda_var > 0:
+            loss += self.lambda_var * variance_penalty
         loss.backward()
 
         grads = [v.value.grad for v in self.critic.trainable_weights]
