@@ -253,7 +253,8 @@ def main(config):
 
     # fit model
     print("\nTraining...\n")
-    history = model.fit(trainloader, epochs=config['epochs'], callbacks=callbacks,
+    history = model.fit(trainloader, epochs=config['epochs'],
+                        callbacks=callbacks,
                         steps_per_epoch=(SAMPLES_PER_EPOCH // config['batch_size']),
                         target_weights=torch.tensor(config['target_weights']),
                         validation_data=validloader,

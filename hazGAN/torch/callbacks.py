@@ -18,6 +18,18 @@ from .utils import unpad
 __all__ = ["WandbMetricsLogger", "MemoryLogger", "ImageLogger", "LRScheduler"]
 
 
+class WandbMetricsLogger(Callback):
+    """
+    Custom Wandb callback to log metrics.
+
+    Source: https://community.wandb.ai/t/sweeps-not-showing-val-loss-with-keras/4495
+    """
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        if wandb.run is not None:
+            wandb.log(logs)
+
+
 class LRScheduler(callbacks.LearningRateScheduler):
     def __init__(self, lr:float, epochs:int, samples:int=1, warmup_steps=0.1,
                  alpha=1e-6, initial_lr=1e-6, verbose=1):
@@ -85,17 +97,9 @@ class LRScheduler(callbacks.LearningRateScheduler):
         logs["learning_rate_generator"] = float(
             backend.convert_to_numpy(self.model.generator_optimizer.learning_rate)
         )
-
-
-class WandbMetricsLogger(Callback):
-    """
-    Custom Wandb callback to log metrics.
-
-    Source: https://community.wandb.ai/t/sweeps-not-showing-val-loss-with-keras/4495
-    """
-    def on_epoch_end(self, epoch, logs=None):
         if wandb.run is not None:
             wandb.log(logs)
+
 
 
 class MemoryLogger(Callback):

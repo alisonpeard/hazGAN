@@ -2,7 +2,7 @@
 # meta parameters
 epochs:
   desc: Number of epochs to train for
-  value: 100
+  value: 250
 train_size:
   value: 0.8  # 840 # 50
 fields:
@@ -10,12 +10,58 @@ fields:
   value: ['u10', 'mslp']
 thresholds:
   desc: Thresholds for each field, [u10, tp, mslp]
-  value: [15., 999]
+  value: [15., 999.]
 target_weights:
   desc: Target ratios for each class [0, 1, 2]
   value: [0., 0.2, 0.8]
 seed:
   value: 42
+
+# training features
+training_balance:
+  desc: Gulrajani et al. 2017 use 5
+  value: 5
+batch_size:
+  value: 64 # for GPU constraints
+gumbel:
+  desc: Train on Gumbel marginals instead of uniform marginals
+  value: True
+lambda_gp:
+  value: 10.
+lookahead:
+  desc: Add predictor step (saddles), [True, False]
+  value: True
+
+
+# optimizer
+optimizer:
+  desc: Optimizer to use, ['SGD', 'Adam']
+  value: Adam
+learning_rate:
+  desc: (Max) Gulrajani et al. 2017 use 0.0001 (Appendix B)
+  value: 0.01
+scheduler:
+  desc: Learning rate scheduler, [True, False]
+  value: True
+beta_1:
+  desc: Gulrajani et al. 2017 use 0.5, [0, 0.5]
+  value: 0.5
+beta_2:
+  desc: Gulrajani et al. 2017 use 0.9, [0.9, 0.99]
+  value: 0.9
+weight_decay:
+  desc: Gulrajani et al. 2017 use 10-3
+  value: 0.001
+use_ema:
+  desc: Use exponential moving average in training, causes issues when re-loading weights.
+  value: True # only set to true if not loading weights
+ema_momentum:
+  desc: Momentum of exponential moving average for tf.keras.optimizers.Adam (higher --> smoother)
+  value: 0.999
+ema_overwrite_frequency:
+  desc: How often [batches] to overwrite weights with ema
+  value: 2
+
 
 # architecture
 lrelu:
@@ -51,47 +97,3 @@ critic_width:
 latent_space_distn:
   desc: Distribution of latent space, ['normal', 'uniform', 'gumbel']
   value: gumbel
-
-# training features
-training_balance:
-  desc: Gulrajani et al. 2017 use 5
-  value: 5
-batch_size:
-  value: 64 # for GPU constraints
-gumbel:
-  desc: Train on Gumbel marginals instead of uniform marginals
-  value: True
-lambda_gp:
-  value: 10.
-lookahead:
-  desc: Add predictor step (saddles), [True, False]
-  value: True
-
-# optimizer
-optimizer:
-  desc: Optimizer to use, ['SGD', 'Adam']
-  value: Adam
-learning_rate:
-  desc: (Max) Gulrajani et al. 2017 use 0.0001 (Appendix B)
-  value: 0.01
-scheduler:
-  desc: Learning rate scheduler, [True, False]
-  value: True
-beta_1:
-  desc: Gulrajani et al. 2017 use 0.5, [0, 0.5]
-  value: 0.5
-beta_2:
-  desc: Gulrajani et al. 2017 use 0.9, [0.9, 0.99]
-  value: 0.9
-weight_decay:
-  desc: Gulrajani et al. 2017 use 10-3
-  value: 0.001
-use_ema:
-  desc: Use exponential moving average in training, causes issues when re-loading weights.
-  value: True # only set to true if not loading weights
-ema_momentum:
-  desc: Momentum of exponential moving average for tf.keras.optimizers.Adam (higher --> smoother)
-  value: 0.999
-ema_overwrite_frequency:
-  desc: How often [batches] to overwrite weights with ema
-  value: 2
