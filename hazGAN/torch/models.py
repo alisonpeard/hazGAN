@@ -56,27 +56,34 @@ class Generator(nn.Module):
         self.label_to_features = nn.Sequential(
             # input shape: (batch_size,)
             nn.Embedding(nconditions, embedding_depth, sparse=False),
+            nn.BatchNorm1d(embedding_depth),
+            nn.LeakyReLU(relu),
             nn.Linear(embedding_depth, self.width0 * 5 * 5 * nfields, bias=bias),
             nn.Unflatten(-1, (self.width0 * nfields, 5, 5)),
-            nn.LeakyReLU(relu),
             nn.BatchNorm2d(self.width0 * nfields),
+            nn.LeakyReLU(relu)
         ) # output shape: (batch_size, width0 * nfields, 5, 5)
 
         self.condition_to_features = nn.Sequential(
             # input shape: (batch_size, 1), linear expects 2d input
             nn.Linear(1, embedding_depth, bias=bias),
+            nn.BatchNorm1d(embedding_depth),
+            nn.LeakyReLU(relu),
             nn.Linear(embedding_depth, self.width0 * 5 * 5 * nfields, bias=bias),
             nn.Unflatten(-1, (self.width0 * nfields, 5, 5)),
-            nn.LeakyReLU(relu),
-            nn.BatchNorm2d(self.width0 * nfields)
+            nn.BatchNorm2d(self.width0 * nfields),
+            nn.LeakyReLU(relu)
         ) # output shape: (batch_size, width0 * nfields, 5, 5)
 
         self.latent_to_features = nn.Sequential(
             # input shape: (batch_size, latent_dim)
-            nn.Linear(self.latent_dim, self.width0 * 5 * 5 * nfields, bias=bias), # custom option
-            nn.Unflatten(-1, (self.width0 * nfields, 5, 5)),
+            nn.Linear(self.latent_dim, embedding_depth * 5 * 5 * nfields, bias=bias), # custom option
+            nn.Unflatten(-1, (embedding_depth * nfields, 5, 5)),
+            nn.BatchNorm2d(embedding_depth *  nfields),
             nn.LeakyReLU(relu),
-            nn.BatchNorm2d(self.width0 *  nfields)
+            nn.Linear(embedding_depth * nfields, self.width0 * nfields, bias=bias),
+            nn.BatchNorm2d(self.width0 * nfields),
+            nn.LeakyReLU(relu)
         ) # output shape: (batch_size, width0 * nfields, 5, 5)
 
         # f(x) = (x-1)*s + k
@@ -104,8 +111,8 @@ class Generator(nn.Module):
 
         self.refine_fields = nn.Sequential(
             nn.Conv2d(nfields, K * nfields, kernel_size=4, padding="same", groups=nfields),
-            nn.LeakyReLU(relu),
             nn.BatchNorm2d(K * nfields),
+            nn.LeakyReLU(relu),
             nn.Conv2d(K * nfields, nfields, kernel_size=3, padding="same"),
             GumbelBlock(nfields)
         ) # output shape: (batch_size, 20, 24, nfields)
@@ -146,27 +153,31 @@ class Critic(nn.Module):
 
         self.process_fields = nn.Sequential(
             nn.Conv2d(nfields, K * self.width0 * nfields, kernel_size=4, padding="same", groups=nfields),
-            nn.LeakyReLU(relu),
             nn.LayerNorm((K * self.width0 * nfields, 20, 24)),
-            nn.Conv2d(K * self.width0 * nfields, self.width0 * nfields, kernel_size=3, padding="same"),
             nn.LeakyReLU(relu),
-            nn.LayerNorm((self.width0 * nfields, 20, 24))
+            nn.Conv2d(K * self.width0 * nfields, self.width0 * nfields, kernel_size=3, padding="same"),
+            nn.LayerNorm((self.width0 * nfields, 20, 24)),
+            nn.LeakyReLU(relu)
         ) # output shape: (batch_size, width0 * nfields, 20, 24)
 
         self.label_to_features = nn.Sequential(
             nn.Embedding(nconditions, embedding_depth, sparse=False),
+            nn.LayerNorm(embedding_depth),
+            nn.LeakyReLU(relu),
             nn.Linear(embedding_depth, self.width0 * 20 * 24 * nfields, bias=bias),
             nn.Unflatten(-1, (self.width0 * nfields, 20, 24)),
-            nn.LeakyReLU(relu),
-            nn.LayerNorm((self.width0 * nfields, 20, 24))
+            nn.LayerNorm((self.width0 * nfields, 20, 24)),
+            nn.LeakyReLU(relu)
         ) # output shape: (batch_size, width0 * nfields, 20, 24)
 
         self.condition_to_features = nn.Sequential(
             nn.Linear(1, embedding_depth, bias=bias),
+            nn.LayerNorm(embedding_depth),
+            nn.LeakyReLU(relu),
             nn.Linear(embedding_depth, self.width0 * 20 * 24 * nfields, bias=bias),
             nn.Unflatten(-1, (self.width0 * nfields, 20, 24)),
-            nn.LeakyReLU(relu),
-            nn.LayerNorm((self.width0 * nfields, 20, 24))
+            nn.LayerNorm((self.width0 * nfields, 20, 24)),
+            nn.LeakyReLU(relu)
         ) # output shape: (batch_size, width0 * nfields, 20, 24)
 
         # f(x) = (x-k)/s + 1
@@ -186,11 +197,11 @@ class Critic(nn.Module):
         self.features_to_score = nn.Sequential(
             nn.Conv2d(self.width2, nfields, kernel_size=4, groups=nfields, bias=bias, padding='same'),
             nn.Flatten(1, -1),
-            nn.LeakyReLU(relu),
             nn.LayerNorm((nfields * 5 * 5)),
-            nn.Linear(nfields * 5 * 5, K * nfields),
             nn.LeakyReLU(relu),
+            nn.Linear(nfields * 5 * 5, K * nfields),
             nn.LayerNorm((K * nfields)),
+            nn.LeakyReLU(relu),
             nn.Linear(K * nfields, 1),
             nn.Sigmoid() # maybe, makes generator and critic very different scales
         ) # output shape: (batch_size, 1)

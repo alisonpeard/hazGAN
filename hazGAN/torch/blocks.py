@@ -82,8 +82,8 @@ class ResidualUpBlock(nn.Module):
         self.out_channels = out_channels
 
         self.deconv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding)
-        self.activation = nn.ReLU() # GELU(), SiLU()
         self.norm = nn.BatchNorm2d(out_channels)
+        self.activation = nn.ReLU()
         self.upsample = lambda x: upsample(x, kernel_size, stride, padding, upsample_mode)
         self.project = nn.Conv2d(self.in_channels, self.out_channels, 1, 1)
 
@@ -104,9 +104,9 @@ class ResidualUpBlock(nn.Module):
         identity = self.upsample(x)
         identity = self.project(identity)
         x = self.deconv(x)
-        x = self.regularise(x)
-        x = self.activation(x)
         x = self.norm(x)
+        x = self.activation(x)
+        x = self.regularise(x)
         return x + identity
 
 
@@ -124,6 +124,7 @@ class ResidualDownBlock(nn.Module):
         self.out_channels = out_channels
 
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
+        self.norm = nn.LayerNorm(out_channels)
         self.activation = nn.ReLU() # GELU()
         self.downsample = lambda x: downsample(x, kernel_size, stride, padding)
         self.project = nn.Conv2d(self.in_channels, self.out_channels, 1, 1)
@@ -143,8 +144,9 @@ class ResidualDownBlock(nn.Module):
     def forward(self, x:torch.Tensor) -> torch.Tensor:
         identity = self.project(self.downsample(x))
         x = self.conv(x)
-        x = self.regularise(x)
+        x = self.norm(x)
         x = self.activation(x)
+        x = self.regularise(x)
         return x + identity
 
 
