@@ -27,7 +27,7 @@ gumbel:
   desc: Train on Gumbel marginals instead of uniform marginals
   value: True
 lambda_gp:
-  value: 0.
+  value: 10.
 lambda_var:
   value: 0.
 lookahead:

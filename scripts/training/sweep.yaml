@@ -9,7 +9,7 @@ metric:
 parameters:
   # meta-parameters
   epochs:
-    values: [100, 200, 300, 400, 500, 600]
+    values: [250, 500, 1000, 2500]
   fields:
     values:
       - ['u10']
@@ -20,12 +20,10 @@ parameters:
       - [0., .4, .6]
       - [0., .2, .8]
       - [0., 0., 1.]
-
   # architecture
   lrelu:
-    values:
     min: 0.01
-    min: 0.5
+    max: 0.5
   momentum:
     min: 0.1
     max: 0.99
