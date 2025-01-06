@@ -72,11 +72,11 @@ def config_devices():
             print("Using CUDA")
             device = "cuda"
 
-        else:
-            print("No MPS available, using CPU")
-            device = "cpu"
+    else:
+        print("No MPS available, using CPU")
+        device = "cpu"
 
-        return device
+    return device
 
 
 def summarise_mps_memory():
@@ -313,7 +313,6 @@ if __name__ == "__main__":
     os.makedirs(rundir, exist_ok=True)
 
     # train
-    getattr(torch, device).empty_cache()
     result = main(config)
     print(result)
 

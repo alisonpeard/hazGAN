@@ -1,10 +1,10 @@
 # %%
-import torch
+from typing import Tuple, Union
 import numpy as np
+import torch
 from torch import nn
 import torch.nn.functional as F
-import warnings
-from typing import Tuple, Union
+from torch.nn.utils.parametrizations import spectral_norm
 
 
 def tuple_to_numpy(tup):
@@ -19,13 +19,15 @@ def tuple_to_torch(tup):
     return tup
 
 
-def downsize(insize, k, s, p) -> tuple:
-    h = torch.floor(((insize[0]-k[0]+2*p)/s) + 1).int()
-    w = torch.floor(((insize[1]-k[1]+2*p)/s) + 1).int()
+def downsize(insize:tuple, k:tuple, s:int, p:int) -> tuple:
+    # h = torch.floor(((insize[0]-k[0]+2*p)/s) + 1).int() # same issue if I uncomment these instead
+    # w = torch.floor(((insize[1]-k[1]+2*p)/s) + 1).int()
+    h = int(((insize[0]-k[0]+2*p)/s) + 1)
+    w = int(((insize[1]-k[1]+2*p)/s) + 1)
     return (h, w)
 
 
-def upsize(insize, k, s, p) -> tuple:
+def upsize(insize:tuple, k:tuple, s:int, p:int) -> tuple:
    h = torch.floor((insize[0] - 1) * s - 2 * p + (k[0] - 1) + 1).int()
    w = torch.floor((insize[1] - 1) * s - 2 * p + (k[1] - 1) + 1).int()
    return (h, w)
@@ -111,36 +113,62 @@ class ResidualUpBlock(nn.Module):
 
 
 class ResidualDownBlock(nn.Module):
-    """Single residual block for downsampling (decreasing resolution)."""
+    """Single residual block for downsampling (decreasing resolution).
+    
+    Lazy input shape initialisation for Layer norm.
+    """
     def __init__(self, in_channels:int, out_channels: int,
                  kernel_size:Union[int, Tuple[int, int]],
                  stride:Union[int, Tuple[int, int]]=1,
                  padding:Union[int, Tuple[int, int]]=0,
+                 lrelu:float=0.2,
                  dropout:Union[None, float]=None,
                  noise_sd:Union[None, float]=None, 
                  **kwargs) -> None:
         super().__init__()
+        # attributes
         self.in_channels = in_channels
         self.out_channels = out_channels
+        self.kernel_size = tuple_to_torch(kernel_size)
+        self.stride = stride
+        self.padding = padding
 
+        # layers
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
-        self.norm = nn.LayerNorm(out_channels)
-        self.activation = nn.ReLU() # GELU()
+        self.norm = None
+        self._init_hook_handle = self.register_forward_pre_hook(self._initialise_norm)
+        self.activation = nn.LeakyReLU(lrelu)
         self.downsample = lambda x: downsample(x, kernel_size, stride, padding)
         self.project = nn.Conv2d(self.in_channels, self.out_channels, 1, 1)
 
-        # regularisation attributes
+        # regularisation layers
         self.dropout = nn.Dropout2d(dropout) if dropout is not None else nn.Identity()
         self.noise_sd = noise_sd
 
-    def regularise(self, x:torch.Tensor) -> torch.Tensor:
-        x = self.dropout(x)
+
+    def _initialise_norm(self, module, x):
+        if self.norm is None:
+            input_size = x[0].size()[2:]
+            output_size = downsize(input_size, self.kernel_size, self.stride, self.padding)
+            output_size = torch.Size(output_size)
+            # layer norm doesn't inherit device, need to explictly set
+            self.norm = nn.LayerNorm(output_size).to(x[0].device)
+            self._init_hook_handle.remove()
+
+
+    def additive_noise(self, x:torch.Tensor) -> torch.Tensor:
         if self.training and self.noise_sd is not None:
             noise = torch.randn_like(x) * self.noise_sd
             x = x + noise
         return x
-    
 
+
+    def regularise(self, x:torch.Tensor) -> torch.Tensor:
+        x = self.dropout(x)
+        x = self.additive_noise(x)
+        return x
+    
+    
     def forward(self, x:torch.Tensor) -> torch.Tensor:
         identity = self.project(self.downsample(x))
         x = self.conv(x)

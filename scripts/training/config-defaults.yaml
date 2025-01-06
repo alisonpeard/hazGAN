@@ -2,7 +2,7 @@
 # meta parameters
 epochs:
   desc: Number of epochs to train for
-  value: 250
+  value: 100
 train_size:
   value: 0.8  # 840 # 50
 fields:
@@ -27,12 +27,12 @@ gumbel:
   desc: Train on Gumbel marginals instead of uniform marginals
   value: True
 lambda_gp:
-  value: 10.
+  value: 0.
 lambda_var:
-  value: 1.
+  value: 0.
 lookahead:
   desc: Add predictor step (saddles), [True, False]
-  value: True
+  value: False
 
 # optimizer
 optimizer:
@@ -71,6 +71,9 @@ ema_overwrite_frequency:
 lrelu:
   desc: Gulrajani et al. 2017 use 0.2
   value: 0.2
+momentum:
+  desc: Batchnorm momentum (default=0.1)
+  value: 0.1
 input_policy:
   desc: add (simpler) or concat (more complex)
   value: concat
@@ -78,7 +81,7 @@ augment_policy:
   desc: https://arxiv.org/pdf/2006.10738,  ['color,translation,cutout', '']
   value: 'color,translation,cutout'
 dropout:
-  desc: Ensemble of simpler models, [None, 0.1, 0.2]
+  desc: Ensemble of simpler models, [None, 0.8, 0.9]
   value:
 noise_sd:
   desc: Makes weights more robust, [None, 0.01, 0.02]

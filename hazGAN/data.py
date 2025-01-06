@@ -212,7 +212,7 @@ def _prep_xr_data(
     gc.collect()
     return train, valid, metadata
 
-# %%
+
 def _equal(a, b, verbose=False) -> bool:
     """Recursively check if two objects are equal.
     
@@ -239,8 +239,12 @@ def _equal(a, b, verbose=False) -> bool:
         return all(_equal(a[key], b[key]) for key in a.keys())
     
     if hasattr(a, '__iter__') and hasattr(b, '__iter__'):
+        if len(a) != len(b):
+            print(f"{a} != {b}")
+            return False
         return all([_equal(i, j) for i, j in zip(a, b)])
     
+    # print(f"Result {a} == {b}: {a==b}")
     return (a == b)
 
 
@@ -258,7 +262,8 @@ def _load_xr_cached(**kwargs) -> tuple[xr.Dataset, xr.Dataset, dict]:
                 print("Loading cached arguments...")
                 cached_kwargs = np.load(kwargfile, allow_pickle=True)
                 cached_kwargs = {key: value[()] for key, value in cached_kwargs.items()}
-
+                print("Current arguments: {}".format(kwargs))
+                print("Cached arguments: {}".format(cached_kwargs))
                 # args_match = all([kwargs.get(key) == cached_kwargs.get(key) for key in kwargs.keys()])
                 args_match = _equal(kwargs, cached_kwargs)
                 
@@ -334,4 +339,3 @@ def load_xr_data(datadir:str, thresholds:list=[15, np.inf],
     train, valid, metadata = _prep_xr_data(datadir, thresholds, train_size, fields, epoch, verbose, testyear)
     _cache_xr_data(train, valid, metadata, **kwargs)
     return train, valid, metadata
-# %%

@@ -52,6 +52,8 @@ class infInitialisedMean(keras.metrics.Mean):
         self.update_state(float('inf'))
 
 
+
+
 def locals_to_config(locals):
     """Convert local variables to a dictionary."""
     del locals['self']
@@ -71,7 +73,8 @@ class WGANGP(keras.Model):
                  channel_multiplier=16, embedding_depth=16, latent_dims=64,
                  nconditions=3, training_balance=5, lookahead=False,
                  generator_width=128, critic_width=128,
-                 relu=0.2, dropout=None, noise_sd=None, bias=False,
+                 lrelu=0.2, momentum=0.1, bias=False,
+                 dropout=None, noise_sd=None,
                  # optimizer kwargs
                  optimizer='Adam', learning_rate=1e-4, beta_1=0.5, beta_2=0.9,
                  weight_decay=0., use_ema=False, ema_momentum=None, ema_overwrite_frequency=None,
@@ -108,7 +111,7 @@ class WGANGP(keras.Model):
         modelkws = dict(
             nfields=self.nfields, channel_multiplier=channel_multiplier, input_policy=input_policy,
             latent_dims=latent_dims, nconditions=nconditions, embedding_depth=embedding_depth,
-            relu=relu, dropout=dropout, noise_sd=noise_sd, bias=bias)
+            lrelu=lrelu, momentum=momentum, dropout=dropout, noise_sd=noise_sd, bias=bias)
         
         self.generator = Generator(width=generator_width, **modelkws).to(self.device)
         self.critic    = Critic(width=critic_width, **modelkws).to(self.device)
@@ -220,7 +223,9 @@ class WGANGP(keras.Model):
     def __repr__(self) -> str:
         out = "\nWasserstein GAN with Gradient Penalty\n"
         out += "-------------------------------------\n"
-        out += self.config.__repr__()
+        config = self.config.__repr__()
+        for key, value in config.items():
+            out += f"{key}: {value}\n"
         return out
 
     def _gradient_penalty(self, data, fake_data, condition, label):
@@ -250,7 +255,9 @@ class WGANGP(keras.Model):
     def _train_critic(self, data, label, condition, batch_size) -> None:
         noise = self.latent_space_distn((batch_size, self.latent_dim))
         fake_data = self.generator(noise, label, condition)
+        print("applying critic to real data")
         score_real = self.critic(self.augment(data), label, condition)
+        print("applying critic to fake data")
         score_fake = self.critic(self.augment(fake_data), label, condition)
 
         gradient_penalty = self._gradient_penalty(data, fake_data, condition, label)
