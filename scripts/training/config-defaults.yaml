@@ -2,7 +2,7 @@
 # meta parameters
 epochs:
   desc: Number of epochs to train for
-  value: 1
+  value: 1000
 train_size:
   value: 0.8  # 840 # 50
 fields:

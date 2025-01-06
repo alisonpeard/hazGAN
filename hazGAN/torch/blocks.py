@@ -20,8 +20,6 @@ def tuple_to_torch(tup):
 
 
 def downsize(insize:tuple, k:tuple, s:int, p:int) -> tuple:
-    # h = torch.floor(((insize[0]-k[0]+2*p)/s) + 1).int() # same issue if I uncomment these instead
-    # w = torch.floor(((insize[1]-k[1]+2*p)/s) + 1).int()
     h = int(((insize[0]-k[0]+2*p)/s) + 1)
     w = int(((insize[1]-k[1]+2*p)/s) + 1)
     return (h, w)

@@ -65,17 +65,14 @@ def config_devices():
     if not force_cpu:
         if torch.mps.is_available():
             print("Using MPS")
-            device = "mps"
+            return "mps"
 
         elif torch.cuda.is_available():
             print("Using CUDA")
-            device = "cuda"
+            return "cuda"
 
-    else:
-        print("No MPS available, using CPU")
-        device = "cpu"
-
-    return device
+    print("No GPUs available, using CPU")
+    return "cpu"
 
 
 def summarise_mps_memory():

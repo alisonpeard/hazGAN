@@ -212,7 +212,6 @@ class Critic(nn.Module):
 
 
     def forward(self, x, label, condition):
-        print(f"\nx.shape: {x.shape}")
         x = self.process_fields(x)
         label = self.label_to_features(label)
         condition = self.condition_to_features(condition)
