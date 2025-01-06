@@ -1,15 +1,14 @@
 #!/bin/bash
-#SBATCH --job-name=sweepGAN
-#SBATCH --output=logs/sweep_%A_%a.out
-#SBATCH --error=logs/sweep_%A_%a.err
+#SBATCH --job-name=ablation
+#SBATCH --output=logs/ablation%A_%a.out
+#SBATCH --error=logs/ablation%A_%a.err
 #SBATCH --array=1-20%1
 #SBATCH --partition=GPU
 #SBATCH --gres=gpu:3080ti:1
-#SBATCH --time=12:00:00
-
+#SBATCH --time=24:00:00
 
 echo "TASK ID: " $SLURM_ARRAY_TASK_ID
-wandb agent alison-peard/hazGAN/$1
+wandb agent alison-peard/hazGAN-linux/$1
 
 # To run from shell:
 # ------------------

@@ -15,7 +15,7 @@
 
 name: hazGAN-torch
 channels:
-    - apple
+  #- apple
     - conda-forge
     - pytorch-nightly
 dependencies:

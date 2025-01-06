@@ -1,0 +1,55 @@
+wandb_version: 1
+
+augment_policy:
+  value: color,translation,cutout
+batch_size:
+  value: 64
+beta_1:
+  value: 0.8698028671775048
+beta_2:
+  value: 0.9976233462021198
+channel_multiplier:
+  value: 16
+critic_width:
+  value: 64
+dropout:
+  value: 0.2
+ema_momentum:
+  value: 0.9516977614007216
+embedding_depth:
+  value: 16
+epochs:
+  value: 50
+fields:
+  value:
+  - u10
+  - tp
+generator_width:
+  value: 128
+input_policy:
+  value: add
+lambda_gp:
+  value: 1
+latent_dims:
+  value: 128
+lookahead:
+  value: true
+lrelu:
+  value: 0.1
+noise_sd:
+  value: 0.02
+pretrain_size:
+  value: 50000
+target_weights:
+  value:
+  - 0
+  - 0.2
+  - 0.8
+training_balance:
+  value: 5
+use_ema:
+  value: false
+warmup_steps:
+  value: 0.05
+weight_decay:
+  value: 0

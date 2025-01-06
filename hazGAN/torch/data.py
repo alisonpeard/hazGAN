@@ -239,8 +239,8 @@ def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
     # had to modify this to not make weights double automatically
     trainsampler = WeightedRandomSampler(train.data['weight'], len(train), replacement=True)
 
-    trainloader = DataLoader(train, batch_size=batch_size, pin_memory=True, sampler=trainsampler)
-    validloader = DataLoader(valid, batch_size=batch_size, shuffle=False, pin_memory=True)
+    trainloader = DataLoader(train, batch_size=batch_size, sampler=trainsampler)
+    validloader = DataLoader(valid, batch_size=batch_size, shuffle=False)
 
     return trainloader, validloader, metadata
 

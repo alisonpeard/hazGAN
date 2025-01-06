@@ -2,12 +2,11 @@
 For conditional training (no constant fields yet).
 """
 # %% quick settings
-DRY_RUN_EPOCHS       = 50
+DRY_RUN_EPOCHS       = 1
 EVAL_CHANNEL         = 2
 SAMPLES_PER_EPOCH    = 1280     # 1000   # samples per epoch
-TRAIN_SUBSET_SIZE    = 10_000   # 10_000 seems good
 CONTOUR_PLOT         = False
-PROJECT              = 'hazGAN'
+PROJECT              = 'hazGAN-linux'
 
 # %% actual script
 import os
@@ -220,13 +219,13 @@ def main(config):
                                        train_size=config['train_size'],
                                        fields=config['fields'],
                                        thresholds=config['thresholds'],
-                                       device=device, subset=TRAIN_SUBSET_SIZE)
+                                       device=device, subset=config['pretrain_size'],)
     
     # update config with number of labels
     config = update_config(config, 'nconditions', len(metadata['labels']))
 
     # compile model
-    model = WGANGP( device=device, **config)
+    model = WGANGP(device=device, **config)
     model.compile()
 
     # callbacks
@@ -276,10 +275,10 @@ if __name__ == "__main__":
         parser.add_argument('--dry-run', '-d', dest="dry_run", action='store_true', default=False, help='Dry run')
         parser.add_argument('--force-cpu', '-f', dest="force_cpu", action='store_true', default=False, help='Force use CPU (for debugging)')
         args = parser.parse_args()
-        dry_run = args.dry_run
+        dry_run   = args.dry_run
         force_cpu = args.force_cpu
     else:
-        dry_run = True
+        dry_run   = True
         force_cpu = False
 
     # use GPU if available
@@ -316,7 +315,7 @@ if __name__ == "__main__":
     result = main(config)
     print(result)
 
-    notify("Process finished", "Python script", "Finished making pretraining data")
+    # notify("Process finished", "Python script", "Finished making pretraining data")
 
 
 # %% ---DEBUG BELOW THIS LINE----

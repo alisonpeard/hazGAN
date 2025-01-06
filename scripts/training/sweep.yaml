@@ -1,4 +1,4 @@
-project: hazGAN
+project: hazGAN-linux
 program: train.py
 method: bayes
 name: ablation
@@ -7,9 +7,9 @@ metric:
   name: chi_rmse
 
 parameters:
-  # meta-parameters
+  # problem specification
   epochs:
-    values: [250, 500, 1000, 2500]
+    values: [25, 50, 100, 200, 300, 400, 500, 600]
   fields:
     values:
       - ['u10']
@@ -20,6 +20,9 @@ parameters:
       - [0., .4, .6]
       - [0., .2, .8]
       - [0., 0., 1.]
+  pretrain_size:
+    values: [5000, 10000, 25000, 50000, 100000]
+
   # architecture
   lrelu:
     min: 0.01
@@ -55,6 +58,8 @@ parameters:
     values: [True, False]
 
   # optimizer
+  warmup_steps:
+    values: [0, .01, .02, .05, .1, .25]
   beta_1:
     min: 0.1
     max: 0.9

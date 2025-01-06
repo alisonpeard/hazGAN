@@ -2,7 +2,7 @@
 # meta parameters
 epochs:
   desc: Number of epochs to train for
-  value: 100
+  value: 1
 train_size:
   value: 0.8  # 840 # 50
 fields:
@@ -16,6 +16,8 @@ target_weights:
   value: [0., 0.2, 0.8]
 seed:
   value: 42
+pretrain_size:
+  value: 50000
 
 # training features
 training_balance:
