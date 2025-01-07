@@ -24,7 +24,7 @@ training_balance:
   desc: Gulrajani et al. 2017 use 5
   value: 5
 batch_size:
-  value: 64 # for GPU constraints
+  value: 128 # for GPU constraints
 gumbel:
   desc: Train on Gumbel marginals instead of uniform marginals
   value: True

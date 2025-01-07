@@ -1,7 +1,7 @@
 project: hazGAN-linux
 program: train.py
 method: bayes
-name: ablation-3
+name: ablation-4
 metric:
   goal: minimize
   name: chi_rmse
@@ -17,6 +17,7 @@ parameters:
       - ['u10', 'mslp']
   target_weights:
     values:
+      - [.2, .4, .4]
       - [0., .4, .6]
       - [0., .2, .8]
       - [0., 0., 1.]
@@ -33,7 +34,7 @@ parameters:
   input_policy:
     values: ['add', 'concat']
   augment_policy:
-    values: ['color,translation,cutout', '', 'color', 'translation', 'cutout']
+    values: ['color,translation,cutout', '']
   noise_sd:
     values: [0, 0.01, 0.02]
   embedding_depth:

@@ -4,7 +4,6 @@
 #SBATCH --error=logs/ablation%A_%a.err
 #SBATCH --array=1-20%1
 #SBATCH --partition=GPU
-#SBATCH --gres=gpu:3080ti:1
 #SBATCH --time=06:00:00
 
 echo "TASK ID: " $SLURM_ARRAY_TASK_ID

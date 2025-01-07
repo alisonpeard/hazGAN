@@ -138,7 +138,7 @@ class ImageLogger(Callback):
         self.field = field
 
         if conditions is None:
-            conditions = np.linspace(20, 60, nsamples)
+            conditions = np.linspace(15, 60, nsamples)
         
         if labels is None:
             labels = np.array([2] * nsamples)
