@@ -97,8 +97,6 @@ class LRScheduler(callbacks.LearningRateScheduler):
         logs["learning_rate_generator"] = float(
             backend.convert_to_numpy(self.model.generator_optimizer.learning_rate)
         )
-        if wandb.run is not None:
-            wandb.log(logs)
 
 
 

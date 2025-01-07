@@ -244,7 +244,7 @@ def main(config):
             config['epochs'],
             warmup_steps=config['warmup']
             )
-        callbacks.append(scheduler)
+        callbacks = [scheduler] + callbacks
 
 
     # check memory before starting
