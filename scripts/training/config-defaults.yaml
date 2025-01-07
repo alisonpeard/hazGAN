@@ -68,7 +68,6 @@ ema_overwrite_frequency:
   desc: How often [batches] to overwrite weights with ema
   value: 2
 
-
 # architecture
 lrelu:
   desc: Gulrajani et al. 2017 use 0.2

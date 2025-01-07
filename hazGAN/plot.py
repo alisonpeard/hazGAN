@@ -32,7 +32,7 @@ def log_image_to_wandb(fig, name:str, dir:str, **kwargs):
         print("Not logging figure, wandb not intialised.")
 
 
-def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str) -> None:
+def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str, id='') -> None:
     """Plot cross-channel extremal coefficients."""
     def get_channel_ext_coefs(x):
             _, h, w, _ = x.shape
@@ -70,11 +70,11 @@ def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str) -
     fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
     ax[0].set_ylabel('Extremal coeff', fontsize=18);
     
-    log_image_to_wandb(fig, f"extremal_dependence", imdir)
+    log_image_to_wandb(fig, f"extremal_dependence{id}", imdir)
     return fig
 
 
-def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str, channel=0) -> None:
+def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str, channel=0, id={}) -> None:
     """Plot spatial extremal coefficients."""
     ecs_train = pairwise_extremal_coeffs(train_u.astype(np.float32)[..., channel])
     ecs_valid = pairwise_extremal_coeffs(valid_u.astype(np.float32)[..., channel])
@@ -107,12 +107,12 @@ def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str, c
     axs[2].set_title("hazGAN", fontsize=16)
     axs[0].set_ylabel('Extremal coeff.', fontsize=18);
 
-    log_image_to_wandb(fig, f"spatial_dependence", imdir)
+    log_image_to_wandb(fig, f"spatial_dependence{id}", imdir)
     return fig
 
 
 def figure_three(fake_u:np.array, train_u:np.array, imdir:str, channel=0,
-                 cmap="Spectral_r", levels=20, contour=True) -> None:
+                 cmap="Spectral_r", levels=20, contour=True, id='') -> None:
     """Plot the 32 most extreme train and generated percentiles."""
     # prep data to plot
     lon = np.linspace(80, 95, 22)
@@ -167,13 +167,13 @@ def figure_three(fake_u:np.array, train_u:np.array, imdir:str, channel=0,
         cbar_ax = subfig.add_axes([1., .02, .02, .9]) 
         subfig.colorbar(im, cax=cbar_ax)
     fig.suptitle('Percentiles')
-    log_image_to_wandb(fig, f"max_percentiles", imdir)
+    log_image_to_wandb(fig, f"max_percentiles{id}", imdir)
     return fig
 
 
 def figure_four(fake_u, train_u, train_x, params, imdir:str,
                 channel=0, cmap="Spectral_r", levels=20,
-                contour=True) -> None:
+                contour=True, id='') -> None:
     """Plot the 32 most extreme train and generated anomalies."""
     # prep data to plot
     fake_maxima = np.max(fake_u[..., channel], axis=(1, 2))
@@ -239,7 +239,7 @@ def figure_four(fake_u, train_u, train_x, params, imdir:str,
         subfig.colorbar(im, cax=cbar_ax)
 
     fig.suptitle('Percentiles')
-    log_image_to_wandb(fig, f"max_samples", imdir)
+    log_image_to_wandb(fig, f"max_samples{id}", imdir)
 
     return fig
 

@@ -3,7 +3,6 @@ For conditional training (no constant fields yet).
 """
 # %% quick settings
 DRY_RUN_EPOCHS       = 1
-EVAL_CHANNEL         = 2
 SAMPLES_PER_EPOCH    = 1280     # 1000   # samples per epoch
 CONTOUR_PLOT         = False
 PROJECT              = 'hazGAN-linux'
@@ -138,7 +137,7 @@ def evaluate_results(train, model, label:int, config:dict,
 
     # print specs
     print(
-        "\nConditioning on {} {:.2f} - {:.2f} max wind percentiles with label {}"
+        "\nConditioning on {} {:.2f}mps - {:.2f}mps max wind percentiles with label {}"
         .format(
             nsamples,
             lower_bound,
@@ -194,10 +193,10 @@ def evaluate_results(train, model, label:int, config:dict,
 
     print("\nGenerating figures...")
     try:
-        plot.figure_one(fake_u, train_u, valid_u, imdir)
-        plot.figure_two(fake_u, train_u, valid_u, imdir)
-        plot.figure_three(fake_u, train_u, imdir, contour=CONTOUR_PLOT)
-        plot.figure_four(fake_u, train_u, train_x, params, imdir, contour=CONTOUR_PLOT)
+        plot.figure_one(fake_u, train_u, valid_u, imdir, id=label)
+        plot.figure_two(fake_u, train_u, valid_u, imdir, id=label)
+        plot.figure_three(fake_u, train_u, imdir, contour=CONTOUR_PLOT, id=label)
+        plot.figure_four(fake_u, train_u, train_x, params, imdir, contour=CONTOUR_PLOT, id=label)
         # plot.figure_five(fake_u, train_u, imdir)                   # augmented    
         export_sample(fake_u)
         
@@ -261,7 +260,8 @@ def main(config):
                         )
 
     # evaluate
-    evaluate_results(trainloader, model, EVAL_CHANNEL, config, history.history, metadata)
+    evaluate_results(trainloader, model, 1, config, history.history, metadata)
+    evaluate_results(trainloader, model, 2, config, history.history, metadata)
     return history
 
 
