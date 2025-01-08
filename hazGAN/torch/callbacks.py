@@ -32,7 +32,7 @@ class WandbMetricsLogger(Callback):
 
 class LRScheduler(callbacks.LearningRateScheduler):
     def __init__(self, lr:float, epochs:int, samples:int=1, warmup_steps=0.1,
-                 alpha=1e-6, initial_lr=1e-6, verbose=1):
+                 alpha=1e-6, initial_lr=1e-4, verbose=1):
 
         total_steps = epochs * samples
 
@@ -137,11 +137,9 @@ class ImageLogger(Callback):
         self.frequency = frequency
         self.field = field
 
-        if conditions is None:
-            conditions = np.linspace(15, 60, nsamples)
-        
-        if labels is None:
-            labels = np.array([2] * nsamples)
+        # assign default values
+        conditions = conditions or np.linspace(15, 60, nsamples)
+        labels = labels or [2] * nsamples
    
         self.nsamples = nsamples
         self.conditions = conditions
@@ -156,15 +154,19 @@ class ImageLogger(Callback):
         generated = generated[:, self.field, ::-1, :]
         return generated
 
-    def on_train_begin(self, logs:dict={}) -> None:
+
+    def on_train_begin(self, logs=None) -> None:
         """Initialise fixed noise."""
+        logs = logs or {}
         if self.noise is None:
             self.noise = self.model.latent_space_distn(
                 (self.nsamples, self.model.latent_dim),
                 seed=self.seed
                 )
     
-    def on_epoch_end(self, epoch:int, logs:dict={}) -> None:
+
+    def on_epoch_end(self, epoch:int, logs=None) -> None:
+        logs = logs or {}
         if (epoch % self.frequency == 0):
             clear_output(wait=True)
             generated = self._sample()

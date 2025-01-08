@@ -12,6 +12,7 @@ import os
 import sys
 import yaml
 import argparse
+import random
 import wandb
 from environs import Env
 import numpy as np
@@ -301,8 +302,12 @@ if __name__ == "__main__":
         runname = wandb.run.name
         config = wandb.config
     
-    # format config
-    config = update_config(config, 'seed', np.random.randint(0, 100))
+    # format random 
+    # config = update_config(config, 'seed', np.random.randint(0, 100))
+    print("Random Seed: ", config['seed'])
+    random.seed(config['seed'])
+    torch.manual_seed(config['seed'])
+    torch.use_deterministic_algorithms(True) # Needed for reproducible results
     
     # make dir to save results
     rundir = os.path.join(workdir, "_wandb-runs", runname)
