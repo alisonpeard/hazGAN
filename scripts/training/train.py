@@ -304,10 +304,11 @@ if __name__ == "__main__":
     
     # format random 
     # config = update_config(config, 'seed', np.random.randint(0, 100))
+    # note, sampling won't be fully deterministic on CUDA
     print("Random Seed: ", config['seed'])
     random.seed(config['seed'])
     torch.manual_seed(config['seed'])
-    torch.use_deterministic_algorithms(True) # Needed for reproducible results
+    torch.use_deterministic_algorithms(True, warn_only=True)
     
     # make dir to save results
     rundir = os.path.join(workdir, "_wandb-runs", runname)

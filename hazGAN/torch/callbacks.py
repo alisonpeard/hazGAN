@@ -32,7 +32,7 @@ class WandbMetricsLogger(Callback):
 
 class LRScheduler(callbacks.LearningRateScheduler):
     def __init__(self, lr:float, epochs:int, samples:int=1, warmup_steps=0.1,
-                 alpha=1e-6, initial_lr=1e-4, verbose=1):
+                 alpha=1e-4, initial_lr=1e-4, verbose=1):
 
         total_steps = epochs * samples
 

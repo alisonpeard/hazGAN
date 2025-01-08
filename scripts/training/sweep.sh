@@ -4,7 +4,7 @@
 #SBATCH --error=logs/ablation%A_%a.err
 #SBATCH --array=1-20%1
 #SBATCH --partition=GPU
-#SBATCH --time=06:00:00
+#SBATCH --time=12:00:00
 
 echo "TASK ID: " $SLURM_ARRAY_TASK_ID
 wandb agent alison-peard/hazGAN-linux/$1
