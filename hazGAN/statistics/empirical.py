@@ -115,7 +115,7 @@ class GenPareto(Empirical):
 
 
     def _semicdf(self, x) -> np.ndarray:
-        """(1.3) H&T for $\ksi\leq 0$ and upper tail."""
+        r"""(1.3) H&T for $\xi \leq 0$ and upper tail."""
         # empirical base
         u = self.ecdf(x)
 
