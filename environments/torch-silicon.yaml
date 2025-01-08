@@ -13,7 +13,7 @@
 # 2. Metal compatibility: https://pypi.org/project/tensorflow-metal/
 # 3. https://developer.apple.com/metal/tensorflow-plugin/
 
-name: hazGAN-torch
+name: hazGAN
 channels:
   #- apple
     - conda-forge
@@ -33,7 +33,7 @@ dependencies:
     - xarray
     - xagg
     - rioxarray
-    - gdal==3.6.3
+    # - gdal==3.6.3 # conflicts with jpeg so choose...
     - hdf5
     - netcdf4
     - shapely>=2.0
@@ -42,6 +42,8 @@ dependencies:
     - matplotlib
     - cartopy # for basemaps
     - seaborn
+    - libpng # new
+    - jpeg   # new
     - pyarrow>=10.0.1
     - pytorch-nightly::pytorch
     - pytorch-nightly::torchaudio
