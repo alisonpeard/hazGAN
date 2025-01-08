@@ -206,8 +206,7 @@ class Critic(nn.Module):
             nn.Linear(nfields * 5 * 5, K * nfields),
             nn.LayerNorm((K * nfields)),
             nn.LeakyReLU(lrelu),
-            nn.Linear(K * nfields, 1),
-            nn.Sigmoid() # maybe, makes generator and critic very different scales
+            nn.Linear(K * nfields, 1)
         ) # output shape: (batch_size, 1)
 
 
