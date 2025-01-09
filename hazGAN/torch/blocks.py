@@ -64,6 +64,16 @@ class GumbelBlock(nn.Module):
         return x
 
 
+class injectNoise(nn.Module):
+    def __init__(self, channels):
+        super(injectNoise, self).__init__()
+        self.weight = nn.Parameter(torch.zeros(1, channels, 1, 1))
+
+    def forward(self, x):
+        noise = torch.randn((x.shape[0], 1, x.shape[2], x.shape[3]), device=x.device)
+        return x + self.weight * noise
+
+
 class ResidualUpBlock(nn.Module):
     """Single residual block for upsampling (increasing resolution)."""
     def __init__(self,
@@ -72,9 +82,10 @@ class ResidualUpBlock(nn.Module):
                  kernel_size:Tuple,
                  stride:int=1,
                  padding:int=0,
+                 lrelu:float=0.2,
                  upsample_mode:str='bilinear',
                  dropout:Union[None, float]=None,
-                 noise_sd:Union[None, float]=None, 
+                 noise:Union[None, float]=None, 
                  **kwargs
                  ) -> None:
         super().__init__()
@@ -83,20 +94,18 @@ class ResidualUpBlock(nn.Module):
 
         self.deconv = nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride, padding)
         self.norm = nn.BatchNorm2d(out_channels)
-        self.activation = nn.ReLU()
+        self.activation = nn.LeakyReLU(lrelu)
         self.upsample = lambda x: upsample(x, kernel_size, stride, padding, upsample_mode)
         self.project = nn.Conv2d(self.in_channels, self.out_channels, 1, 1)
 
         # regularisation attributes
         self.dropout = nn.Dropout2d(dropout) if dropout is not None else nn.Identity()
-        self.noise_sd = noise_sd
+        self.noise   = injectNoise(out_channels) if noise else nn.Identity()
     
 
     def regularise(self, x):
         x = self.dropout(x)
-        if self.training and self.noise_sd is not None:
-            noise = torch.randn_like(x) * self.noise_sd
-            x = x + noise
+        x = self.noise(x)
         return x
 
     
@@ -121,7 +130,7 @@ class ResidualDownBlock(nn.Module):
                  padding:Union[int, Tuple[int, int]]=0,
                  lrelu:float=0.2,
                  dropout:Union[None, float]=None,
-                 noise_sd:Union[None, float]=None, 
+                 noise:Union[None, float]=None, 
                  **kwargs) -> None:
         super().__init__()
         # attributes
@@ -134,17 +143,17 @@ class ResidualDownBlock(nn.Module):
         # layers
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
         self.norm = None
-        self._init_hook_handle = self.register_forward_pre_hook(self._initialise_norm)
+        self._init_hook_handle = self.register_forward_pre_hook(self._initialise_layer_norm)
         self.activation = nn.LeakyReLU(lrelu)
         self.downsample = lambda x: downsample(x, kernel_size, stride, padding)
         self.project = nn.Conv2d(self.in_channels, self.out_channels, 1, 1)
 
         # regularisation layers
         self.dropout = nn.Dropout2d(dropout) if dropout is not None else nn.Identity()
-        self.noise_sd = noise_sd
+        self.noise   = injectNoise(out_channels) if noise else nn.Identity()
 
 
-    def _initialise_norm(self, module, x):
+    def _initialise_layer_norm(self, module, x):
         if self.norm is None:
             input_size = x[0].size()[2:]
             output_size = downsize(input_size, self.kernel_size, self.stride, self.padding)
@@ -154,16 +163,9 @@ class ResidualDownBlock(nn.Module):
             self._init_hook_handle.remove()
 
 
-    def additive_noise(self, x:torch.Tensor) -> torch.Tensor:
-        if self.training and self.noise_sd is not None:
-            noise = torch.randn_like(x) * self.noise_sd
-            x = x + noise
-        return x
-
-
     def regularise(self, x:torch.Tensor) -> torch.Tensor:
         x = self.dropout(x)
-        x = self.additive_noise(x)
+        x = self.noise(x)
         return x
     
     

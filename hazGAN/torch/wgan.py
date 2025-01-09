@@ -52,8 +52,6 @@ class infInitialisedMean(keras.metrics.Mean):
         self.update_state(float('inf'))
 
 
-
-
 def locals_to_config(locals):
     """Convert local variables to a dictionary."""
     del locals['self']
@@ -74,7 +72,7 @@ class WGANGP(keras.Model):
                  nconditions=3, training_balance=5, lookahead=False,
                  generator_width=128, critic_width=128,
                  lrelu=0.2, momentum=0.1, bias=False,
-                 dropout=None, noise_sd=None,
+                 dropout=None, noise=None,
                  # optimizer kwargs
                  optimizer='Adam', learning_rate=1e-4, beta_1=0.5, beta_2=0.9,
                  weight_decay=0., use_ema=False, ema_momentum=None, ema_overwrite_frequency=None,
@@ -111,7 +109,7 @@ class WGANGP(keras.Model):
         modelkws = dict(
             nfields=self.nfields, channel_multiplier=channel_multiplier, input_policy=input_policy,
             latent_dims=latent_dims, nconditions=nconditions, embedding_depth=embedding_depth,
-            lrelu=lrelu, momentum=momentum, dropout=dropout, noise_sd=noise_sd, bias=bias)
+            lrelu=lrelu, momentum=momentum, dropout=dropout, noise=noise, bias=bias)
         
         self.generator = Generator(width=generator_width, **modelkws).to(self.device)
         self.critic    = Critic(width=critic_width, **modelkws).to(self.device)

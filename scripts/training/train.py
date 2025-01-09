@@ -173,24 +173,25 @@ def evaluate_results(train, model, label:int, config:dict,
     print("fake_u.shape: {}".format(fake_u.shape))
     print("params.shape: {}".format(params.shape))
 
-    # Quick plot of sampling rates -- delete later
-    fig, ax = plt.subplots(figsize=(12, 6), layout='tight')
-    ax.plot(history['weight_0'], label="normal climate")
-    ax.plot(history['weight_1'], linestyle='dashed', label="stormy")
-    ax.plot(history['weight_2'], label='very stormy')
-    ax.legend()
-    ax.set_ylabel("Sampling rate")
-    ax.set_xlabel("Epoch")
-    fig.savefig(os.path.join(rundir, "sampling_rates.png"), **plot_kwargs)
+    if dry_run:
+        # Quick plot of sampling rates -- delete later
+        fig, ax = plt.subplots(figsize=(12, 6), layout='tight')
+        ax.plot(history['weight_0'], label="normal climate")
+        ax.plot(history['weight_1'], linestyle='dashed', label="stormy")
+        ax.plot(history['weight_2'], label='very stormy')
+        ax.legend()
+        ax.set_ylabel("Sampling rate")
+        ax.set_xlabel("Epoch")
+        fig.savefig(os.path.join(rundir, "sampling_rates.png"), **plot_kwargs)
 
-    # Quick plot of learning rate -- delete later
-    fig, ax = plt.subplots(figsize=(12, 6), layout='tight')
-    ax.plot(history['learning_rate_generator'], label="generator")
-    ax.plot(history['learning_rate_critic'], label="discriminator")
-    ax.legend()
-    ax.set_ylabel("Learning rate")
-    ax.set_xlabel("Epoch")
-    fig.savefig(os.path.join(rundir, "learning_rate.png"), **plot_kwargs)
+        # Quick plot of learning rate -- delete later
+        fig, ax = plt.subplots(figsize=(12, 6), layout='tight')
+        ax.plot(history['learning_rate_generator'], label="generator")
+        ax.plot(history['learning_rate_critic'], label="discriminator")
+        ax.legend()
+        ax.set_ylabel("Learning rate")
+        ax.set_xlabel("Epoch")
+        fig.savefig(os.path.join(rundir, "learning_rate.png"), **plot_kwargs)
 
     print("\nGenerating figures...")
     try:

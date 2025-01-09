@@ -50,7 +50,7 @@ class Generator(nn.Module):
     def __init__(self, nfields, channel_multiplier, width,
     input_policy, lrelu, embedding_depth, nconditions,
     latent_dims, momentum,
-    dropout=None, noise_sd=None, bias=False,
+    dropout=None, noise=False, bias=False,
     **kwargs) -> None:
         super(Generator, self).__init__()
 
@@ -107,7 +107,7 @@ class Generator(nn.Module):
         ) # output shape: (batch_size, width0 * nfields, 5, 5)
 
         # f(x) = (x-1)*s + k
-        reskws = dict(bias=bias, dropout=dropout, noise_sd=noise_sd, momentum=momentum, lrelu=lrelu)
+        reskws = dict(bias=bias, dropout=dropout, noise=noise, momentum=momentum, lrelu=lrelu)
         self.features_to_image = nn.Sequential(
             ResidualUpBlock(self.input_factor * self.width0 * nfields, self.width1, (3, 3), **reskws),
             ResidualUpBlock(self.width1, self.width1, (2, 4), 2, **reskws),
@@ -139,7 +139,7 @@ class Critic(nn.Module):
     def __init__(self, nfields, channel_multiplier, width,
     input_policy, embedding_depth, nconditions,
     lrelu,
-    dropout=None, noise_sd=None, bias=False,
+    dropout=None, noise=False, bias=False,
     **kwargs) -> None:
         super(Critic, self).__init__()
 
@@ -188,7 +188,7 @@ class Critic(nn.Module):
         ) # output shape: (batch_size, width0 * nfields, 20, 24)
 
         # f(x) = (x-k)/s + 1)
-        reskws = dict(bias=bias, dropout=dropout, noise_sd=noise_sd, lrelu=lrelu)
+        reskws = dict(bias=bias, dropout=dropout, noise=noise, lrelu=lrelu)
         self.image_to_features = nn.Sequential(
             ResidualDownBlock(self.input_factor * self.width0 * nfields, self.width0, (3, 3), **reskws),
             ResidualDownBlock(self.width0, self.width1, (3, 4), **reskws),

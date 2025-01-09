@@ -84,9 +84,9 @@ augment_policy:
 dropout:
   desc: Ensemble of simpler models, [None, 0.8, 0.9]
   value:
-noise_sd:
+noise: False
   desc: Makes weights more robust, [None, 0.01, 0.02]
-  value: 0.01
+  value: True
 embedding_depth:
   desc: Complexity of label/conditioning embedding
   value: 32
