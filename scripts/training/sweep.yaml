@@ -1,7 +1,7 @@
 project: hazGAN-linux
 program: train.py
 method: bayes
-name: ablation-4
+name: ablation-5
 metric:
   goal: minimize
   name: chi_rmse

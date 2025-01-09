@@ -253,15 +253,13 @@ class WGANGP(keras.Model):
     def _train_critic(self, data, label, condition, batch_size) -> None:
         noise = self.latent_space_distn((batch_size, self.latent_dim))
         fake_data = self.generator(noise, label, condition)
-        print("applying critic to real data")
         score_real = self.critic(self.augment(data), label, condition)
-        print("applying critic to fake data")
         score_fake = self.critic(self.augment(fake_data), label, condition)
 
         gradient_penalty = self._gradient_penalty(data, fake_data, condition, label)
         variance_penalty = self._variance_penalty(data, fake_data)
 
-        self.zero_grad()
+        self.zero_grad(set_to_none=True)
         loss = ops.mean(score_fake) - ops.mean(score_real)
         
         # add penalties if they're switched on 
@@ -269,26 +267,27 @@ class WGANGP(keras.Model):
             loss += self.lambda_gp * gradient_penalty
         if self.lambda_var > 0:
             loss += self.lambda_var * variance_penalty
+        loss += + (0.001) * torch.mean(score_real ** 2) # https://arxiv.org/abs/1801.04406
         loss.backward()
 
-        grads = [v.value.grad for v in self.critic.trainable_weights]
         with torch.no_grad():
+            grads = [v.value.grad for v in self.critic.trainable_weights]
             self.critic_optimizer.apply(grads, self.critic.trainable_weights)
-        grad_norms = [ops.norm(grad) for grad in grads]
+            grad_norms = [ops.norm(grad) for grad in grads]
 
-        self.critic_loss_tracker.update_state(loss)
+        self.critic_loss_tracker.update_state(loss.item())
         self.value_function_tracker.update_state(-loss)
-        self.critic_real_tracker.update_state(ops.mean(score_real))
-        self.critic_fake_tracker.update_state(ops.mean(score_fake))
-        self.gradient_penalty_tracker.update_state(gradient_penalty)
-        self.critic_grad_norm.update_state(ops.norm(grad_norms))
+        self.critic_real_tracker.update_state(ops.mean(score_real).item())
+        self.critic_fake_tracker.update_state(ops.mean(score_fake).item())
+        self.gradient_penalty_tracker.update_state(gradient_penalty.item())
+        self.critic_grad_norm.update_state(ops.norm(grad_norms).item())
         self.critic_steps.update_state(1)
 
         # update image statistics
-        self.fake_mean.update_state(ops.mean(fake_data))
-        self.real_mean.update_state(ops.mean(data))
-        self.fake_std.update_state(ops.std(fake_data))
-        self.real_std.update_state(ops.std(data))
+        self.fake_mean.update_state(ops.mean(fake_data).item())
+        self.real_mean.update_state(ops.mean(data).item())
+        self.fake_std.update_state(ops.std(fake_data).item())
+        self.real_std.update_state(ops.std(data).item())
 
 
     def _chi_wrapper(self, real, fake):
@@ -306,18 +305,18 @@ class WGANGP(keras.Model):
         critic_score = self.critic(self.augment(generated_data), label, condition)
         chi = self._chi_wrapper(self._uniform(data), self._uniform(generated_data))
 
-        self.zero_grad()
+        self.zero_grad(set_to_none=True)
         loss = -ops.mean(critic_score)
         loss.backward()
 
-        grads = [v.value.grad for v in self.generator.trainable_weights]
         with torch.no_grad():
+            grads = [v.value.grad for v in self.generator.trainable_weights]
             self.generator_optimizer.apply(grads, self.generator.trainable_weights)
-        grad_norms = [ops.norm(grad) for grad in grads]
+            grad_norms = [ops.norm(grad) for grad in grads]
 
-        self.generator_loss_tracker.update_state(loss)
-        self.chi_rmse_tracker.update_state(chi)
-        self.generator_grad_norm.update_state(ops.norm(grad_norms))
+        self.generator_loss_tracker.update_state(loss.item())
+        self.chi_rmse_tracker.update_state(chi.item())
+        self.generator_grad_norm.update_state(ops.norm(grad_norms).item())
         self.generator_steps.update_state(1)
 
 
