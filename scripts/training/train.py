@@ -259,6 +259,7 @@ def main(config):
                         steps_per_epoch=(SAMPLES_PER_EPOCH // config['batch_size']),
                         target_weights=torch.tensor(config['target_weights']),
                         validation_data=validloader,
+                        weight_update_frequency=config['weight_update_frequency'],
                         )
 
     # evaluate

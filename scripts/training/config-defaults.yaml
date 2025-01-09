@@ -35,6 +35,9 @@ lambda_var:
 lookahead:
   desc: Add predictor step (saddles), [True, False]
   value: False
+weight_update_frequency:
+  desc: How often (epochs) to shift the weight ratios of the sample classes
+  value: 1000
 
 # optimizer
 optimizer:

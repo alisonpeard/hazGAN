@@ -433,6 +433,7 @@ class WGANGP(keras.Model):
         steps_per_epoch=None,
         validation_steps=None,
         validation_batch_size=None,
+        weight_update_frequency=1,
         validation_freq=1,
         target_weights=torch.tensor([0., .5, .5]),
     ):
@@ -568,9 +569,10 @@ class WGANGP(keras.Model):
             callbacks.on_epoch_end(epoch, epoch_logs)
 
             # Update dataloader to new resampling weights
-            x, weights = update_dataloader(x, epoch, weight_iterator)
-            epoch_iterator = update_epoch_iterator(x)
-            self._symbolic_build(iterator=epoch_iterator)
+            if epoch % weight_update_frequency == 0:
+                x, weights = update_dataloader(x, epoch, weight_iterator)
+                epoch_iterator = update_epoch_iterator(x)
+                self._symbolic_build(iterator=epoch_iterator)
             epoch_iterator.reset()
 
             training_logs = epoch_logs
