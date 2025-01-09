@@ -178,6 +178,7 @@ class ResidualDownBlock(nn.Module):
         return x + identity
 
 
+    
 # %% tests
 if __name__ == "__main__":
     print('Running tests...')

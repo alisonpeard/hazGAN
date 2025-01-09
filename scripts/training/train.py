@@ -75,6 +75,23 @@ def config_devices():
     return "cpu"
 
 
+def seed_everything(seed=42):
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.use_deterministic_algorithms(True, warn_only=True)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    
+    if torch.mps.is_available():
+        torch.mps.manual_seed(seed)
+
+
 def summarise_mps_memory():
         current = torch.mps.current_allocated_memory() / 1e9
         driver  = torch.mps.driver_allocated_memory()  / 1e9
@@ -172,26 +189,6 @@ def evaluate_results(train, model, label:int, config:dict,
     print("train_u.shape: {}".format(train_u.shape))
     print("fake_u.shape: {}".format(fake_u.shape))
     print("params.shape: {}".format(params.shape))
-
-    # if dry_run:
-    #     # Quick plot of sampling rates -- delete later
-    #     fig, ax = plt.subplots(figsize=(12, 6), layout='tight')
-    #     ax.plot(history['weight_0'], label="normal climate")
-    #     ax.plot(history['weight_1'], linestyle='dashed', label="stormy")
-    #     ax.plot(history['weight_2'], label='very stormy')
-    #     ax.legend()
-    #     ax.set_ylabel("Sampling rate")
-    #     ax.set_xlabel("Epoch")
-    #     fig.savefig(os.path.join(rundir, "sampling_rates.png"), **plot_kwargs)
-
-    #     # Quick plot of learning rate -- delete later
-    #     fig, ax = plt.subplots(figsize=(12, 6), layout='tight')
-    #     ax.plot(history['learning_rate_generator'], label="generator")
-    #     ax.plot(history['learning_rate_critic'], label="discriminator")
-    #     ax.legend()
-    #     ax.set_ylabel("Learning rate")
-    #     ax.set_xlabel("Epoch")
-    #     fig.savefig(os.path.join(rundir, "learning_rate.png"), **plot_kwargs)
 
     print("\nGenerating figures...")
     try:
@@ -308,9 +305,7 @@ if __name__ == "__main__":
     # config = update_config(config, 'seed', np.random.randint(0, 100))
     # note, sampling won't be fully deterministic on CUDA
     print("Random Seed: ", config['seed'])
-    random.seed(config['seed'])
-    torch.manual_seed(config['seed'])
-    torch.use_deterministic_algorithms(True, warn_only=True)
+    seed_everything(config['seed'])
     
     # make dir to save results
     rundir = os.path.join(workdir, "_wandb-runs", runname)

@@ -218,6 +218,7 @@ class WGANGP(keras.Model):
         self.critic_valid_tracker.update_state(score_valid)
         return {'critic': self.critic_valid_tracker.result()}
 
+
     def __repr__(self) -> str:
         out = "\nWasserstein GAN with Gradient Penalty\n"
         out += "-------------------------------------\n"
@@ -225,6 +226,7 @@ class WGANGP(keras.Model):
         for key, value in config.items():
             out += f"{key}: {value}\n"
         return out
+
 
     def _gradient_penalty(self, data, fake_data, condition, label):
         eps = keras.random.uniform((data.shape[0], 1, 1, 1))
@@ -239,6 +241,16 @@ class WGANGP(keras.Model):
         gradient_penalty = self.lambda_gp * ops.mean((gradient_norm - 1) ** 2)
         return gradient_penalty
     
+ 
+    def _r1_penalty(self, real_data, real_score):
+        # def forward(self, prediction_real: torch.Tensor, real_sample: torch.Tensor) -> torch.Tensor:
+        #     grad_real           = torch.autograd.grad(outputs=prediction_real.sum(), inputs=real_sample, create_graph=True)[0]
+        #     regularization_loss = grad_real.pow(2).view(grad_real.shape[0], -1).sum(1).mean()
+        #     return regularization_loss
+        gradients  = grad(real_score.sum(), real_data, create_graph=True)[0]
+        r1_penalty = gradients.pow(2).view(gradients.shape[0], -1).sum(1).mean()
+        return r1_penalty
+
 
     def _variance_penalty(self, data, fake_data):
         """Maximise variance or minimise variance difference."""
@@ -258,6 +270,7 @@ class WGANGP(keras.Model):
 
         gradient_penalty = self._gradient_penalty(data, fake_data, condition, label)
         variance_penalty = self._variance_penalty(data, fake_data)
+        r1_penalty = self._r1_penalty(data, score_real)
 
         self.zero_grad(set_to_none=True)
         loss = ops.mean(score_fake) - ops.mean(score_real)
@@ -267,7 +280,8 @@ class WGANGP(keras.Model):
             loss += self.lambda_gp * gradient_penalty
         if self.lambda_var > 0:
             loss += self.lambda_var * variance_penalty
-        loss += + (0.001) * torch.mean(score_real ** 2) # https://arxiv.org/abs/1801.04406
+        # loss += (0.001) * torch.mean(score_real ** 2) # constrains critic output drift (ProGAN)
+        loss += 0.001 * r1_penalty # https://arxiv.org/abs/1801.04406
         loss.backward()
 
         with torch.no_grad():
