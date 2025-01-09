@@ -7,7 +7,7 @@ References:
 """
 # %%
 from functools import partial
-from torch import nn, cat
+from torch import nn, cat, std
 
 from .blocks import ResidualUpBlock
 from .blocks import ResidualDownBlock
@@ -210,12 +210,20 @@ class Critic(nn.Module):
         ) # output shape: (batch_size, 1)
 
 
+    def minibatch_std(self, x):
+            batch_statistics = (
+                std(x, dim=0).mean().repeat(x.shape[0], 1, x.shape[2], x.shape[3])
+            )
+            return cat([x, batch_statistics], dim=1)
+        
+    
     def forward(self, x, label, condition):
         x = self.process_fields(x)
         label = self.label_to_features(label)
         condition = self.condition_to_features(condition)
         x = self.combine_inputs(x, label, condition)
         x = self.image_to_features(x)
+        x = self.minibatch_std(x)
         x = self.features_to_score(x)
         return x
     
