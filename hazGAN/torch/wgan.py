@@ -227,7 +227,7 @@ class WGANGP(keras.Model):
             out += f"{key}: {value}\n"
         return out
 
-
+    # penalties
     def _gradient_penalty(self, data, fake_data, condition, label):
         eps = keras.random.uniform((data.shape[0], 1, 1, 1))
         differences = fake_data - data
@@ -243,13 +243,17 @@ class WGANGP(keras.Model):
     
  
     def _r1_penalty(self, real_data, real_score):
-        # def forward(self, prediction_real: torch.Tensor, real_sample: torch.Tensor) -> torch.Tensor:
-        #     grad_real           = torch.autograd.grad(outputs=prediction_real.sum(), inputs=real_sample, create_graph=True)[0]
-        #     regularization_loss = grad_real.pow(2).view(grad_real.shape[0], -1).sum(1).mean()
-        #     return regularization_loss
         gradients  = grad(real_score.sum(), real_data, create_graph=True)[0]
         r1_penalty = gradients.pow(2).reshape(gradients.shape[0], -1).sum(1).mean()
         return r1_penalty
+
+
+    def _smoothness_penalty(self, fake_data, xy_ratio=.75):
+        """Penalise rapid changes in the spatial gradient."""
+        x_gradient = torch.abs(torch.diff(fake_data, dim=2))
+        y_gradient = torch.abs(torch.diff(fake_data, dim=3))
+        smoothness_penalty = xy_ratio * torch.mean(x_gradient) + torch.mean(y_gradient)
+        return smoothness_penalty
 
 
     def _variance_penalty(self, data, fake_data):
@@ -263,16 +267,19 @@ class WGANGP(keras.Model):
 
     @lookahead('generator')
     def _train_critic(self, data, label, condition, batch_size) -> None:
+        self.critic.requires_grad_(True)
+        self.generator.requires_grad_(False)
+        data.requires_grad_(True) # need this for penalty terms
+
         noise = self.latent_space_distn((batch_size, self.latent_dim))
-        fake_data = self.generator(noise, label, condition)
-        data = data.requires_grad_()
-        # fake_data.requires_grad() # needed?
+        fake_data = self.generator(noise, label, condition).detach()
         score_real = self.critic(self.augment(data), label, condition)
         score_fake = self.critic(self.augment(fake_data), label, condition)
 
         gradient_penalty = self._gradient_penalty(data, fake_data, condition, label)
         variance_penalty = self._variance_penalty(data, fake_data)
         r1_penalty = self._r1_penalty(data, score_real)
+        smoothness_penalty = self._smoothness_penalty(fake_data)
 
         self.zero_grad(set_to_none=True)
         loss = ops.mean(score_fake) - ops.mean(score_real)
@@ -282,7 +289,8 @@ class WGANGP(keras.Model):
             loss += self.lambda_gp * gradient_penalty
         if self.lambda_var > 0:
             loss += self.lambda_var * variance_penalty
-        # loss += (0.001) * torch.mean(score_real ** 2) # constrains critic output drift (ProGAN)
+        loss += (0.001) * torch.mean(score_real ** 2) # constrains critic output drift (ProGAN)
+        loss += 10 * smoothness_penalty # https://arxiv.org/abs/1801.04406
         loss += 0.001 * r1_penalty # https://arxiv.org/abs/1801.04406
         loss.backward()
 
@@ -316,6 +324,8 @@ class WGANGP(keras.Model):
 
     @lookahead('critic')
     def _train_generator(self, data, label, condition, batch_size) -> None:
+        self.critic.requires_grad_(False)
+        self.generator.requires_grad_(True)
         noise = self.latent_space_distn((batch_size, self.latent_dim))
         generated_data = self.generator(noise, label, condition)
         critic_score = self.critic(self.augment(generated_data), label, condition)
