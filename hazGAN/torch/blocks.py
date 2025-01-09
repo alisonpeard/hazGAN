@@ -2,7 +2,7 @@
 from typing import Tuple, Union
 import numpy as np
 import torch
-from torch import nn
+from torch import nn, std, cat
 import torch.nn.functional as F
 from torch.nn.utils.parametrizations import spectral_norm
 
@@ -73,6 +73,16 @@ class injectNoise(nn.Module):
         noise = torch.randn((x.shape[0], 1, x.shape[2], x.shape[3]), device=x.device)
         return x + self.weight * noise
 
+
+class MinibatchDev(nn.Module):
+    def __init__(self):
+        super(MinibatchDev, self).__init__()
+
+    def forward(self, x):
+        batch_statistics = (
+            std(x, dim=0).mean().repeat(x.shape[0], 1, x.shape[2], x.shape[3])
+        )
+        return cat([x, batch_statistics], dim=1)
 
 class ResidualUpBlock(nn.Module):
     """Single residual block for upsampling (increasing resolution)."""

@@ -248,7 +248,7 @@ class WGANGP(keras.Model):
         #     regularization_loss = grad_real.pow(2).view(grad_real.shape[0], -1).sum(1).mean()
         #     return regularization_loss
         gradients  = grad(real_score.sum(), real_data, create_graph=True)[0]
-        r1_penalty = gradients.pow(2).view(gradients.shape[0], -1).sum(1).mean()
+        r1_penalty = gradients.pow(2).reshape(gradients.shape[0], -1).sum(1).mean()
         return r1_penalty
 
 
@@ -265,6 +265,8 @@ class WGANGP(keras.Model):
     def _train_critic(self, data, label, condition, batch_size) -> None:
         noise = self.latent_space_distn((batch_size, self.latent_dim))
         fake_data = self.generator(noise, label, condition)
+        data = data.requires_grad_()
+        # fake_data.requires_grad() # needed?
         score_real = self.critic(self.augment(data), label, condition)
         score_fake = self.critic(self.augment(fake_data), label, condition)
 

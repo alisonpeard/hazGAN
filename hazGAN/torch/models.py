@@ -12,6 +12,7 @@ from torch import nn, cat, std
 from .blocks import ResidualUpBlock
 from .blocks import ResidualDownBlock
 from .blocks import GumbelBlock
+from .blocks import MinibatchDev
 
 __all__ = ['Generator', 'Critic']
 
@@ -194,7 +195,8 @@ class Critic(nn.Module):
             ResidualDownBlock(self.width0, self.width1, (3, 4), **reskws),
             ResidualDownBlock(self.width1, self.width1, (3, 4), **reskws),
             ResidualDownBlock(self.width1, self.width2, (2, 4), 2, **reskws),
-            ResidualDownBlock(self.width2, self.width2, (3, 3), **reskws),
+            MinibatchDev(),
+            ResidualDownBlock(self.width2 + 1, self.width2, (3, 3), **reskws),
         ) # output shape: (batch_size, width2, 5, 5)
 
 
@@ -208,13 +210,6 @@ class Critic(nn.Module):
             nn.LeakyReLU(lrelu),
             nn.Linear(K * nfields, 1)
         ) # output shape: (batch_size, 1)
-
-
-    def minibatch_std(self, x):
-            batch_statistics = (
-                std(x, dim=0).mean().repeat(x.shape[0], 1, x.shape[2], x.shape[3])
-            )
-            return cat([x, batch_statistics], dim=1)
         
     
     def forward(self, x, label, condition):
@@ -223,7 +218,6 @@ class Critic(nn.Module):
         condition = self.condition_to_features(condition)
         x = self.combine_inputs(x, label, condition)
         x = self.image_to_features(x)
-        x = self.minibatch_std(x)
         x = self.features_to_score(x)
         return x
     

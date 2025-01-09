@@ -9,6 +9,7 @@ PROJECT              = 'hazGAN-linux'
 
 # %% actual script
 import os
+os.environ["KERAS_BACKEND"] = "torch"
 import sys
 import yaml
 import argparse
@@ -19,7 +20,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import torch
-os.environ["KERAS_BACKEND"] = "torch"
 from keras.callbacks import ModelCheckpoint
 
 from hazGAN import plot
