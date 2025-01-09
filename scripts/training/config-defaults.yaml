@@ -83,8 +83,8 @@ augment_policy:
   value: 'color,translation,cutout'
 dropout:
   desc: Ensemble of simpler models, [None, 0.8, 0.9]
-  value:
-noise: False
+  value: False
+noise:
   desc: Makes weights more robust, [None, 0.01, 0.02]
   value: True
 embedding_depth:
