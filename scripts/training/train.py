@@ -139,74 +139,77 @@ def evaluate_results(train, model, label:int, config:dict,
                      ) -> None:
     """Make some key figures to view results.
     """
-    save_config(rundir, config)
-    print("Gathering labels and conditions...")
+    if config['target_weights'][label] > 0.
+        save_config(rundir, config)
+        print("Gathering labels and conditions...")
 
-    # filter training data
-    label_indices = (train.dataset.data['label'] == label).nonzero().reshape(-1)
-    train_subset = train.dataset[label_indices.tolist()]
-    condition_subset = train_subset['condition'].cpu().numpy()
+        # filter training data
+        label_indices = (train.dataset.data['label'] == label).nonzero().reshape(-1)
+        train_subset = train.dataset[label_indices.tolist()]
+        condition_subset = train_subset['condition'].cpu().numpy()
 
-    # make generated data for same labels and conditions
-    nsamples = len(condition_subset)
-    condition = condition_subset
-    labels = np.tile(label, len(condition))
-    lower_bound = np.floor(condition_subset.min())
-    upper_bound = np.ceil(condition_subset.max())
+        # make generated data for same labels and conditions
+        nsamples = len(condition_subset)
+        condition = condition_subset
+        labels = np.tile(label, len(condition))
+        lower_bound = np.floor(condition_subset.min())
+        upper_bound = np.ceil(condition_subset.max())
 
-    # print specs
-    print(
-        "\nConditioning on {} {:.2f}mps - {:.2f}mps max wind percentiles with label {}"
-        .format(
-            nsamples,
-            lower_bound,
-            upper_bound,
-            label
+        # print specs
+        print(
+            "\nConditioning on {} {:.2f}mps - {:.2f}mps max wind percentiles with label {}"
+            .format(
+                nsamples,
+                lower_bound,
+                upper_bound,
+                label
+            )
         )
-    )
 
-    print("\nGenerating samples...")
-    fake_u = model(label=labels, condition=condition, nsamples=nsamples).detach().cpu().numpy()
-    fake_u = unpad(fake_u) # now permute
-    fake_u = np.transpose(fake_u, (0, 2, 3, 1))
-    print("fake_u.shape: {}".format(fake_u.shape))
+        print("\nGenerating samples...")
+        fake_u = model(label=labels, condition=condition, nsamples=nsamples).detach().cpu().numpy()
+        fake_u = unpad(fake_u) # now permute
+        fake_u = np.transpose(fake_u, (0, 2, 3, 1))
+        print("fake_u.shape: {}".format(fake_u.shape))
 
-    # get metadata to compate
-    print("\nGathering validation data...")
-    train_u = metadata['train']['uniform'].data
-    train_x = metadata['train']['anomaly'].data
-    valid_u = metadata['valid']['uniform'].data
-    valid_x = metadata['valid']['anomaly'].data
-    params = metadata['train']['params'].data
+        # get metadata to compate
+        print("\nGathering validation data...")
+        train_u = metadata['train']['uniform'].data
+        train_x = metadata['train']['anomaly'].data
+        valid_u = metadata['valid']['uniform'].data
+        valid_x = metadata['valid']['anomaly'].data
+        params = metadata['train']['params'].data
 
-    print("\nFiltering by lower bound on anomaly...")
-    train_mask = train_x[..., 0].max(axis=(1, 2)) > lower_bound
-    valid_mask = valid_x[..., 0].max(axis=(1, 2)) > lower_bound
-    train_u = train_u[train_mask]
-    train_x = train_x[train_mask]
-    valid_u = valid_u[valid_mask]
+        print("\nFiltering by lower bound on anomaly...")
+        train_mask = train_x[..., 0].max(axis=(1, 2)) > lower_bound
+        valid_mask = valid_x[..., 0].max(axis=(1, 2)) > lower_bound
+        train_u = train_u[train_mask]
+        train_x = train_x[train_mask]
+        valid_u = valid_u[valid_mask]
 
-    print("\nValidation data shapes:\n----------------------")
-    print("train_u.shape: {}".format(train_u.shape))
-    print("fake_u.shape: {}".format(fake_u.shape))
-    print("params.shape: {}".format(params.shape))
+        print("\nValidation data shapes:\n----------------------")
+        print("train_u.shape: {}".format(train_u.shape))
+        print("fake_u.shape: {}".format(fake_u.shape))
+        print("params.shape: {}".format(params.shape))
 
-    print("\nGenerating figures...")
-    try:
-        plot.figure_one(fake_u, train_u, valid_u, imdir, id=label)
-        plot.figure_two(fake_u, train_u, valid_u, imdir, id=label)
-        plot.figure_three(fake_u, train_u, imdir, contour=CONTOUR_PLOT, id=label)
-        plot.figure_four(fake_u, train_u, train_x, params, imdir, contour=CONTOUR_PLOT, id=label)
-        # plot.figure_five(fake_u, train_u, imdir)                   # augmented    
-        export_sample(fake_u)
-        
-        if len(history) > 1:
-            print("\nResults:\n--------")
-            final_chi_rmse = history['chi_rmse'][-1]
-            print(f"final_chi_rmse: {final_chi_rmse:.4f}")
+        print("\nGenerating figures...")
+        try:
+            plot.figure_one(fake_u, train_u, valid_u, imdir, id=label)
+            plot.figure_two(fake_u, train_u, valid_u, imdir, id=label)
+            plot.figure_three(fake_u, train_u, imdir, contour=CONTOUR_PLOT, id=label)
+            plot.figure_four(fake_u, train_u, train_x, params, imdir, contour=CONTOUR_PLOT, id=label)
+            # plot.figure_five(fake_u, train_u, imdir)                   # augmented    
+            export_sample(fake_u)
+            
+            if len(history) > 1:
+                print("\nResults:\n--------")
+                final_chi_rmse = history['chi_rmse'][-1]
+                print(f"final_chi_rmse: {final_chi_rmse:.4f}")
 
-    except Exception as e:
-        print(f"Error generating figures: {e}")
+        except Exception as e:
+            print(f"Error generating figures: {e}")
+    else:
+        print(f"Skipping evaluation for label {label} as target weight is 0.")
 
 
 def main(config):
@@ -261,6 +264,7 @@ def main(config):
                         )
 
     # evaluate
+    evaluate_results(trainloader, model, 0, config, history.history, metadata)
     evaluate_results(trainloader, model, 1, config, history.history, metadata)
     evaluate_results(trainloader, model, 2, config, history.history, metadata)
     return history
