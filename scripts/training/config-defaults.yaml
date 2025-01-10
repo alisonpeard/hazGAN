@@ -31,7 +31,7 @@ gumbel:
 lambda_gp:
   value: 10.
 lambda_r1:
-  value: 10.
+  value: .1
 lambda_var:
   value: 0.
 lookahead:
