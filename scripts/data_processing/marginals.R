@@ -26,33 +26,6 @@ LAST RUN: 08-12-2024
 # Clear environment
 rm(list = ls())
 
-user_lib <- "~/R/library"
-dir.create(user_lib, showWarnings = FALSE, recursive = TRUE)
-.libPaths(c(user_lib, .libPaths()))
-
-install_if_missing <- function(packages) {
-  new_packages <- packages[!(packages %in% installed.packages()[,"Package"])]
-  if(length(new_packages)) {
-    message("Installing missing packages: ", paste(new_packages, collapse=", "))
-    install.packages(new_packages, 
-                    lib = user_lib,
-                    repos = 'https://cloud.r-project.org/')
-  }
-}
-
-# List of required packages
-required_packages <- c(
-  "arrow",
-  "lubridate",
-  "dplyr",
-  "ggplot2",
-  "CFtime",
-  "tidync"
-)
-
-# Install missing packages
-install_if_missing(required_packages)
-
 library(arrow)
 library(lubridate)
 library(dplyr)
@@ -67,15 +40,17 @@ source("utils.R")
 readRenviron("../../.env")
 
 FILENAME   <- "data_1941_2022.nc"     # nolint
+RES        <- c(64, 64)               # nolint
 WD         <- Sys.getenv("TRAINDIR")  # nolint
+WD         <- paste0(WD, "/", res2str(RES))
 RFUNC      <- max                     # nolint, https://doi.org/10.1111/rssb.12498
 TEST.YEARS <- c(2022)                 # nolint, exclude from ecdf + gpd fitting
 VISUALS    <- TRUE                    # nolint
 Q          <- 0.8                     # nolint
-RES        <- c(64, 64)               # nolint
 
 #%%######### LOAD AND STANDARDISE DATA #########################################
-src <- tidync(paste0(WD, "/", res2str(RES), "/", FILENAME))
+print("Loading and standardising data...")
+src <- tidync(paste0(WD, "/", FILENAME))
 daily <- src %>% hyper_tibble(force = TRUE)
 coords <- src %>% activate("grid") %>% hyper_tibble(force = TRUE)
 daily <- left_join(daily, coords, by = c("lon", "lat"))
@@ -83,10 +58,7 @@ rm(coords)
 
 daily$msl <- -daily$msl # negate pressure so maximizing all vars
 daily <- daily[, c("grid", "time", "u10", "msl", "tp")]
-
-daily$time <- as.Date(CFtimestamp(
-  CFtime("days since 1940-01-01", "gregorian", daily$time)
-))
+daily$time <- as.Date("1941-01-01") + days(daily$time)
 
 medians <- monthly_medians(daily, "u10")
 medians$mslp <- monthly_medians(daily, "msl")$msl
@@ -97,13 +69,16 @@ daily$msl <- standardise_by_month(daily, "msl")
 daily$tp <- standardise_by_month(daily, "tp")
 
 #%%######## EXTRACT AND TRANSFORM STORMS #######################################
+print("Extracting storms...")
 metadata <- storm_extractor(daily, "u10", RFUNC)
 
 # fit to marginal data
+print("Tranforming fields...")
 storms_wind <- gpd_transformer(daily, metadata, "u10", Q)
 storms_mslp <- gpd_transformer(daily, metadata, "msl", Q)
 storms_tp   <- gpd_transformer(daily, metadata, "tp", Q)
 
+print("Done. Putting it all together...")
 renamer <- function(df, var) {
   df <- df %>%
     rename_with(~ paste0(., ".", var),
@@ -123,11 +98,12 @@ storms <- storms_wind %>%
 storms$thresh.q <- Q # keep track of threshold used
 
 ########### SAVE RESULTS #######################################################
+print("Saving...")
 write.csv(medians, paste0(WD, "/", "medians.csv"), row.names = FALSE)
 write_parquet(metadata, paste0(WD, "/", "storms_metadata.parquet"))
 write_parquet(storms, paste0(WD, "/", "storms.parquet"))
 
 cat("\nSaved as:", paste0(WD, "/", "storms.parquet"))
-print(paste0(length(unique(storms$storm)), " events processed."))
+print(paste0("Finished!", length(unique(storms$storm)), " events processed."))
 
 ########### END ###############################################################

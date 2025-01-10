@@ -3,12 +3,13 @@ library(eva)
 library(extRemes)
 library(dplyr)
 library(lubridate)
+library(parallel)
 
 ########### HELPER FUNCTIONS ###################################################
 `%ni%` <- Negate(`%in%`)
 
 res2str <- function(res){
-  string <- paste0(res[0], "x", res[1])
+  string <- paste0(res[1], "x", res[2])
   return(string)
 }
 
@@ -172,15 +173,25 @@ storm_extractor <- function(daily, var, rfunc) {
 gpd_transformer <- function(df, metadata, var, q) {
   gridcells <- unique(df$grid)
   ngrid <- length(gridcells)
+
   update_progress <- progress_bar(ngrid, "Fitting GPD to excesses:", "Complete")
 
   df <- df[df$time %in% metadata$time, ]
+
   fields <- c("storm", "variable", "time", "storm.rp",
               "grid", "thresh", "scale", "shape", "p", "ecdf")
   transformed <- data.frame(matrix(nrow = 0, ncol = length(fields)))
   colnames(transformed) <- fields
 
-  for (i in 1:ngrid){
+  ncores  <- min(detectCores(), ngrid)
+  cluster <- makeCluster(ncores)
+  clusterExport(cluster, c("df", "var", "q", "TEST.YEARS", "gpdAd", "scdf", "ecdf"))
+
+  progress_file <- tempfile()
+  writeLines("0", progress_file)
+
+  transformed <- parLapply(cluster, 1:ngrid, function(i) {
+  # for (i in 1:ngrid){
     grid_i <- gridcells[i]
     gridcell <- df[df$grid == grid_i, ]
     gridcell <- left_join(gridcell,
@@ -215,7 +226,7 @@ gpd_transformer <- function(df, metadata, var, q) {
         train$variable[train$variable >= thresh],
         bootstrap     = TRUE,
         bootnum       = 10,
-        allowParallel = TRUE,
+        allowParallel = FALSE,
         numCores      = 2
       ) # H0: GPD distribution
 
@@ -242,8 +253,18 @@ gpd_transformer <- function(df, metadata, var, q) {
       maxima$scdf <- maxima$ecdf
       return(maxima)
     })
-    transformed <- rbind(transformed, newrow)
-    update_progress(i)
-  }
+
+    # update progress
+    progress <- as.integer(readLines(progress_file)[1])
+    writeLines(as.character(progress + 1), progress_file)
+    update_progress(as.integer(readLines(progress_file)[1]))
+
+    return(newrow)
+  })
+
+  stopCluster(cluster)
+  unlink(progress_file)
+  transformed <- do.call(rbind, transformed)
+  
   return(transformed)
 }

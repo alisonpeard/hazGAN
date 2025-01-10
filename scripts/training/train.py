@@ -3,7 +3,7 @@ For conditional training (no constant fields yet).
 """
 # %% quick settings
 DRY_RUN_EPOCHS       = 1
-SAMPLES_PER_EPOCH    = 1280     # 1000   # samples per epoch
+SAMPLES_PER_EPOCH    = 20 # 1280     # 1000   # samples per epoch
 CONTOUR_PLOT         = False
 PROJECT              = 'hazGAN-linux'
 RES                  = (18, 22)
@@ -43,6 +43,10 @@ global force_cpu
 
 
 plot_kwargs = {"bbox_inches": "tight", "dpi": 300}
+
+
+def res2str(res):
+    return f"{res[0]}x{res[1]}"
 
 
 def notify(title, subtitle, message):
