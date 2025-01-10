@@ -32,6 +32,8 @@ import matplotlib.pyplot as plt
 import cartopy
 from cartopy import crs as ccrs
 
+from hazGAN.utils import res2str
+
 
 plt.rcParams['font.family'] = 'serif'
 hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k'}
@@ -40,9 +42,10 @@ FIELDS = ["u10", "tp", 'mslp']
 VISUALISATIONS = True
 THRESHOLD = 0.75 # rough manual bisection for this
 PROCESS_OUTLIERS = False
+RES = (64, 64)
 
 # for snakemake in future
-INFILES = ['data_1940_2022.nc', 'storms.parquet', 'storms_metadata.parquet', 'medians.csv']
+INFILES = ['data_1941_2022.nc', 'storms.parquet', 'storms_metadata.parquet', 'medians.csv']
 OUTFILES = ['data.nc']
 
 
@@ -328,7 +331,7 @@ def main(datadir):
 if __name__ == "__main__":
     env = Env()
     env.read_env(recurse=True)
-    datadir = env.str("TRAINDIR")
+    datadir = os.path.join(env.str("TRAINDIR"), res2str(RES))
     main(datadir)
 
 # %% MAKING TESTS

@@ -33,6 +33,7 @@ from datetime import datetime
 import subprocess, os
 
 from hazGAN import sliding_windows
+from hazGAN.utils import res2str
 from hazGAN.statistics import ecdf
 from make_training import process_outliers # borrow this function
 
@@ -41,6 +42,7 @@ VISUALISATIONS = True
 WINDOWS = [2, 5, 8, 10, 12, 15, 20]
 THRESHOLD = 0.85 # rough manual bisection for this
 PROCESS_OUTLIERS = False
+RES = (64, 64)
 
 INFILES = ['data_1940_2022.nc', 'data.nc']
 OUTFILES = ['data_pretrain.nc', 'data_pretrain.npz']
@@ -176,7 +178,7 @@ def main(datadir):
 if __name__ == "__main__":
     env = Env()
     env.read_env(recurse=True)
-    datadir = env.str("TRAINDIR")
+    datadir = os.path.join(env.str("TRAINDIR"), res2str(RES))
     main(datadir)
 
 # %%

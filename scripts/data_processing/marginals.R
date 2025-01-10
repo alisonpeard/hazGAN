@@ -23,7 +23,36 @@ To do:
 LAST RUN: 08-12-2024
 "
 #%%######### START #############################################################
+# Clear environment
 rm(list = ls())
+
+user_lib <- "~/R/library"
+dir.create(user_lib, showWarnings = FALSE, recursive = TRUE)
+.libPaths(c(user_lib, .libPaths()))
+
+install_if_missing <- function(packages) {
+  new_packages <- packages[!(packages %in% installed.packages()[,"Package"])]
+  if(length(new_packages)) {
+    message("Installing missing packages: ", paste(new_packages, collapse=", "))
+    install.packages(new_packages, 
+                    lib = user_lib,
+                    repos = 'https://cloud.r-project.org/')
+  }
+}
+
+# List of required packages
+required_packages <- c(
+  "arrow",
+  "lubridate",
+  "dplyr",
+  "ggplot2",
+  "CFtime",
+  "tidync"
+)
+
+# Install missing packages
+install_if_missing(required_packages)
+
 library(arrow)
 library(lubridate)
 library(dplyr)
@@ -37,15 +66,16 @@ try(setwd(dirname(rstudioapi::getActiveDocumentContext()$path)))
 source("utils.R")
 readRenviron("../../.env")
 
-FILENAME   <- "data_1940_2022.nc"     # nolint
+FILENAME   <- "data_1941_2022.nc"     # nolint
 WD         <- Sys.getenv("TRAINDIR")  # nolint
 RFUNC      <- max                     # nolint, https://doi.org/10.1111/rssb.12498
 TEST.YEARS <- c(2022)                 # nolint, exclude from ecdf + gpd fitting
 VISUALS    <- TRUE                    # nolint
 Q          <- 0.8                     # nolint
+RES        <- c(64, 64)               # nolint
 
 #%%######### LOAD AND STANDARDISE DATA #########################################
-src <- tidync(paste0(WD, "/", FILENAME))
+src <- tidync(paste0(WD, "/", res2str(RES), "/", FILENAME))
 daily <- src %>% hyper_tibble(force = TRUE)
 coords <- src %>% activate("grid") %>% hyper_tibble(force = TRUE)
 daily <- left_join(daily, coords, by = c("lon", "lat"))

@@ -33,11 +33,13 @@ from collections import Counter
 import matplotlib.pyplot as plt
 
 from hazGAN.utils import get_similarities
+from hazGAN.utils import res2str
 os.environ["USE_PYGEOS"] = "0"
 
 VISUALS = True
 VIEW = 4
 THRESHOLD = 0.82 # human-implemented bisection algorithm
+RES = (64, 64)
 
 
 if __name__ == "__main__":
@@ -45,15 +47,15 @@ if __name__ == "__main__":
     env = Env()
     env.read_env(recurse=True)
     source_dir = env.str("ERA5DIR")
-    target_dir = env.str("TRAINDIR")
-    files = glob(os.path.join(source_dir, "resampled", "18x22", f"*bangladesh*.nc"))
+    target_dir = os.path.join(env.str("TRAINDIR"), res2str(RES))
+    files = glob(os.path.join(source_dir, "resampled", res2str(RES), f"*bangladesh*.nc"))
     start = time()
 
     # load data
     ds = xr.open_mfdataset(files, chunks={"time": "500MB"}, engine="netcdf4")
     ds["u10"] = np.sqrt(ds["u10"] ** 2 + ds["v10"] ** 2)
     ds = ds.drop_vars(["v10"])
-    print("Number of days of data: {:,}".format(ds.dims['time']))
+    print("Number of days of data: {:,}".format(ds.sizes['time']))
     print("Number of years found: {}".format(len(np.unique(ds['time.year'].data))))
 
     # check for missing dates
@@ -70,7 +72,7 @@ if __name__ == "__main__":
 
     # resample to daily maxima
     ds = ds.dropna(dim='time', how='all')
-    h, w = ds.dims['lat'], ds.dims['lon']
+    h, w = ds.sizes['lat'], ds.sizes['lon']
     grid = np.arange(0, h * w, 1).reshape(h, w)
     grid = xr.DataArray(
         grid, dims=["lat", "lon"], coords={"lat": ds.lat[::-1], "lon": ds.lon}

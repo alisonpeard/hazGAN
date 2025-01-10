@@ -6,6 +6,12 @@ library(lubridate)
 
 ########### HELPER FUNCTIONS ###################################################
 `%ni%` <- Negate(`%in%`)
+
+res2str <- function(res){
+  string <- paste0(res[0], "x", res[1])
+  return(string)
+}
+
 standardise_by_month <- function(df, var) {
   df$month <- months(df$time)
   df <- df[,c(var, "month", "grid")]
