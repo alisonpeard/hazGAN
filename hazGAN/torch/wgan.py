@@ -66,7 +66,7 @@ class WGANGP(keras.Model):
                  fields=['u10', 'mslp'],
                  seed=42, device='mps',
                  gumbel=True, latent_space_distn='gumbel',
-                 lambda_gp=10, lambda_var=0.,
+                 lambda_gp=10, lambda_var=0., lambda_r1=10.,
                  input_policy='add', augment_policy='',
                  channel_multiplier=16, embedding_depth=16, latent_dims=64,
                  nconditions=3, training_balance=5, lookahead=False,
@@ -83,6 +83,7 @@ class WGANGP(keras.Model):
 
         self.latent_dim = latent_dims
         self.lambda_gp = lambda_gp
+        self.lambda_r1 = lambda_r1
         self.lambda_var = lambda_var
         self.latent_space_distn = setup_latents(latent_space_distn)
         self.augment = partial(DiffAugment, policy=augment_policy)
@@ -181,6 +182,8 @@ class WGANGP(keras.Model):
                 offset=offset,
                 seed=seed
                 )
+        else:
+            noise = noise.to(self.device)
             
         def _tensor(x):
             if not isinstance(x, torch.Tensor):
@@ -204,9 +207,9 @@ class WGANGP(keras.Model):
         with torch.no_grad():
             for n, batch in enumerate(x):
                 try:
-                    data = batch['uniform']
-                    condition = batch["condition"]
-                    label = batch["label"]
+                    data = batch['uniform'].to(self.device)
+                    condition = batch["condition"].to(self.device)
+                    label = batch["label"].to(self.device)
                     critic_score = self.critic(data, label, condition)
                     score_valid += ops.mean(critic_score)
 
@@ -282,7 +285,7 @@ class WGANGP(keras.Model):
         if self.lambda_var > 0:
             loss += self.lambda_var * variance_penalty
         loss += (0.001) * torch.mean(score_real ** 2) # constrains critic output drift (ProGAN)
-        loss += 0.001 * r1_penalty # https://arxiv.org/abs/1801.04406
+        loss += self.lambda_r1 * r1_penalty # https://arxiv.org/abs/1801.04406
         loss.backward()
 
         with torch.no_grad():
@@ -338,9 +341,9 @@ class WGANGP(keras.Model):
 
 
     def train_step(self, batch:dict) -> dict:
-        data = batch['uniform']
-        condition = batch['condition']
-        label = batch['label']
+        data = batch['uniform'].to(self.device)
+        condition = batch['condition'].to(self.device)
+        label = batch['label'].to(self.device)
         batch_size = data.shape[0]
         
         self._train_critic(data, label, condition, batch_size)

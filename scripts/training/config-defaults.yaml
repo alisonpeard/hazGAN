@@ -30,6 +30,8 @@ gumbel:
   value: True
 lambda_gp:
   value: 10.
+lambda_r1:
+  value: 10.
 lambda_var:
   value: 0.
 lookahead:
