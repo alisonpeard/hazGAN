@@ -223,8 +223,12 @@ def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
         Resize(img_size),
         Gumbel(),
         Pad(padding_mode, (1, 1, 1, 1)),
-        sendToDevice(device)
+        # sendToDevice(device)
         ])
+    
+    livetransforms = transforms.Compose([
+        sendToDevice(device)
+    ])
     
     train = StormDataset(sample_dict(traindata), transform=pretransforms)
     valid = StormDataset(sample_dict(validdata), transform=pretransforms)
@@ -233,14 +237,14 @@ def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
         assert isinstance(subset, int), "subset must be an integer."
         train = train.subset(subset)
 
-    train = train.pretransform()
-    valid = valid.pretransform()
+    train = train.pretransform(transform=livetransforms)
+    valid = valid.pretransform(transform=livetransforms)
 
     # had to modify this to not make weights double automatically
     trainsampler = WeightedRandomSampler(train.data['weight'], len(train), replacement=True)
 
-    trainloader = DataLoader(train, batch_size=batch_size, sampler=trainsampler)
-    validloader = DataLoader(valid, batch_size=batch_size, shuffle=False)
+    trainloader = DataLoader(train, batch_size=batch_size, sampler=trainsampler, pin_memory=True)
+    validloader = DataLoader(valid, batch_size=batch_size, shuffle=False, pin_memory=True)
 
     return trainloader, validloader, metadata
 
