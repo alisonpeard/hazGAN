@@ -81,21 +81,25 @@ def config_devices():
 
 
 def seed_everything(seed=42):
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    random.seed(seed)
-    np.random.seed(seed)
-    
-    torch.manual_seed(seed)
-    torch.use_deterministic_algorithms(True, warn_only=True)
+    try:
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+        random.seed(seed)
+        np.random.seed(seed)
+        
+        torch.manual_seed(seed)
+        torch.use_deterministic_algorithms(True, warn_only=True)
 
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-    
-    if torch.mps.is_available():
-        torch.mps.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+        
+        if torch.mps.is_available():
+            torch.mps.manual_seed(seed)
+    except Exception as e:
+        print(f"Error setting seed: {e}")
 
 
 def summarise_mps_memory():
