@@ -7,7 +7,7 @@
 #SBATCH --time=12:00:00
 
 echo "TASK ID: " $SLURM_ARRAY_TASK_ID
-wandb agent alison-peard/hazGAN-linux/$1
+wandb agent --count 1 alison-peard/hazGAN-linux/$1
 
 # To run from shell:
 # ------------------
