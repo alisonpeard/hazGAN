@@ -109,7 +109,7 @@ class StormDataset(Dataset):
         sample = {}
         for key in self.keys:
             sample[key] = self.data[key][idx]
-        if self.transform and (not sample.get('transformed', False)):
+        if self.transform:
             sample = self.transform(sample)
         return sample
             
@@ -223,12 +223,9 @@ def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
         Resize(img_size),
         Gumbel(),
         Pad(padding_mode, (1, 1, 1, 1)),
-        # sendToDevice(device)
         ])
     
-    livetransforms = transforms.Compose([
-        sendToDevice(device)
-    ])
+    livetransforms = None
     
     train = StormDataset(sample_dict(traindata), transform=pretransforms)
     valid = StormDataset(sample_dict(validdata), transform=pretransforms)
@@ -237,6 +234,7 @@ def load_data(datadir:str, batch_size:int, padding_mode:str="reflect",
         assert isinstance(subset, int), "subset must be an integer."
         train = train.subset(subset)
 
+    # note this is a little tricky, be careful to only call once
     train = train.pretransform(transform=livetransforms)
     valid = valid.pretransform(transform=livetransforms)
 
