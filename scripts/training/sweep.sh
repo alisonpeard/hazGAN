@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --job-name=ablation
-#SBATCH --output=logs/ablation%A_%a.out
-#SBATCH --error=logs/ablation%A_%a.err
+#SBATCH --job-name=sweep
+#SBATCH --output=logs/%A-%a.out
+#SBATCH --error=logs/%A-%a.err
 #SBATCH --array=1-20%1
 #SBATCH --partition=GPU
-#SBATCH --time=12:00:00
+#SBATCH --time=1-00:00:00
 
 echo "TASK ID: " $SLURM_ARRAY_TASK_ID
 wandb agent --count 1 alison-peard/hazGAN-linux/$1

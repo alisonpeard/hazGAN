@@ -6,7 +6,7 @@ DRY_RUN_EPOCHS       = 1
 SAMPLES_PER_EPOCH    = 1280     # 1000   # samples per epoch
 CONTOUR_PLOT         = False
 PROJECT              = 'hazGAN-linux'
-
+RES                  = (18, 22)
 # %% actual script
 import os
 os.environ["KERAS_BACKEND"] = "torch"
@@ -23,6 +23,7 @@ import torch
 from keras.callbacks import ModelCheckpoint
 
 from hazGAN import plot
+from hazGAN.utils import res2str
 from hazGAN.torch import unpad
 from hazGAN.torch import load_data # type: ignore
 from hazGAN.torch import WGANGP
@@ -139,7 +140,7 @@ def evaluate_results(train, model, label:int, config:dict,
                      ) -> None:
     """Make some key figures to view results.
     """
-    if config['target_weights'][label] > 0.
+    if config['target_weights'][label] > 0:
         save_config(rundir, config)
         print("Gathering labels and conditions...")
 
@@ -290,7 +291,7 @@ if __name__ == "__main__":
     env     = Env()
     env.read_env(recurse=True)
     workdir = env.str("WORKINGDIR")
-    datadir = env.str('TRAINDIR')
+    datadir = os.path.join(env.str('TRAINDIR'), res2str(RES))
     imdir   = os.path.join(workdir, "figures", "temp")
 
     # intialise config object
@@ -324,6 +325,3 @@ if __name__ == "__main__":
 
 
 # %% ---DEBUG BELOW THIS LINE----
-
-
-# %% ---DEBUG ABOVE THIS LINE----

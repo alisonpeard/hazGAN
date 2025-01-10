@@ -4,6 +4,9 @@ import yaml
 import numpy as np
 import xarray as xr
 
+def res2str(res):
+    return f"{res[0]}x{res[1]}"
+
 
 def notify(title, subtitle, message):
     """Display OSX system notification with title and subtitle."""
