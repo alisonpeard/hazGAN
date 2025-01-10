@@ -248,14 +248,6 @@ class WGANGP(keras.Model):
         return r1_penalty
 
 
-    def _smoothness_penalty(self, fake_data, xy_ratio=.75):
-        """Penalise rapid changes in the spatial gradient."""
-        x_gradient = torch.abs(torch.diff(fake_data, dim=2))
-        y_gradient = torch.abs(torch.diff(fake_data, dim=3))
-        smoothness_penalty = xy_ratio * torch.mean(x_gradient) + torch.mean(y_gradient)
-        return smoothness_penalty
-
-
     def _variance_penalty(self, data, fake_data):
         """Maximise variance or minimise variance difference."""
         train_batch_var = torch.var(data, dim=0)
@@ -290,7 +282,6 @@ class WGANGP(keras.Model):
         if self.lambda_var > 0:
             loss += self.lambda_var * variance_penalty
         loss += (0.001) * torch.mean(score_real ** 2) # constrains critic output drift (ProGAN)
-        loss += 10 * smoothness_penalty # https://arxiv.org/abs/1801.04406
         loss += 0.001 * r1_penalty # https://arxiv.org/abs/1801.04406
         loss.backward()
 
