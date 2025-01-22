@@ -48,64 +48,45 @@ RES = (64, 64)
 INFILES = ['data_1941_2022.nc', 'storms.parquet', 'storms_metadata.parquet', 'medians.csv']
 OUTFILES = ['data.nc']
 
+# %%
+def check_scdf(df, var, testyear):
+    """Function to debug issue with scdf."""
+    from hazGAN.statistics import semiparametric_cdf as SemiCDF
 
-def frobenius(test:np.ndarray, template:np.ndarray) -> float:
-    """Calculate the Frobenius norm (similarity) of two matrices."""
-    similarity = np.sum(template * test) / (np.linalg.norm(template) * np.linalg.norm(test))
-    return similarity
+    varcols = ["{}", "grid", "time.{}", "thresh.{}", "scale.{}", "shape.{}", "scdf.{}", "ecdf.{}"]
+    varcols = [col.format(var) for col in varcols]
+
+    df         = df[varcols]
+    df.columns = ["var", "grid", "time", "thresh", "scale", "shape", "scdf_old", "ecdf"]
+    df         = df.sort_values(["grid", "time"])
+    df         = df[pd.to_datetime(df['time']).dt.year != testyear]
+
+    debug = df[['grid', 'time', 'var', 'thresh', 'scale', 'shape']]
+    debug = debug.groupby(['grid', 'thresh', 'scale', 'shape']).agg(list).reset_index()
+
+    def scdf(row):  
+        x = np.array(row['var'])
+        func = SemiCDF(x, (row['thresh'], row['scale'], row['shape']))
+        return func(x)
+
+    debug['scdf'] = debug.apply(lambda row: scdf(row), axis=1)
+    debug = debug.explode(['var','time','scdf']).reset_index(drop=True)
+    df    = df.groupby(['time', 'grid']).first() # switch to .count() to make sure only 1
+    debug = debug.groupby(['time', 'grid']).first()
+    df = df.merge(debug[['scdf']], on=['time', 'grid'])
+
+    # final output
+    res = df.copy()
+    res[res['scdf_old'].isnull()]
+    # so NaNs correspone to ones, why are we getting NaN instead of 1 in R?
+    # so wherever the shape is negative...
+    bounded = res[res['shape'] < 0].copy()
+    bounded['upperbound'] = bounded['thresh'] - bounded['scale'] / bounded['shape']
+    bounded[bounded['scdf_old'].isnull()]
+    return bounded
 
 
-def process_outliers(ds:xr.Dataset, threshold:float=THRESHOLD,
-                     datadir:str='.', visuals:bool=VISUALISATIONS) -> xr.Dataset:
-    """Remove "wind bomb" outliers from data
-    
-    Args:
-    -----
-    ds: xr.Dataset
-        The dataset to process
-    threshold: float
-        The threshold for the Frobenius norm similarity between the template and the test matrix.
-    """
-    ds = ds.copy()
-    ds['maxwind'] = ds.sel(field='u10')['anomaly'].max(dim=['lon', 'lat'])
-
-    sorting = ds.sel(field='u10')['maxwind'].argsort()
-
-    if visuals:
-        fig, axs = plt.subplots(1, 2, figsize=(12, 6))
-        ds['anomaly'].isel(field=0, time=sorting[-1]).plot(ax=axs[0])
-        axs[0].set_title('Largest sample before filtering.')
-
-    if not os.path.exists(os.path.join(datadir, "windbomb.npy")):
-        print('Creating outlier template.')
-        template = ds['anomaly'].isel(field=0, time=sorting[-1]).data # this has a "wind bomb"
-        np.save(os.path.join(datadir, "windbomb.npy"), template)    
-    else:
-        print('Loading outlier template.')
-        template = np.load(os.path.join(datadir, "windbomb.npy"))
-
-    similarities = [] * ds['time'].data.size
-    for i in range(ds['time'].data.size):
-        test_matrix = ds['anomaly'].isel(field=0, time=i).data
-        similarity = frobenius(test_matrix, template)
-        similarities.append(similarity)
-    similarities = np.array(similarities)
-
-    print(f'{sum(similarities > threshold)} ERA5 "wind bombs" detected in dataset for threshold {threshold}.')
-    mask = similarities <= threshold 
-
-    ds_filtered = ds.sel(time=mask)
-    sorting = ds_filtered.sel(field='u10')['maxwind'].argsort().data
-    ds_filtered = ds_filtered.isel(time=sorting[-60000:]) # 60,000 like MNIST
-    sorting = ds_filtered.sel(field='u10')['maxwind'].argsort().data # again
-
-    if visuals:
-        ds_filtered['anomaly'].isel(field=0, time=sorting[-1]).plot(ax=axs[1])
-        axs[1].set_title('Largest sample after filtering.')
-
-    print("Returning 60,000 largest filtered samples.")
-    return ds_filtered
-
+# %%
 
 def main(datadir):
     # load coordinates
@@ -117,6 +98,7 @@ def main(datadir):
 
     # load GPD-fitted data                                                                                                        
     df = pd.read_parquet(os.path.join(datadir, INFILES[1]))
+
     df = df.merge(coords, on="grid")
     df.columns = [col.replace(".", "_") for col in df.columns]
     df = df.rename(columns={"msl": "mslp"})

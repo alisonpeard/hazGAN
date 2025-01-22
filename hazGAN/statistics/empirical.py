@@ -179,6 +179,7 @@ class GenPareto(Empirical):
                 print("loc: ", self.loc)
                 print("scale: ", self.scale)
                 print("shape: ", self.shape)
+                print("(1 - loc_u).min(): ", (1 - loc_u).min())
                 print("tail_fit min: ", min(tail_x))
                 print("tail_fit max: ", max(tail_x))
                 print("multiplicative constant: ", 1 - ((1 - tail_u) / (1 - loc_u)))

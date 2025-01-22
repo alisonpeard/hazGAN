@@ -49,7 +49,16 @@ ecdf <- function(x) {
   attr(rval, "call") <- sys.call()
   rval
 }
+
 scdf <- function(train, loc, scale, shape){
+  # Add bounds checking for negative shape
+  if (shape < 0) {
+    upper_bound <- loc - scale/shape
+    # Handle values beyond the upper bound
+    beyond_bound <- x_tail >= upper_bound
+    x_tail[beyond_bound] <- upper_bound - .Machine$double.eps
+  }
+  
   calculator <- function(x){
     u <- ecdf(train)(x)
     pthresh <- ecdf(train)(loc)
@@ -61,6 +70,7 @@ scdf <- function(train, loc, scale, shape){
   }
   return(calculator)
 }
+
 progress_bar <- function(n, prefix = "", suffix = "") {
   pb <- utils::txtProgressBar(min = 0, max = n, style = 3)
   function(i) {
@@ -268,3 +278,7 @@ gpd_transformer <- function(df, metadata, var, q) {
   
   return(transformed)
 }
+
+
+
+
