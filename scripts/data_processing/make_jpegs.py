@@ -12,7 +12,7 @@ import glob
 from hazGAN.utils import res2str
 # %%
 
-WINDTHRESHOLD = 15 # -float('inf') 
+WINDTHRESHOLD = -float('inf')  #15 for storms
 DOMAIN        = "gumbel" # ["uniform", "gumbel"]
 EPS           = 1e-6
 
@@ -21,7 +21,6 @@ def apply_colormap(grayscale_array, colormap_name='Spectral_r'):
     colormap = plt.get_cmap(colormap_name)
     colored = colormap(normalized)
     rgb_uint8 = np.uint8(colored[..., :3] * 255)
-    
     return rgb_uint8
 
 
@@ -62,7 +61,11 @@ os.listdir(traindir)
 # %%
 ds = xr.open_dataset(os.path.join(traindir, 'data.nc'))
 ds['windmax'] = ds.sel(field='u10').anomaly.max(dim=['lon', 'lat'])
-ds = ds.where(ds.windmax > WINDTHRESHOLD, drop=True)
+mask = (ds['windmax'] > WINDTHRESHOLD).values
+idx  = np.where(mask)[0]
+ds   = ds.isel(time=idx)
+
+# %%
 ds.isel(time=0, field=0).uniform.plot(cmap=CMAP)
 ds.isel(time=0, field=0).uniform
 ds = ds.fillna(1.) #! TEMPORARY

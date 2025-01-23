@@ -2,7 +2,6 @@
 import numpy as np
 from .base import *
 
-
 def chi_rmse(real, fake):
     c = real.shape[1]
     chi_diff = np.zeros(c)

@@ -32,32 +32,59 @@ def log_image_to_wandb(fig, name:str, dir:str, **kwargs):
         print("Not logging figure, wandb not intialised.")
 
 
-def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str, id='') -> None:
+def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array=None, imdir:str=None, id='') -> None:
     """Plot cross-channel extremal coefficients."""
     def get_channel_ext_coefs(x):
-            _, h, w, _ = x.shape
-            excoefs = get_extremal_coeffs_nd(x, [*range(h * w)])
-            excoefs = np.array([*excoefs.values()]).reshape(h, w)
-            return excoefs
+        _, h, w, _ = x.shape
+        excoefs = get_extremal_coeffs_nd(x, [*range(h * w)])
+        excoefs = np.array([*excoefs.values()]).reshape(h, w)
+        return excoefs
+    n = fake_u.shape[0]
+
+    if valid_u is not None:
+        ncolumns = 3
+    else:
+        ncolumns = 2
     
     excoefs_train = get_channel_ext_coefs(train_u)
-    excoefs_valid = get_channel_ext_coefs(valid_u)
     excoefs_fake = get_channel_ext_coefs(fake_u)
 
     cmap = plt.cm.coolwarm_r
-    vmin = 1
-    vmax = 2
+    vmin = min(
+        np.nanmin(excoefs_train),
+        # np.nanmin(excoefs_valid),
+        np.nanmin(excoefs_fake)
+        )
+    vmax = max(
+        np.nanmax(excoefs_train),
+        # np.nanmax(excoefs_valid),
+        np.nanmax(excoefs_fake)
+    )
     cmap.set_under(cmap(0))
     cmap.set_over(cmap(.99))
 
-    fig, ax = plt.subplots(1, 4, figsize=(12, 3.5),
+    fig, ax = plt.subplots(1, ncolumns + 1, figsize=(4 * ncolumns, 3.5),
                         gridspec_kw={
                             'wspace': .02,
-                            'width_ratios': [1, 1, 1, .05]}
+                            'width_ratios': [1] * ncolumns + [.05]}
                             )
+    
+    # plot coefficients
     im = ax[0].imshow(excoefs_train, vmin=vmin, vmax=vmax, cmap=cmap)
-    im = ax[1].imshow(excoefs_valid, vmin=vmin, vmax=vmax, cmap=cmap)
-    im = ax[2].imshow(excoefs_fake, vmin=vmin, vmax=vmax, cmap=cmap)
+    im = ax[-2].imshow(excoefs_fake, vmin=vmin, vmax=vmax, cmap=cmap)
+
+    # add contour lines
+    ax[0].contour(excoefs_train, levels=[3.], colors='k', linewidths=.5,
+                  linestyles='dashed')
+    ax[-2].contour(excoefs_fake, levels=[3.], colors='k', linewidths=.5,
+                  linestyles='dashed')
+
+    if valid_u is not None:
+        excoefs_valid = get_channel_ext_coefs(valid_u)
+        im = ax[1].imshow(excoefs_valid, vmin=vmin, vmax=vmax, cmap=cmap)
+        ax[1].contour(excoefs_valid, levels=[3.], colors='k', linewidths=.5,
+                    linestyles='dashed')
+        ax[1].set_title('Test', fontsize=16)
 
     for a in ax:
         a.set_yticks([])
@@ -65,53 +92,75 @@ def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str, i
         a.invert_yaxis()
     
     ax[0].set_title('Train', fontsize=16)
-    ax[1].set_title('Test', fontsize=16)
-    ax[2].set_title('hazGAN', fontsize=16);
-    fig.colorbar(im, cax=ax[3], extend='both', orientation='vertical')
+    ax[-2].set_title('hazGAN', fontsize=16);
+
+    cbar = fig.colorbar(im, cax=ax[-1], extend='both', orientation='vertical')
+    cbar.ax.axhline(y=y_pos, color='k', linewidth=.5, linestyle='dashed')
+
+    fig.suptitle('Cross-channel extremal coefficients', fontsize=18, y=1.05)
     ax[0].set_ylabel('Extremal coeff', fontsize=18);
     
-    log_image_to_wandb(fig, f"extremal_dependence{id}", imdir)
+    if imdir is not None:
+        log_image_to_wandb(fig, f"extremal_dependence{id}", imdir)
     return fig
 
 
-def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array, imdir:str, channel=0, id={}) -> None:
+def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array=None, imdir:str=None, channel=0, id={}) -> None:
     """Plot spatial extremal coefficients."""
     ecs_train = pairwise_extremal_coeffs(train_u.astype(np.float32)[..., channel])
-    ecs_valid = pairwise_extremal_coeffs(valid_u.astype(np.float32)[..., channel])
     ecs_fake = pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., channel])
     
+    if valid_u is not None:
+        ncolumns = 3
+        ecs_valid = pairwise_extremal_coeffs(valid_u.astype(np.float32)[..., channel])
+    else:
+        ncolumns = 2
+    
     cmap = plt.cm.coolwarm_r
-    vmin = 1
-    vmax = 2
+    vmin = min(
+        np.nanmin(ecs_train),
+        # np.nanmin(ecs_valid),
+        np.nanmin(ecs_fake)
+    ) # 1
+    vmax = max(
+        np.nanmax(ecs_train),
+        # np.nanmax(ecs_valid),
+        np.nanmax(ecs_fake)
+    )
     cmap.set_under(cmap(0))
     cmap.set_over(cmap(.99))
     
-    fig, axs = plt.subplots(1, 4, figsize=(12, 3.5),
+    fig, axs = plt.subplots(1, ncolumns + 1, figsize=(4 * ncolumns, 3.5),
                         gridspec_kw={
                             'wspace': .02,
-                            'width_ratios': [1, 1, 1, .05]}
+                            'width_ratios': [1] * ncolumns +[.05]}
                             )
     print(ecs_train.dtype)
     print(ecs_train.shape)
     axs[0].imshow(ecs_train, vmin=vmin, vmax=vmax, cmap=cmap)
-    im = axs[1].imshow(ecs_valid, vmin=vmin, vmax=vmax, cmap=cmap)
-    im = axs[2].imshow(ecs_fake, vmin=vmin, vmax=vmax, cmap=cmap)
+    im = axs[-2].imshow(ecs_fake, vmin=vmin, vmax=vmax, cmap=cmap)
+
+    if valid_u is not None:
+        im = axs[1].imshow(ecs_valid, vmin=vmin, vmax=vmax, cmap=cmap)
+        axs[1].set_title("Test", fontsize=16)
 
     for ax in axs:
         ax.set_xticks([])
         ax.set_yticks([])
     
     # fig.colorbar(im, cax=axs[3], extend='both', orientation='vertical');
+    fig.colorbar(im, cax=axs[-1], extend='both', orientation='vertical')
     axs[0].set_title("Train", fontsize=16)
-    axs[1].set_title("Test", fontsize=16)
-    axs[2].set_title("hazGAN", fontsize=16)
+    axs[-2].set_title("hazGAN", fontsize=16)
     axs[0].set_ylabel('Extremal coeff.', fontsize=18);
 
-    log_image_to_wandb(fig, f"spatial_dependence{id}", imdir)
+    if imdir is not None:
+        log_image_to_wandb(fig, f"spatial_dependence{id}", imdir)
+    
     return fig
 
 
-def figure_three(fake_u:np.array, train_u:np.array, imdir:str, channel=0,
+def figure_three(fake_u:np.array, train_u:np.array, imdir:str=None, channel=0,
                  cmap="Spectral_r", levels=20, contour=True, id='') -> None:
     """Plot the 32 most extreme train and generated percentiles."""
     # prep data to plot
@@ -167,11 +216,13 @@ def figure_three(fake_u:np.array, train_u:np.array, imdir:str, channel=0,
         cbar_ax = subfig.add_axes([1., .02, .02, .9]) 
         subfig.colorbar(im, cax=cbar_ax)
     fig.suptitle('Percentiles')
-    log_image_to_wandb(fig, f"max_percentiles{id}", imdir)
+
+    if imdir is not None:
+        log_image_to_wandb(fig, f"max_percentiles{id}", imdir)
     return fig
 
 
-def figure_four(fake_u, train_u, train_x, params, imdir:str,
+def figure_four(fake_u, train_u, train_x, params, imdir:str=None,
                 channel=0, cmap="Spectral_r", levels=20,
                 contour=True, id='') -> None:
     """Plot the 32 most extreme train and generated anomalies."""
@@ -239,7 +290,9 @@ def figure_four(fake_u, train_u, train_x, params, imdir:str,
         subfig.colorbar(im, cax=cbar_ax)
 
     fig.suptitle('Percentiles')
-    log_image_to_wandb(fig, f"max_samples{id}", imdir)
+
+    if imdir is not None:
+        log_image_to_wandb(fig, f"max_samples{id}", imdir)
 
     return fig
 
