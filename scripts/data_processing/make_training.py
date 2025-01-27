@@ -240,9 +240,9 @@ def main(datadir):
     ds.attrs['project'] = 'hazGAN'
     ds.attrs['note'] = "Fixed interpolation: [0, 1] --> (0, 1)."
 
-    # remove outliers
-    if PROCESS_OUTLIERS:
-        ds = process_outliers(ds, THRESHOLD, datadir=datadir, visuals=VISUALISATIONS)
+    # # remove outliers
+    # if PROCESS_OUTLIERS:
+    #     ds = process_outliers(ds, THRESHOLD, datadir=datadir, visuals=VISUALISATIONS)
 
     # save
     print("Finished! Saving to netcdf...")

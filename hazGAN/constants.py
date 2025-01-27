@@ -11,8 +11,8 @@ ymax = 25.0
 
 bay_of_bengal_crs = 24346 # https://epsg.io/24346
 
-channel_labels = {0: r'wind speed [ms$^{-1}$]', 1: r'mean sea level pressure [Pa]'}
-channel_labels = {0: r'wind speed [ms$^{-1}$]', 1: r'total precipitation [m]'}
+channel_labels = {0: r'wind speed [ms$^{-1}$]', 1: r'total precipitation [m]', 2: r'mean sea level pressure [Pa]'}
+
 longitude = np.linspace(xmin, xmax, 3)
 latitude = np.linspace(ymin, ymax, 4)
 

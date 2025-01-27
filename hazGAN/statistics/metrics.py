@@ -26,7 +26,7 @@ def pairwise_extremal_coeffs(uniform):
     n, h, w = uniform.shape
     uniform = np.reshape(uniform, (n, h * w))
     frechet = inverted_frechet(uniform)
-    minima = minner_product(np.transpose(frechet), frechet)
+    minima = minner_product(frechet.T, frechet)
     n = float(n)
     minima = minima.astype(float)
     ecs = np.zeros_like(minima)
@@ -37,11 +37,22 @@ def pairwise_extremal_coeffs(uniform):
 def minner_product(a, b):
     "Use broadcasting to get sum of pairwise minima."
     x = np.sum(
-        np.minimum(
-            np.expand_dims(a, axis=-1),
-            np.expand_dims(b, axis=0)),
-        axis=1
-    )
+            np.minimum(
+                np.expand_dims(a, axis=-1),
+                np.expand_dims(b, axis=0)),
+            axis=1
+        )
+    return x
+
+
+def maxer_product(a, b):
+    "Use broadcasting to get sum of pairwise maxima."
+    x = np.sum(
+            np.maximum(
+                np.expand_dims(a, axis=-1),
+                np.expand_dims(b, axis=0)),
+            axis=1
+        )
     return x
 
 

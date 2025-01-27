@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 import matplotlib as mpl
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 
 from .constants import channel_labels
 from .statistics import (
@@ -15,6 +17,11 @@ from .statistics import (
     # interpolate_thresholds, # old, might not need
     # get_extremal_coeffs     # old, might not need
 )
+
+plt.rcParams.update({
+    'font.family': 'Arial',  # or 'Helvetica'
+    'font.size': 12
+})
 
 hist_kwargs = {"bins": 50, "color": "lightgrey", "edgecolor": "black", "alpha": 0.7}
 save_kwargs = {"dpi": 300, "bbox_inches": "tight", "pad_inches": 0.1}
@@ -32,7 +39,20 @@ def log_image_to_wandb(fig, name:str, dir:str, **kwargs):
         print("Not logging figure, wandb not intialised.")
 
 
-def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array=None, imdir:str=None, id='') -> None:
+def cartopy_xlabel(ax, label):
+    ax.text(0.5, 1.01, label, va='bottom', ha='center',
+        rotation='horizontal', rotation_mode='anchor',
+        transform=ax.transAxes, fontsize=8)
+    
+
+def cartopy_ylabel(ax, label):
+    ax.text(-0.05, 0.5, label, va='bottom', ha='center',
+        rotation='vertical', rotation_mode='anchor',
+        transform=ax.transAxes, fontsize=8)
+    
+
+def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array=None, imdir:str=None,
+               id='', cmap='coolwarm_r') -> None:
     """Plot cross-channel extremal coefficients."""
     def get_channel_ext_coefs(x):
         _, h, w, _ = x.shape
@@ -49,84 +69,91 @@ def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array=None, imdir:s
     excoefs_train = get_channel_ext_coefs(train_u)
     excoefs_fake = get_channel_ext_coefs(fake_u)
 
-    cmap = plt.cm.coolwarm_r
+    cmap = getattr(plt.cm, cmap)
     vmin = min(
         np.nanmin(excoefs_train),
-        # np.nanmin(excoefs_valid),
         np.nanmin(excoefs_fake)
         )
     vmax = max(
         np.nanmax(excoefs_train),
-        # np.nanmax(excoefs_valid),
         np.nanmax(excoefs_fake)
     )
     cmap.set_under(cmap(0))
     cmap.set_over(cmap(.99))
 
-    fig, ax = plt.subplots(1, ncolumns + 1, figsize=(4 * ncolumns, 3.5),
-                        gridspec_kw={
-                            'wspace': .02,
-                            'width_ratios': [1] * ncolumns + [.05]}
-                            )
+    fig = plt.figure(figsize=(4 * ncolumns, 3.5))
+    gs = fig.add_gridspec(1, ncolumns + 1, width_ratios=[1] * ncolumns + [0.05], wspace=0.02)
+
+    plot_axes = [fig.add_subplot(gs[0, i], projection=ccrs.PlateCarree()) for i in range(ncolumns)]
+    cbar_ax = fig.add_subplot(gs[0, -1])
+    ax = plot_axes + [cbar_ax]
     
     # plot coefficients
-    im = ax[0].imshow(excoefs_train, vmin=vmin, vmax=vmax, cmap=cmap)
-    im = ax[-2].imshow(excoefs_fake, vmin=vmin, vmax=vmax, cmap=cmap)
+    extent = [80, 95, 10, 25]
+    transform = ccrs.PlateCarree()
 
     # add contour lines
-    ax[0].contour(excoefs_train, levels=[3.], colors='k', linewidths=.5,
-                  linestyles='dashed')
-    ax[-2].contour(excoefs_fake, levels=[3.], colors='k', linewidths=.5,
-                  linestyles='dashed')
+    levels = np.linspace(vmin, vmax, 20)
+    im = ax[0].contourf(excoefs_train, levels=levels, extent=extent, transform=transform, cmap=cmap, extend='both')
+    im = ax[-2].contourf(excoefs_fake, levels=levels, extent=extent, transform=transform, cmap=cmap, extend='both')
+    ax[0].contour(excoefs_train, levels=[3.], extent=extent, transform=transform, colors='k', linewidths=2, linestyles='dotted')
+    ax[-2].contour(excoefs_fake, levels=[3.], extent=extent, transform=transform, colors='k', linewidths=2, linestyles='dotted')
 
     if valid_u is not None:
         excoefs_valid = get_channel_ext_coefs(valid_u)
-        im = ax[1].imshow(excoefs_valid, vmin=vmin, vmax=vmax, cmap=cmap)
-        ax[1].contour(excoefs_valid, levels=[3.], colors='k', linewidths=.5,
-                    linestyles='dashed')
+        im = ax[1].imshow(excoefs_valid, vmin=vmin, vmax=vmax, cmap=cmap, extent=extent, transform=transform)
+        ax[1].contour(excoefs_valid, levels=3, colors='k', linewidths=.5,
+                    linestyles='dashed', extent=extent, transform=transform)
         ax[1].set_title('Test', fontsize=16)
 
-    for a in ax:
+    for a in ax[:-1]:
         a.set_yticks([])
         a.set_xticks([])
-        a.invert_yaxis()
+        a.add_feature(cfeature.COASTLINE, linewidth=.5)
+        a.set_extent(extent, crs=ccrs.PlateCarree())
     
     ax[0].set_title('Train', fontsize=16)
-    ax[-2].set_title('hazGAN', fontsize=16);
+    ax[-2].set_title('Model', fontsize=16);
 
-    cbar = fig.colorbar(im, cax=ax[-1], extend='both', orientation='vertical')
-    cbar.ax.axhline(y=y_pos, color='k', linewidth=.5, linestyle='dashed')
+    cbar = fig.colorbar(im, cax=ax[-1], extend='both', orientation='vertical', format='%.0f')
+    cbar.set_label('Extremal coefficient', rotation=270, labelpad=15)
 
     fig.suptitle('Cross-channel extremal coefficients', fontsize=18, y=1.05)
-    ax[0].set_ylabel('Extremal coeff', fontsize=18);
     
     if imdir is not None:
         log_image_to_wandb(fig, f"extremal_dependence{id}", imdir)
-    return fig
+    
+    return excoefs_train, excoefs_fake
 
 
-def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array=None, imdir:str=None, channel=0, id={}) -> None:
+def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array=None, imdir:str=None,
+               channel=0, id={}, cmap='coolwarm_r', yflip=True) -> None:
     """Plot spatial extremal coefficients."""
     ecs_train = pairwise_extremal_coeffs(train_u.astype(np.float32)[..., channel])
-    ecs_fake = pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., channel])
+    ecs_fake  = pairwise_extremal_coeffs(fake_u.astype(np.float32)[..., channel])
     
     if valid_u is not None:
         ncolumns = 3
         ecs_valid = pairwise_extremal_coeffs(valid_u.astype(np.float32)[..., channel])
     else:
         ncolumns = 2
+
+    if yflip:
+        ecs_train = np.flip(ecs_train, axis=0)
+        ecs_fake = np.flip(ecs_fake, axis=0)
+        if valid_u is not None:
+            ecs_valid = np.flip(ecs_valid, axis=1)
     
-    cmap = plt.cm.coolwarm_r
+    cmap = getattr(plt.cm, cmap)
     vmin = min(
         np.nanmin(ecs_train),
-        # np.nanmin(ecs_valid),
         np.nanmin(ecs_fake)
-    ) # 1
+    )
     vmax = max(
         np.nanmax(ecs_train),
-        # np.nanmax(ecs_valid),
         np.nanmax(ecs_fake)
     )
+
     cmap.set_under(cmap(0))
     cmap.set_over(cmap(.99))
     
@@ -135,10 +162,9 @@ def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array=None, imdir:s
                             'wspace': .02,
                             'width_ratios': [1] * ncolumns +[.05]}
                             )
-    print(ecs_train.dtype)
-    print(ecs_train.shape)
-    axs[0].imshow(ecs_train, vmin=vmin, vmax=vmax, cmap=cmap)
-    im = axs[-2].imshow(ecs_fake, vmin=vmin, vmax=vmax, cmap=cmap)
+
+    im = axs[0].imshow(ecs_train, cmap=cmap, vmin=1, vmax=2)
+    im = axs[-2].imshow(ecs_fake, cmap=cmap, vmin=1, vmax=2)
 
     if valid_u is not None:
         im = axs[1].imshow(ecs_valid, vmin=vmin, vmax=vmax, cmap=cmap)
@@ -147,17 +173,17 @@ def figure_two(fake_u:np.array, train_u:np.array, valid_u:np.array=None, imdir:s
     for ax in axs:
         ax.set_xticks([])
         ax.set_yticks([])
+        ax.invert_xaxis()
     
-    # fig.colorbar(im, cax=axs[3], extend='both', orientation='vertical');
-    fig.colorbar(im, cax=axs[-1], extend='both', orientation='vertical')
+    cbar = fig.colorbar(im, cax=axs[-1], extend='both', orientation='vertical')
+    cbar.set_label('Extremal coefficient', rotation=270, labelpad=15)
+
     axs[0].set_title("Train", fontsize=16)
-    axs[-2].set_title("hazGAN", fontsize=16)
-    axs[0].set_ylabel('Extremal coeff.', fontsize=18);
+    axs[-2].set_title("Model", fontsize=16)
+    axs[0].set_ylabel(channel_labels[channel].capitalize(), fontsize=18);
 
     if imdir is not None:
         log_image_to_wandb(fig, f"spatial_dependence{id}", imdir)
-    
-    return fig
 
 
 def figure_three(fake_u:np.array, train_u:np.array, imdir:str=None, channel=0,
@@ -294,8 +320,99 @@ def figure_four(fake_u, train_u, train_x, params, imdir:str=None,
     if imdir is not None:
         log_image_to_wandb(fig, f"max_samples{id}", imdir)
 
-    return fig
 
+def crossfield_correlations(x, dataset:str='', fields=None):
+    x       = x.copy()
+    fields  = fields or range(x.shape[-1])
+    npixels = x.shape[1] * x.shape[1]
+    nfields = x.shape[3]
+    height  = x.shape[1]
+    width   = x.shape[2]
+
+    x = x.reshape(x.shape[0], x.shape[1] * x.shape[2], x.shape[3])
+
+    def pixelcorr(array, axis):
+        array = array[:, axis, fields].copy()
+        corr  = np.corrcoef(array, rowvar=False)
+        return corr 
+
+    corrs = []
+    for i in range(npixels):
+        corr = pixelcorr(x, i)
+        corrs.append(corr)
+
+    corrs = np.stack(corrs, axis=0)
+    corrs = corrs.reshape(height, width, nfields, nfields)
+    
+    extent = [80, 95, 10, 25]
+    transform = ccrs.PlateCarree()
+
+    fig, axs = plt.subplots(nfields, nfields, figsize=(5, 5),
+                            sharex=True, sharey=True,
+                            gridspec_kw={'hspace': .01, 'wspace': .01},
+                            subplot_kw={'projection': ccrs.PlateCarree()}
+                            )
+    
+    for i in range(nfields):
+        for j in range(nfields):
+            ax = axs[i, j]
+            im = ax.contourf(corrs[..., i, j],
+                            extent=extent, transform=transform,
+                            cmap="Spectral_r", levels=np.linspace(0, 1, 20),
+                            )
+            
+            ax.label_outer()
+            ax.add_feature(cfeature.COASTLINE, linewidth=.5)
+            ax.set_extent(extent, crs=ccrs.PlateCarree())
+        
+            if j == 0:
+                cartopy_ylabel(ax, channel_labels[i])
+            if i == 0:
+                cartopy_xlabel(ax, channel_labels[j])
+
+    cbar = fig.colorbar(im, ax=list(axs.flat), orientation='horizontal', format='%.2f', fraction=.05, pad=.05)
+    cbar.set_label('Correlation')
+    fig.suptitle(f"{dataset.capitalize()} cross-field correlations", fontsize=18)
+
+
+def spatial_correlations(generated, training):
+    """Plot spatial correlations for each field."""
+    def one_plot(array, field, ax=None):
+        """Plot spatial correlations for a single field."""
+        array = array[..., field].copy()
+        n, h, w = array.shape
+        array = array.reshape(n, h * w)
+        corrs = np.corrcoef(array.T)
+        cmap = plt.get_cmap("Spectral_r")
+        cmap.set_over(cmap(1.))
+        cmap.set_under(cmap(0.))
+        if ax is None:
+            _, ax = plt.subplots()
+        im = ax.imshow(corrs, vmin=0., vmax=.1, cmap="Spectral_r")
+        return im 
+        
+    nfields = training.shape[-1]
+    fig, axs = plt.subplots(2, 3, figsize=(6, 4.5),
+                            gridspec_kw={'hspace': 0., 'wspace': 0.})
+    for i in range(nfields):
+        im = one_plot(training, i, ax=axs[0, i])
+        im = one_plot(generated, i, ax=axs[1, i])
+        axs[0, i].set_xticks([])
+        axs[0, i].set_yticks([])
+        axs[1, i].set_xticks([])
+        axs[1, i].set_yticks([])
+    
+    axs[0, 0].set_ylabel("Training", fontsize=12)
+    axs[1, 0].set_ylabel("Generated", fontsize=12)
+    axs[0, 0].set_title("Wind speed", fontsize=12)
+    axs[0, 1].set_title("Precipitation", fontsize=12)
+    axs[0, 2].set_title("MSLP", fontsize=12)
+
+    # add left/under extend to colorbar
+    cbar = fig.colorbar(im, ax=list(axs.flat), orientation='horizontal',
+                        extend='min', aspect=30, fraction=.03, pad=0.05);
+    cbar.set_label("Pearson correlation", fontsize=12);
+    fig.suptitle("Spatial correlations", fontsize=13);
 
 
 ## - - - - Older stuff (decide if needed later) - - - - - - - - - - - - - - - - - - |
@@ -343,7 +460,11 @@ def plot_sample_density(data, ax, sample_pixels=None, cmap='cividis', s=10):
 
     axtitle = f"Pixels ({sample_pixels_x[0]}, {sample_pixels_y[0]})"
 
-    scatter_density(sample_x.numpy(), sample_y.numpy(), ax, title=axtitle, cmap=cmap, s=s)
+    if not isinstance(sample_x, np.ndarray):
+        sample_x = sample_x.numpy()
+        sample_y = sample_y.numpy()
+
+    scatter_density(sample_x, sample_y, ax, title=axtitle, cmap=cmap, s=s)
 
 
 def scatter_density(x, y, ax, title='', cmap='cividis', s=10):

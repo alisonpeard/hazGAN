@@ -11,7 +11,6 @@ import glob
 
 from hazGAN.utils import res2str
 # %%
-
 WINDTHRESHOLD = -float('inf')  #15 for storms
 DOMAIN        = "gumbel" # ["uniform", "gumbel"]
 EPS           = 1e-6
