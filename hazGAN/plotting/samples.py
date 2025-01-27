@@ -20,6 +20,7 @@ def anomaly(array, reference, params):
 
 def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, title="Untitled",
          cbar_label='', cbar_width=0.2, linewidth=.1, **transform_kws):
+    """Plot training samples on top row and generated samples on bottom row."""
 
     transform = transform or identity
     fake  = transform(fake, **transform_kws)

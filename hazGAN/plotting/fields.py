@@ -9,7 +9,7 @@ from ..statistics import get_extremal_coeffs_nd
 
 
 def plot(fake, train, func, fields=[0, 1], figsize=1., cmap=CMAP, vmin=None, vmax=None,
-         title="Untitled", cbar_label=""):
+         title="Untitled", cbar_label="", **func_kws):
     """
     Plot relationships between climate fields.
 
@@ -22,11 +22,11 @@ def plot(fake, train, func, fields=[0, 1], figsize=1., cmap=CMAP, vmin=None, vma
     train = train[..., fields]
     fake  = fake[..., fields]
 
-    train_res = func(train)
-    fake_res  = func(fake)
+    train_res = func(train, **func_kws)
+    fake_res  = func(fake, **func_kws)
 
-    vmin = vmin or train_res.min()
-    vmax = vmax or train_res.max()
+    vmin = vmin or np.nanmin(train_res)
+    vmax = vmax or np.nanmax(train_res)
     cmap = getattr(plt.cm, cmap)
 
     cmap.set_under(cmap(0))
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     uniform = data['uniform'].values
 
     plot(uniform, uniform, taildependence, title="Tail dependence", cbar_label="Χ", figsize=.8);
-    plot(uniform, uniform, pearson, vmin=-1, vmax=1, title="Pearson correlation", cbar_label="correlation", figsize=.8);
+    plot(uniform, uniform, pearson, vmin=-1, vmax=1, title="Pearson correlation", cbar_label="r", figsize=.8);
     plot(uniform, uniform, smith1990, title="Extremal coefficient", cbar_label="Χ", figsize=.8);
     
 
