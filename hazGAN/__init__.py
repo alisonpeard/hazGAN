@@ -1,6 +1,7 @@
 from .utils import *
-from .plot import *
 from .data import *
+from . import plotting
+
 # from .tensorflow import *
 # from . import conditional
 # from .R import R

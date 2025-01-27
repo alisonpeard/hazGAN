@@ -26,6 +26,7 @@ def pairwise_extremal_coeffs(uniform):
     n, h, w = uniform.shape
     uniform = np.reshape(uniform, (n, h * w))
     frechet = inverted_frechet(uniform)
+    print("frechet shape:", frechet.shape)
     minima = minner_product(frechet.T, frechet)
     n = float(n)
     minima = minima.astype(float)
@@ -34,15 +35,36 @@ def pairwise_extremal_coeffs(uniform):
     return ecs
 
 
-def minner_product(a, b):
-    "Use broadcasting to get sum of pairwise minima."
-    x = np.sum(
+# def minner_product(a, b):
+#     "Use broadcasting to get sum of pairwise minima."
+#     x = np.sum(
+#             np.minimum(
+#                 np.expand_dims(a, axis=-1),
+#                 np.expand_dims(b, axis=0)),
+#             axis=1
+#         )
+#     return x
+
+
+def minner_product(a, b, batch_size=100):
+    """Use broadcasting with batching to get sum of pairwise minima."""
+    # a is (4096, 1248), b is (1248, 4096)
+    result = np.zeros((4096, 4096))
+    
+    for i in range(0, 4096, batch_size):
+        batch_end = min(i + batch_size, 4096)
+        batch_a = a[i:batch_end]  # Shape: (batch_size, 1248)
+        
+        batch_result = np.sum(
             np.minimum(
-                np.expand_dims(a, axis=-1),
-                np.expand_dims(b, axis=0)),
+                np.expand_dims(batch_a, axis=-1),      # Shape: (batch_size, 1248, 1)
+                np.expand_dims(b, axis=0)              # Shape: (1, 1248, 4096)
+            ),
             axis=1
         )
-    return x
+        result[i:batch_end, :] = batch_result
+    
+    return result
 
 
 def maxer_product(a, b):
