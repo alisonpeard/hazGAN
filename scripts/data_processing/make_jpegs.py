@@ -48,7 +48,6 @@ def create_image_grid(image_paths, grid_size=(32, 32), output_path="grid.png"):
     print(f"Grid saved to: {output_path}")
     return output_img
 
-
 RES  = (64, 64)
 CMAP = "Spectral_r"
 

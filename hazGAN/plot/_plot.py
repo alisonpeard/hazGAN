@@ -52,7 +52,7 @@ def cartopy_ylabel(ax, label):
     
 
 def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array=None, imdir:str=None,
-               id='', cmap='coolwarm_r') -> None:
+               id='', cmap='coolwarm_r', levels=50) -> None:
     """Plot cross-channel extremal coefficients."""
     def get_channel_ext_coefs(x):
         _, h, w, _ = x.shape
@@ -67,7 +67,7 @@ def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array=None, imdir:s
         ncolumns = 2
     
     excoefs_train = get_channel_ext_coefs(train_u)
-    excoefs_fake = get_channel_ext_coefs(fake_u)
+    excoefs_fake  = get_channel_ext_coefs(fake_u)
 
     cmap = getattr(plt.cm, cmap)
     vmin = min(
@@ -93,7 +93,7 @@ def figure_one(fake_u:np.array, train_u:np.array, valid_u:np.array=None, imdir:s
     transform = ccrs.PlateCarree()
 
     # add contour lines
-    levels = np.linspace(vmin, vmax, 20)
+    levels = np.linspace(vmin, vmax, levels)
     im = ax[0].contourf(excoefs_train, levels=levels, extent=extent, transform=transform, cmap=cmap, extend='both')
     im = ax[-2].contourf(excoefs_fake, levels=levels, extent=extent, transform=transform, cmap=cmap, extend='both')
     ax[0].contour(excoefs_train, levels=[3.], extent=extent, transform=transform, colors='k', linewidths=2, linestyles='dotted')
@@ -415,6 +415,37 @@ def spatial_correlations(generated, training):
     fig.suptitle("Spatial correlations", fontsize=13);
 
 
+def taildependence_fields(array, fields, ax=None, thresh=0.9, metric='chi', cbar=False):
+    from hazGAN.R import R
+
+    def taildependence(u, fields, thresh=thresh, metric=metric):
+        n, h, w, c = u.shape
+        u = u.reshape(n, h * w, c)
+
+        def f(x, fields=fields, thresh=thresh):
+            return R.taildependence(x[..., fields[0]], x[..., fields[1]], thresh)[metric]
+        
+        chi_values = []
+        for i in range(h * w):
+            chi = f(u[:, i, :])
+            chi_values.append(chi)
+        chi_values = np.stack(chi_values, axis=0)
+        chi_values = chi_values.reshape(h, w)
+
+        return chi_values
+    
+    result = taildependence(array, fields, thresh=0.9, metric='chi')
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    im = ax.imshow(result, cmap="Spectral_r")
+    ax.invert_yaxis()
+
+    if cbar:
+        plt.colorbar(im, ax=ax)
+
+    return im
 ## - - - - Older stuff (decide if needed later) - - - - - - - - - - - - - - - - - - |
 def add_watermark(ax, text):
         ax.text(-1, 0.01, text,
