@@ -1,8 +1,7 @@
 # %%
 import numpy as np
-import matplotlib.pyplot as plt
 from .base import CMAP
-from .base import makegrid, contourmap
+from .base import makegrid, contourmap, scalebar
 from ..statistics import invPIT
 
 def identity(array, *args, **kwargs):
@@ -19,12 +18,12 @@ def anomaly(array, reference, params):
 
 
 def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, title="Untitled",
-         cbar_label='', cbar_width=0.2, linewidth=.1, **transform_kws):
+         cbar_label='', cbar_width=0.2, linewidth=.1, alpha=1e-4, **transform_kws):
     """Plot training samples on top row and generated samples on bottom row."""
 
     transform = transform or identity
     fake  = transform(fake, **transform_kws)
-    train = transform(train,  **transform_kws)
+    train = transform(train, **transform_kws)
 
     fake = fake[..., field].copy()
     train = train[..., field].copy()
@@ -37,8 +36,10 @@ def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, 
     fake = sort_by_wind(fake)
     train = sort_by_wind(train)
 
-    vmin = vmin or np.nanmin(train)
-    vmax = vmax or np.nanmax(train)
+    # vmin = vmin or min(np.nanmin(fake), np.nanmin(train))
+    # vmax = vmax or max(np.nanmax(fake), np.nanmax(train))
+    vmin = vmin or np.nanquantile(np.concatenate([fake, train]), alpha)
+    vmax = vmax or np.nanquantile(np.concatenate([fake, train]), 1-alpha)
 
     fig, axs, cax = makegrid(8, 8, cbar_width=cbar_width, figsize=1.2)
     for i, ax in enumerate(axs.flat):
@@ -50,8 +51,16 @@ def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, 
             j = i - 32
             im = contourmap(fake[j, ...], ax=ax, vmin=vmin, vmax=vmax, cmap=cmap, linewidth=linewidth)
 
+    # add A and B labels to top left of both blocks
+    axs[0, 0].text(.25, .6, "A", transform=axs[0, 0].transAxes, ha='center', va='bottom', fontsize=22, weight='bold')
+    axs[4, 0].text(.25, .6, "B", transform=axs[4, 0].transAxes, ha='center', va='bottom', fontsize=22, weight='bold')
+
+    # add a scale bar
+    scalebar(axs[-1, -1])
+    scalebar(axs[3, -1])
+
     fig.colorbar(im, cax=cax, label=cbar_label)
-    fig.suptitle(title, y=1.02, fontsize=18)
+    fig.suptitle(title, y=1.02, fontsize=22)
 
     return fig
 

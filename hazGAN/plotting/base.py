@@ -3,14 +3,16 @@ import os
 import numpy as np
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import cartopy.geodesic as geodesic
 import matplotlib.pyplot as plt
+from matplotlib_scalebar.scalebar import ScaleBar
 
 plt.rcParams.update({
     'font.family': 'Arial',  # or 'Helvetica'
     'font.size': 12
 })
 
-CMAP   = "Spectral_r"
+CMAP   = "Spectral_r" # "Oranges", "YlGnBu", "YlOrBr"
 LABELS = ["wind speed [m]", "total precipitation [m]", "mslp [Pa]"]
 
 
@@ -97,6 +99,25 @@ def log_image_to_wandb(fig, name:str, dir:str, **kwargs):
         wandb.log({name: wandb.Image(impath)})
     else:
         print("Not logging figure, wandb not intialised.")
+    
+
+def scalebar(ax, location='lower right', length_fraction=.6):
+    # calculate dx
+    xlim = ax.get_xlim()
+    npixels = int(xlim[1] - xlim[0])
+    extent = ax.get_extent() # [80, 95, 10, 25]
+
+    points    = (extent[0], extent[2])
+    endpoints = (extent[1], extent[2])
+
+    geod = geodesic.Geodesic()
+    dx = geod.inverse(points, endpoints)
+    dx = dx[0][0] / npixels
+    scalebar = ScaleBar(dx, loc=location, fixed_value=1000, fixed_units='km',
+                        box_alpha=.8, frameon=True, box_color='white', color='k',
+                        bbox_to_anchor=(.8, .05), bbox_transform=ax.transAxes,
+                        width_fraction=.05)
+    ax.add_artist(scalebar)
 
 # %%
 if __name__ == "__main__":
