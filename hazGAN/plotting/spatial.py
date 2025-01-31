@@ -9,15 +9,20 @@ from .base import makegrid
 
 
 def plot(fake, train, func, field=0, figsize=1., cmap=CMAP, vmin=None, vmax=None,
-         title="Untitled", cbar_label=""):
-    fake  = fake[..., field].copy()
+         title="Untitled", cbar_label="", alpha:float=1e-4, **func_kws):
     train = train[..., field].copy()
+    fake  = fake[..., field].copy()
     
-    fake_res  = func(fake)
     train_res = func(train)
+    fake_res  = func(fake)
 
-    vmin = vmin or train_res.min()
-    vmax = vmax or train_res.max()
+    if alpha is not None:
+        vmin = vmin or np.nanquantile(np.concatenate([fake_res, train_res]), alpha)
+        vmax = vmax or np.nanquantile(np.concatenate([fake_res, train_res]), 1-alpha)
+    else:
+        vmin = vmin or train_res.min()
+        vmax = vmax or train_res.max()
+    
     cmap = getattr(plt.cm, cmap)
     cmap.set_under(cmap(0))
     cmap.set_over(cmap(.99))

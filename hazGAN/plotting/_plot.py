@@ -22,84 +22,10 @@ def discrete_colormap(data, nintervals, min=None, cmap="cividis", under='lightgr
 
 
 
-def plot_sample_density(data, ax, sample_pixels=None, cmap='cividis', s=10):
-    """Scatterplot for two variables, coloured by density."""
-    h, w = data.shape[1:3]
-    n = h * w
-
-    if sample_pixels is None:
-        sample_pixels_x = random.sample(range(n), 1)
-        sample_pixels_y = random.sample(range(n), 1)
-    else:
-        assert sample_pixels[0] != sample_pixels[1]
-        sample_pixels_x = [sample_pixels[0]]
-        sample_pixels_y = [sample_pixels[1]]
-
-    data_ravel = np.reshape(data, [len(data), n])
-
-    sample_x = np.take(data_ravel, sample_pixels_x, axis=1)
-    sample_y = np.take(data_ravel, sample_pixels_y, axis=1)
-
-    axtitle = f"Pixels ({sample_pixels_x[0]}, {sample_pixels_y[0]})"
-
-    if not isinstance(sample_x, np.ndarray):
-        sample_x = sample_x.numpy()
-        sample_y = sample_y.numpy()
-
-    scatter_density(sample_x, sample_y, ax, title=axtitle, cmap=cmap, s=s)
 
 
-def scatter_density(x, y, ax, title='', cmap='cividis', s=10):
-    xy = np.hstack([x, y]).transpose()
-    z = gaussian_kde(xy)(xy)
-    idx = z.argsort()
-    x, y, z = x[idx], y[idx], z[idx]
-    ax.scatter(x, y, c=z, s=s, cmap=cmap)
-    ax.set_title(title)
-    return ax
 
 
-def scatter_density2(x, y, ax, title='', cmap='cividis'):
-    """Sometimes first doesn't work -- need to resolve why later."""
-    xy = np.vstack([x,y])
-    z = gaussian_kde(xy)(xy)
-    idx = z.argsort()
-    x, y, z = x[idx], y[idx], z[idx]
-    ax.scatter(x, y, c=z, s=10, cmap=cmap)
-    ax.set_title(title)
-    return ax
-
-
-def compare_channels_plot(train_images, test_images, fake_data, cmap='cividis'):
-    fig, axs = plt.subplots(3, 3, figsize=(15, 3))
-
-    for i, j in enumerate([300, 201, 102]):
-
-        n, h, w, c = train_images.shape
-        data_ravel = np.reshape(train_images, [n, h * w, c])
-        data_sample = np.take(data_ravel, j, axis=1).numpy()
-        x = np.array([data_sample[:, 0]]).transpose()
-        y = np.array([data_sample[:, 1]]).transpose()
-        scatter_density(x, y, ax=axs[i, 0], cmap=cmap)
-
-        n, h, w, c = test_images.shape
-        data_ravel = np.reshape(test_images, [n, h * w, c])
-        data_sample = np.take(data_ravel, j, axis=1).numpy()
-        x = np.array([data_sample[:, 0]]).transpose()
-        y = np.array([data_sample[:, 1]]).transpose()
-        scatter_density(x, y, ax=axs[i, 1], cmap=cmap)
-
-        n, h, w, c = fake_data.shape
-        data_ravel = np.reshape(fake_data, [n, h * w, c])
-        data_sample = np.take(data_ravel, j, axis=1).numpy()
-        x = np.array([data_sample[:, 0]]).transpose()
-        y = np.array([data_sample[:, 1]]).transpose()
-        scatter_density(x, y, ax=axs[i, 2], cmap=cmap)
-
-        for ax in axs.ravel():
-            ax.set_xlabel('u10')
-            ax.set_ylabel('v10')
-    return fig
 
 
 

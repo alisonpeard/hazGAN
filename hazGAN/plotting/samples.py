@@ -18,7 +18,7 @@ def anomaly(array, reference, params):
 
 
 def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, title="Untitled",
-         cbar_label='', cbar_width=0.2, linewidth=.1, alpha=1e-4, **transform_kws):
+         cbar_label='', cbar_width=0.2, linewidth=.1, alpha=1e-4, alpha_vlim=True, **transform_kws):
     """Plot training samples on top row and generated samples on bottom row."""
 
     transform = transform or identity
@@ -36,10 +36,12 @@ def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, 
     fake = sort_by_wind(fake)
     train = sort_by_wind(train)
 
-    # vmin = vmin or min(np.nanmin(fake), np.nanmin(train))
-    # vmax = vmax or max(np.nanmax(fake), np.nanmax(train))
-    vmin = vmin or np.nanquantile(np.concatenate([fake, train]), alpha)
-    vmax = vmax or np.nanquantile(np.concatenate([fake, train]), 1-alpha)
+    if alpha_vlim:
+        vmin = vmin or np.nanquantile(np.concatenate([fake, train]), alpha)
+        vmax = vmax or np.nanquantile(np.concatenate([fake, train]), 1-alpha)
+    else:
+        vmin = vmin or min(np.nanmin(fake), np.nanmin(train))
+        vmax = vmax or max(np.nanmax(fake), np.nanmax(train))
 
     fig, axs, cax = makegrid(8, 8, cbar_width=cbar_width, figsize=1.2)
     for i, ax in enumerate(axs.flat):

@@ -3,12 +3,13 @@ rm(list = ls())
 library(arrow)
 library(ncdf4)
 library(mvPot)
+library(geosphere)
 library(SpatialExtremes)
 
-channel <- 2
-channel.names <- c('u10', 'tp')
-ntrain <- 1000
-outdir <- '/Users/alison/Documents/DPhil/paper1.nosync/results/brown_resnick/'
+field       <- 1
+field.names <- c('u10', 'tp', 'mslp')
+ntrain      <- 1000
+outdir      <- '/Users/alison/Documents/DPhil/paper1.nosync/results/brown_resnick/'
 
 extCoeffBR <- function(h, par){
   s=par[1]
@@ -51,25 +52,43 @@ BRIsoSim <- function(n, par, coord){
   simu=t(z)
 }
 
-nc_data <- nc_open('/Users/alison/Documents/DPhil/paper1.nosync/training/18x22/data.nc')
+nc_data <- nc_open('/Users/alison/Documents/DPhil/paper1.nosync/training/64x64/data.nc')
 lon <- ncvar_get(nc_data, "lon")
 lat <- ncvar_get(nc_data, "lat")
 coord <- expand.grid(lon = lon, lat = lat)
 t <- ncvar_get(nc_data, "time")
-U <- ncvar_get(nc_data, "uniform")[channel,,,]
+U <- ncvar_get(nc_data, "uniform")[field,,,]
+
+# Remove nans
+eps          <- 1e-6
+U[is.nan(U)] <- eps
+U[U == 0]    <- eps
+U[U == 1]    <- 1-eps
+
+# figures
 heatmap(U[,,1], Rowv=NA, Colv=NA)
 nsamples <- dim(U)[3]
-dim(U) <- c(18*22,nsamples)
-frechet <- -1 / log(U) # transform to unit Fréchet
-train <- frechet[,1:ntrain]
-test <- frechet[,(ntrain+1):nsamples]
+dim(U)   <- c(64*64,nsamples)
+frechet  <- -1 / log(U) # transform to unit Fréchet
+train    <- frechet[,1:ntrain]
+test     <- frechet[,(ntrain+1):nsamples]
+
+# load and subset by OP data
+op_path <- "/Users/alison/Documents/DPhil/paper1.nosync/training/18x22/ops.parquet"
+op_data <- read_parquet(op_path)
+dd             <- distm(op_data[,c("lon", "lat")], coord[,c("lon", "lat")])
+op_data$idxmin <- apply(dd, 1, which.min)
+
+train <- train[op_data$idxmin,]
+test  <- test[op_data$idxmin,]
+coord <- coord[op_data$idxmin,]
 
 ##### FIT EXTREMAL COEFFICIENTS ################################################
 if(TRUE){
-  test_ECs <- fitextcoeff(t(test), as.matrix(coord), estim="ST", marge="frech", plot=T)$ext.coeff
+  test_ECs  <- fitextcoeff(t(test), as.matrix(coord), estim="ST", marge="frech", plot=T)$ext.coeff
   train_ECs <- fitextcoeff(t(train), as.matrix(coord), estim="ST", marge="frech", plot=T)$ext.coeff
   
-  n <- 396
+  n <- nrow(train)
   npairs <- n * (n - 1) / 2 # i.e. (n C 2)
   indices <- list()
   for(i in 1:(n-1)){
@@ -83,20 +102,27 @@ if(TRUE){
   ECs <- cbind(ECs, train_ECs[,'ext.coeff'])
   colnames(ECs) <- c('i', 'j', 'distance', 'test_EC', 'train_EC')
   ECs <- data.frame(t(apply(ECs, 1, unlist)))
-  write_parquet(ECs, sink=paste0(outdir, 'ECs_', channel.names[channel], '.parquet'))
+  write_parquet(ECs, sink=paste0(outdir, 'ECs_', field.names[field], '.parquet'))
 }
 ##### SAMPLE FROM FITTED BR ####################################################
-ECs <- read_parquet(paste0(outdir, 'ECs_', channel.names[channel], '.parquet'))
+ECs <- read_parquet(paste0(outdir, 'ECs_', field.names[field], '.parquet'))
 ops <- read_parquet("/Users/alison/Documents/DPhil/paper1.nosync/training/18x22/ops.parquet")
-ii <- ops$grid
+ii <- c(1:nrow(ops))
 
 nsamples <- ntrain
 fit <- BRIsoFit(train[ii,], coord[ii,])
 par_U <- fit$par
+
+start.time <- Sys.time()
 sample <- BRIsoSim(nsamples, par_U, coord[ii,])
+
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+print(time.taken)
+
 sample_U <- exp(-1/sample) # convert back to uniform distribution
 sample.df <- cbind(ops, sample_U)
 sample.df[,1:10]
-write_parquet(sample.df, paste0(outdir, 'samples_', channel.names[channel], '.parquet'))
+write_parquet(sample.df, paste0(outdir, 'samples_', field.names[field], '.parquet'))
 
               

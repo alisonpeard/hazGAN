@@ -3,6 +3,7 @@ import os
 import yaml
 import numpy as np
 import xarray as xr
+from shapely.geometry import Point
 
 def res2str(res):
     return f"{res[0]}x{res[1]}"
@@ -55,6 +56,21 @@ def get_similarities(ds:xr.Dataset, template:np.ndarray) -> np.ndarray:
     return similarities # np.array(similarities)
 
 
+def op2idx(ops:dict, data:np.ndarray, extent:list):
+    h, w = data.shape
+
+    lons = np.linspace(extent[0], extent[1], w)
+    lats = np.linspace(extent[2], extent[3], h)
+
+    coords = np.array([Point(lon, lat) for lon in lons for lat in lats])
+
+    op_idx = {}
+    for op, loc in ops.items():
+        idx = np.argmin([coord.distance(Point(loc)) for coord in coords])
+        op_idx[op] = idx
+
+    return op_idx
+    
 def diff(x, d=1):
     """Difference a (time series) array."""
     return x[d:] - x[:-d]

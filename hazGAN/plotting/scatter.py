@@ -1,0 +1,129 @@
+#TODO: Tidy up !!
+import random
+import numpy as np
+from scipy.stats import gaussian_kde
+import matplotlib.pyplot as plt
+
+from .base import CMAP
+from ..constants import channel_labels
+
+
+def plot(fake, real, field=0, pixels=None, cmap=CMAP, s=10,
+         xlabel=None, ylabel=None, figsize=(6, 3)):
+        # find corresponding to OPs like before
+        n, h, w, c = real.shape
+        if pixels is None:
+            i, j = random.sample(range(h * w), 2)
+        else:
+            i, j = pixels
+
+        fig, axs = plt.subplots(1, 2, figsize=figsize, sharex=True, sharey=True)
+
+        single_scatter(real[..., field], ax=axs[0], sample_pixels=[j,i], cmap=cmap)
+        single_scatter(fake[..., field], ax=axs[1], sample_pixels=[j,i], cmap=cmap)
+
+        axs[0].set_title(f"Data (n={len(real)})", fontsize=13)
+        axs[1].set_title(f"Samples (n={len(fake)})", fontsize=13)
+
+        for ax in axs:
+            if ylabel:
+                ax.set_ylabel(ylabel)
+            else:
+                ax.set_ylabel(f"pixel index {i}", fontsize=12)
+
+            if xlabel:
+                ax.set_xlabel(xlabel)
+            else:
+                ax.set_xlabel(f"pixel index {j}", fontsize=12)
+
+            ax.set_facecolor('#f3f3f3ff')
+            ax.label_outer()
+        
+        plt.tight_layout()
+
+        fig.suptitle(channel_labels[field].capitalize(), y=1.05, fontsize=14)
+
+
+
+
+
+def single_scatter(data, ax=None, sample_pixels=None, cmap=CMAP, s=10):
+    """Scatterplot for two variables, coloured by density."""
+    h, w = data.shape[1:3]
+    n = h * w
+
+    if sample_pixels is None:
+        sample_pixels_x = random.sample(range(n), 1)
+        sample_pixels_y = random.sample(range(n), 1)
+    else:
+        assert sample_pixels[0] != sample_pixels[1]
+        sample_pixels_x = [sample_pixels[0]]
+        sample_pixels_y = [sample_pixels[1]]
+
+    data_ravel = np.reshape(data, [len(data), n])
+
+    sample_x = np.take(data_ravel, sample_pixels_x, axis=1)
+    sample_y = np.take(data_ravel, sample_pixels_y, axis=1)
+
+    axtitle = f"Pixels ({sample_pixels_x[0]}, {sample_pixels_y[0]})"
+
+    if not isinstance(sample_x, np.ndarray):
+        sample_x = sample_x.numpy()
+        sample_y = sample_y.numpy()
+
+    if ax is None:
+        _, ax = plt.subplots(1, 1, figsize=(5, 5))
+    scatter_density(sample_x, sample_y, ax, title=axtitle, cmap=cmap, s=s)
+
+
+def scatter_density(x, y, ax, title='', cmap=CMAP, s=10):
+    xy = np.hstack([x, y]).transpose()
+    z = gaussian_kde(xy)(xy)
+    idx = z.argsort()
+    x, y, z = x[idx], y[idx], z[idx]
+    ax.scatter(x, y, c=z, s=s, cmap=cmap)
+    ax.set_title(title)
+    return ax
+
+
+# def scatter_density2(x, y, ax, title='', cmap='cividis'):
+#     """Sometimes first doesn't work -- need to resolve why later."""
+#     xy = np.vstack([x,y])
+#     z = gaussian_kde(xy)(xy)
+#     idx = z.argsort()
+#     x, y, z = x[idx], y[idx], z[idx]
+#     ax.scatter(x, y, c=z, s=10, cmap=cmap)
+#     ax.set_title(title)
+#     return ax
+
+
+# def compare_channels_plot(train_images, test_images, fake_data, cmap='cividis'):
+#     fig, axs = plt.subplots(3, 3, figsize=(15, 3))
+
+#     for i, j in enumerate([300, 201, 102]):
+
+#         n, h, w, c = train_images.shape
+#         data_ravel = np.reshape(train_images, [n, h * w, c])
+#         data_sample = np.take(data_ravel, j, axis=1).numpy()
+#         x = np.array([data_sample[:, 0]]).transpose()
+#         y = np.array([data_sample[:, 1]]).transpose()
+#         scatter_density(x, y, ax=axs[i, 0], cmap=cmap)
+
+#         n, h, w, c = test_images.shape
+#         data_ravel = np.reshape(test_images, [n, h * w, c])
+#         data_sample = np.take(data_ravel, j, axis=1).numpy()
+#         x = np.array([data_sample[:, 0]]).transpose()
+#         y = np.array([data_sample[:, 1]]).transpose()
+#         scatter_density(x, y, ax=axs[i, 1], cmap=cmap)
+
+#         n, h, w, c = fake_data.shape
+#         data_ravel = np.reshape(fake_data, [n, h * w, c])
+#         data_sample = np.take(data_ravel, j, axis=1).numpy()
+#         x = np.array([data_sample[:, 0]]).transpose()
+#         y = np.array([data_sample[:, 1]]).transpose()
+#         scatter_density(x, y, ax=axs[i, 2], cmap=cmap)
+
+#         for ax in axs.ravel():
+#             ax.set_xlabel('u10')
+#             ax.set_ylabel('v10')
+#     return fig

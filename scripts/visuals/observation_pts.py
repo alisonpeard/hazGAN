@@ -9,11 +9,11 @@ import cartopy.feature as feature
 import matplotlib.pyplot as plt
 
 figdir = '/Users/alison/Documents/DPhil/paper1.nosync/figures/paper/brownresnick'
-ds = xr.open_dataset("/Users/alison/Documents/DPhil/paper1.nosync/training/18x22/data.nc")
+ds = xr.open_dataset("/Users/alison/Documents/DPhil/paper1.nosync/training/64x64/data.nc")
 fig_kws = {'dpi': 300, 'bbox_inches': 'tight', 'transparent': True}
 
 # create a variable grid, which is the index of each grid cell from 1-396
-grid = np.arange(0, 396).reshape(18, 22) # may need to modify this
+grid = np.arange(0, 4096).reshape(64, 64) # may need to modify this
 ds['grid'] = (('lat', 'lon'), grid)
 
 observation_points = {

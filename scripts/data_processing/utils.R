@@ -195,13 +195,15 @@ gpd_transformer <- function(df, metadata, var, q) {
 
   ncores  <- min(detectCores(), ngrid)
   cluster <- makeCluster(ncores)
-  clusterExport(cluster, c("df", "var", "q", "TEST.YEARS", "gpdAd", "scdf", "ecdf"))
+  clusterExport(cluster, c("df", "var", "q", "TEST.YEARS", "gpdAd", "scdf",
+    "ecdf", "left_join", "group_by", "%>%",
+    "slice", "summarise", "%ni%", "Box.test"
+  ))
 
   progress_file <- tempfile()
   writeLines("0", progress_file)
 
   transformed <- parLapply(cluster, 1:ngrid, function(i) {
-  # for (i in 1:ngrid){
     grid_i <- gridcells[i]
     gridcell <- df[df$grid == grid_i, ]
     gridcell <- left_join(gridcell,
@@ -216,7 +218,6 @@ gpd_transformer <- function(df, metadata, var, q) {
         storm.rp = storm.rp,
         grid = grid
       )
-    
     train <- maxima[year(maxima$time) %ni% TEST.YEARS,]
     thresh <- quantile(train$variable, q)
 
@@ -275,10 +276,5 @@ gpd_transformer <- function(df, metadata, var, q) {
   stopCluster(cluster)
   unlink(progress_file)
   transformed <- do.call(rbind, transformed)
-  
   return(transformed)
 }
-
-
-
-

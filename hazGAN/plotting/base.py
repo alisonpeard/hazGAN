@@ -14,6 +14,8 @@ plt.rcParams.update({
 
 CMAP   = "Spectral_r" # "Oranges", "YlGnBu", "YlOrBr"
 LABELS = ["wind speed [m]", "total precipitation [m]", "mslp [Pa]"]
+hist_kwargs = {"bins": 50, "color": "lightgrey", "edgecolor": "black", "alpha": 0.7}
+save_kwargs = {"dpi": 300, "bbox_inches": "tight", "pad_inches": 0.1}
 
 
 def heatmap(array, ax=None, extent=[80, 95, 10, 25], transform=ccrs.PlateCarree(),

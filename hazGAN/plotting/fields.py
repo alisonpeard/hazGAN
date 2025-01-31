@@ -8,8 +8,10 @@ from .base import CMAP
 from ..statistics import get_extremal_coeffs_nd
 
 
-def plot(fake, train, func, fields=[0, 1], figsize=1., cmap=CMAP, vmin=None, vmax=None,
-         title="Untitled", cbar_label="", **func_kws):
+def plot(fake, train, func, fields=[0, 1], figsize=1.,
+         cmap=CMAP, vmin=None, vmax=None,
+         title="Untitled", cbar_label="", **func_kws
+         ) -> plt.Figure:
     """
     Plot relationships between climate fields.
 

@@ -20,7 +20,8 @@ To do:
 - train-test split before ECDF & GPD fit (nearly there)
 - convert to Python!
 
-LAST RUN: 08-12-2024
+SECOND LAST RUN: 08-12-2024
+LAST RUN:        30-01-2025 (Q: 0.8 -> 0.9 hoping for bounded u10 tails)
 "
 #%%######### START #############################################################
 # Clear environment
@@ -44,9 +45,9 @@ RES        <- c(64, 64)               # nolint
 WD         <- Sys.getenv("TRAINDIR")  # nolint
 WD         <- paste0(WD, "/", res2str(RES))
 RFUNC      <- max                     # nolint, https://doi.org/10.1111/rssb.12498
-TEST.YEARS <- c(2022)                 # nolint, exclude from ecdf + gpd fitting
+TEST.YEARS <- c(2021)                 # nolint, exclude from ecdf + gpd fitting
 VISUALS    <- TRUE                    # nolint
-Q          <- 0.8                     # nolint
+Q          <- 0.9                     # nolint
 
 #%%######### LOAD AND STANDARDISE DATA #########################################
 print("Loading and standardising data...")

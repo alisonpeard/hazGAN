@@ -6,6 +6,7 @@ training set, test set, Brown-Resnick, and deep learning samples.
 import hazGAN as hg # stops things bugging out
 # %%
 import os
+import yaml
 import numpy as np
 import pandas as pd
 import geopandas as gpd
