@@ -4,6 +4,8 @@ library(extRemes)
 library(dplyr)
 library(lubridate)
 library(parallel)
+library(future)
+library(furrr)
 
 ########### HELPER FUNCTIONS ###################################################
 `%ni%` <- Negate(`%in%`)
@@ -179,32 +181,20 @@ storm_extractor <- function(daily, var, rfunc) {
   return(metadata)
 }
 
-
 gpd_transformer <- function(df, metadata, var, q) {
   gridcells <- unique(df$grid)
   ngrid <- length(gridcells)
 
-  update_progress <- progress_bar(ngrid, "Fitting GPD to excesses:", "Complete")
+  plan(multisession, workers = min(availableCores(), ngrid))
 
   df <- df[df$time %in% metadata$time, ]
 
-  fields <- c("storm", "variable", "time", "storm.rp",
-              "grid", "thresh", "scale", "shape", "p", "ecdf")
-  transformed <- data.frame(matrix(nrow = 0, ncol = length(fields)))
-  colnames(transformed) <- fields
+  pb <- progress::progress_bar$new(
+    format = "Processing grid cells [:bar] :percent eta: :eta",
+    total  = ngrid
+  )
 
-  ncores  <- min(detectCores(), ngrid)
-  cluster <- makeCluster(ncores)
-  clusterExport(cluster, c("df", "var", "q", "TEST.YEARS", "gpdAd", "scdf",
-    "ecdf", "left_join", "group_by", "%>%",
-    "slice", "summarise", "%ni%", "Box.test"
-  ))
-
-  progress_file <- tempfile()
-  writeLines("0", progress_file)
-
-  transformed <- parLapply(cluster, 1:ngrid, function(i) {
-    grid_i <- gridcells[i]
+  process_gridcell <- function(grid_i) {
     gridcell <- df[df$grid == grid_i, ]
     gridcell <- left_join(gridcell,
                           metadata[, c("time", "storm", "storm.rp")],
@@ -227,18 +217,18 @@ gpd_transformer <- function(df, metadata, var, q) {
     if (p < 0.1) {
       warning(paste0(
         "p-value ≤ 10% for H0 of independent exceedences for gridcell ",
-        i, ". Value: ", round(p, 4)
+        grid_i, ". Value: ", round(p, 4)
       ))
     }
 
     # fit ECDF & GPD on train set only...
-    newrow <- tryCatch({
+    tryCatch({
       fit <- gpdAd(
         train$variable[train$variable >= thresh],
         bootstrap     = TRUE,
         bootnum       = 10,
         allowParallel = FALSE,
-        numCores      = 2
+        numCores      = 1
       ) # H0: GPD distribution
 
       scale <- fit$theta[1]
@@ -255,7 +245,7 @@ gpd_transformer <- function(df, metadata, var, q) {
 
       maxima # assigns maxima to newrow
     }, error = function(e) {
-      print(paste0("MLE failed for grid cell ", grid_i, " ", e))
+      warning(sprintf("MLE failed for grid cell %d: %s", grid_i, e$message))
       maxima$thresh <- NA
       maxima$scale  <- NA
       maxima$shape  <- NA
@@ -266,15 +256,23 @@ gpd_transformer <- function(df, metadata, var, q) {
     })
 
     # update progress
-    progress <- as.integer(readLines(progress_file)[1])
-    writeLines(as.character(progress + 1), progress_file)
-    update_progress(as.integer(readLines(progress_file)[1]))
+    pb$tick()
+    return(maxima)
+  }
 
-    return(newrow)
-  })
-
-  stopCluster(cluster)
-  unlink(progress_file)
-  transformed <- do.call(rbind, transformed)
+  transformed <- future_map_dfr(
+    .x = 1:ngrid,
+    .f = ~process_gridcell(gridcells[.x]),
+    .options = furrr_options(
+      seed = TRUE,
+      scheduling = 1
+    )
+  )
+  
+  fields <- c("storm", "variable", "time", "storm.rp",
+              "grid", "thresh", "scale", "shape", "p",
+              "ecdf", "scdf")
+  transformed <- transformed[, fields]
+  
   return(transformed)
 }
