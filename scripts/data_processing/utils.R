@@ -6,6 +6,7 @@ library(lubridate)
 library(parallel)
 library(future)
 library(furrr)
+library(data.table)
 
 ########### HELPER FUNCTIONS ###################################################
 `%ni%` <- Negate(`%in%`)
@@ -15,26 +16,6 @@ res2str <- function(res){
   return(string)
 }
 
-standardise_by_month <- function(df, var) {
-  df$month <- months(df$time)
-  df <- df[,c(var, "month", "grid")]
-  monthly_median <- aggregate(. ~ month + grid, df, median)
-  df$monthly_median <- left_join(
-    df[, c("month", "grid")],
-    monthly_median,
-    by = c("month" = "month", "grid" = "grid")
-  )[[var]]
-  df[[var]] <- df[[var]] - df$monthly_median
-  return(df[[var]])
-}
-monthly_medians <- function(df, var) {
-  df <- df[, c(var, "time", "grid")]
-  df$month <- months(df$time)
-  monthly_median <- aggregate(. ~ month + grid,
-                              df[, c(var, "grid", "month")],
-                              median)
-  return(monthly_median)
-}
 ecdf <- function(x) {
   x <- sort(x)
   n <- length(x)
@@ -81,35 +62,108 @@ progress_bar <- function(n, prefix = "", suffix = "") {
   }
 }
 
-########### EVT FUNCTIONS ###################################################
-gridsearch <- function(series, var, qmin = 60, qmax = 99, rmax = 14) {
+########### EVT FUNCTIONS ######################################################
+standardise_by_month <- function(df, var) {
+  
+  df$month       <- months(df$time)
+  df             <- df[,c(var, "month", "grid")]
+  monthly_median <- aggregate(. ~ month + grid, df, median)
+  
+  df$monthly_median <- left_join(
+    df[, c("month", "grid")],
+    monthly_median,
+    by = c("month" = "month", "grid" = "grid")
+  )[[var]]
+  
+  df[[var]] <- df[[var]] - df$monthly_median
+
+  return(list(
+    var=df[[var]],
+    medians=df[c("monthly_median", "grid", "month")]
+    ))
+}
+
+# monthly_medians <- function(df, var) {
+#   df <- df[, c(var, "time", "grid")]
+#   df$month <- months(df$time)
+#   monthly_median <- aggregate(. ~ month + grid,
+#                               df[, c(var, "grid", "month")],
+#                               median)
+#   return(monthly_median)
+# }
+
+# remove_seasonality <- function(dt, vars) {
+#   dt <- as.data.table(dt)
+#   dt$month <- month(dt$time)
+#   medians <- dt[, lapply(.SD, median), 
+#                 by = .(month, grid), 
+#                 .SDcols = vars]
+#   
+#   setkeyv(dt, c('month', 'grid'))
+#   setkeyv(medians, c('month', 'grid'))
+#   
+#   for (var in vars) {
+#     dt[medians, paste0(var, "_temp") := get(var) - get(paste0("i.", var))]
+#   }
+#   
+#   standardised <- dt[, .SD, .SDcols = paste0(vars, "_temp")]
+#   setnames(standardised, paste0(vars, "_temp"), vars)
+#   
+#   return(list(
+#     standardised = as_tibble(standardised),
+#     medians = medians
+#   ))
+# }
+
+
+gridsearch <- function(series, var, qmin = 60, qmax = 99, rmin = 1, rmax = 14) {
   "Unit tests for this?"
   qvec <- c(qmin:qmax) / 100
-  rvec <- c(1:rmax)
+  rvec <- c(rmin:rmax)
+
+  print("Initial data summary:")
+  print(summary(series[[var]]))
 
   nclusters <- matrix(nrow = length(rvec), ncol = length(qvec))
-  ext_ind <- matrix(nrow = length(rvec), ncol = length(qvec))
-  pvals <- matrix(nrow = length(rvec), ncol = length(qvec))
+  ext_ind   <- matrix(nrow = length(rvec), ncol = length(qvec))
+  pvals     <- matrix(nrow = length(rvec), ncol = length(qvec))
 
+  series_var <- series[[var]]
+  thresholds  <- quantile(series_var, qvec)
+
+  print("Testing combinations:")
   for (i in seq_along(rvec)){
     for (j in seq_along(qvec)){
-      thresh <- quantile(series[[var]], qvec[j])
-      d <- decluster(series[[var]], thresh = thresh,
+      thresh <- thresholds[j]
+
+      d <- decluster(series_var, thresh = thresh,
                      r = rvec[i], method = "runs")
 
       # NOTE: theta = 1 a lot, double-check?
       e <- extremalindex(c(d), thresh, r = rvec[i],
                          method = "runs") # Coles (2001) §5.3.2
+
+      # print(sprintf("r=%d, q=%.2f: ext_ind=%.3f",
+      #               rvec[i], qvec[j], e[["extremal.index"]]))
+
       p <- Box.test(c(d)[c(d) > thresh], type = "Ljung")
+
       nclusters[i, j] <- e[["number.of.clusters"]]
-      ext_ind[i, j] <- e[["extremal.index"]]
-      pvals[i, j] <- p$p.value
+      ext_ind[i, j]   <- e[["extremal.index"]]
+      pvals[i, j]     <- p$p.value
     }
   }
+  print("Before filtering:")
+  print(table(is.finite(nclusters)))
 
-  # remove any cases with dependence in exceedences
+  print("After extremal index filter:")
   nclusters[ext_ind < 0.8] <- -Inf # theta < 1 => extremal dependence
+  print(table(is.finite(nclusters)))
+  print("After p-value filter:")
+
   nclusters[pvals < 0.1]  <- -Inf  # H0: independent exceedances
+  print(table(is.finite(nclusters)))
+
   ind <- which(nclusters == max(nclusters), arr.ind = TRUE)
   r <- rvec[ind[1]]
   q <- qvec[ind[2]]
@@ -181,24 +235,36 @@ storm_extractor <- function(daily, var, rfunc) {
   return(metadata)
 }
 
-gpd_transformer <- function(df, metadata, var, q) {
+gpd_transformer <- function(df, metadata, var, q, chunksize=256) {
   gridcells <- unique(df$grid)
-  ngrid <- length(gridcells)
-
-  plan(multisession, workers = min(availableCores(), ngrid))
-
   df <- df[df$time %in% metadata$time, ]
+  ngrid <- length(gridcells)
+  
+  # save df to RDS for worker access
+  tmp <- tempfile(fileext = ".rds")
+  saveRDS(df, tmp)
+  rm(df)
+  gc() 
 
+  # chunk data for memory efficiency
+  gridchunks <- split(gridcells, ceiling(seq_along(gridcells)/chunksize))
+  gridchunks <- unname(gridchunks)
+  nchunks <- length(gridchunks)
+
+  # multiprocessing intiation
+  plan(multisession, workers = min(availableCores() - 2, nchunks))
   pb <- progress::progress_bar$new(
     format = "Processing grid cells [:bar] :percent eta: :eta",
     total  = ngrid
   )
 
-  process_gridcell <- function(grid_i) {
+  # main GPD fitting function
+  process_gridcell <- function(grid_i, df) {
     gridcell <- df[df$grid == grid_i, ]
     gridcell <- left_join(gridcell,
                           metadata[, c("time", "storm", "storm.rp")],
                           by = c("time" = "time"))
+    
     maxima <- gridcell %>%
       group_by(storm) %>%
       slice(which.max(get(var))) %>%
@@ -222,7 +288,7 @@ gpd_transformer <- function(df, metadata, var, q) {
     }
 
     # fit ECDF & GPD on train set only...
-    tryCatch({
+    maxima <- tryCatch({
       fit <- gpdAd(
         train$variable[train$variable >= thresh],
         bootstrap     = TRUE,
@@ -239,35 +305,49 @@ gpd_transformer <- function(df, metadata, var, q) {
       maxima$p      <- fit$p.value
 
       # empirical cdf transform
-      maxima$scdf <- scdf(train$variable, thresh,
-                          scale, shape)(maxima$variable)
+      maxima$scdf <- scdf(train$variable, thresh, scale, shape)(maxima$variable)
       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
-
-      maxima # assigns maxima to newrow
+      maxima
     }, error = function(e) {
-      warning(sprintf("MLE failed for grid cell %d: %s", grid_i, e$message))
+      warning(sprintf("MLE failed for grid cell %d: %s. Resorting to fully empirical fits.",
+                      grid_i, e$message))
       maxima$thresh <- NA
       maxima$scale  <- NA
       maxima$shape  <- NA
       maxima$p      <- 0
       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
       maxima$scdf <- maxima$ecdf
-      return(maxima)
+      maxima
     })
-
-    # update progress
-    pb$tick()
+    #pb$tick()
     return(maxima)
   }
-
+  
+  
+  # wrapper for process_gridcell()
+  process_gridchunk <- function(gridchunk) {
+    df <- readRDS(tmp)
+    df <- df[df$grid %in% gridchunk, ]
+    gc()
+    
+    maxima <- lapply(gridchunk, function(grid_i) {
+      process_gridcell(grid_i, df)
+    })
+    
+    bind_rows(maxima)
+  }
+  
+  # apply multiprocessing
   transformed <- future_map_dfr(
-    .x = 1:ngrid,
-    .f = ~process_gridcell(gridcells[.x]),
+    .x = gridchunks,
+    .f = process_gridchunk,
     .options = furrr_options(
       seed = TRUE,
       scheduling = 1
     )
   )
+  
+  unlink(tmp)
   
   fields <- c("storm", "variable", "time", "storm.rp",
               "grid", "thresh", "scale", "shape", "p",
