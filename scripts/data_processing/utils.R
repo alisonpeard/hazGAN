@@ -216,7 +216,7 @@ gpd_transformer <- function(df, metadata, var, q, chunksize=256) {
     thresh <- quantile(train$variable, q)
 
     # validation
-    excesses <- maxima$variable[maxima$variable >= thresh]
+    excesses <- maxima$variable[maxima$variable > thresh]
     p <- Box.test(excesses)[["p.value"]] # H0: independent
     if (p < 0.1) {
       warning(paste0(
@@ -228,7 +228,7 @@ gpd_transformer <- function(df, metadata, var, q, chunksize=256) {
     # fit ECDF & GPD on train set only...
     maxima <- tryCatch({
       fit <- gpdAd(
-        train$variable[train$variable >= thresh],
+        train$variable[train$variable > thresh],
         bootstrap     = TRUE,
         bootnum       = 10,
         allowParallel = FALSE,
@@ -338,7 +338,7 @@ gpd_transformer <- function(df, metadata, var, q, chunksize=256) {
 #     thresh <- quantile(train$variable, q)
 
 #     # validation
-#     excesses <- maxima$variable[maxima$variable >= thresh]
+#     excesses <- maxima$variable[maxima$variable > thresh]
 #     p <- Box.test(excesses)[["p.value"]] # H0: independent
 #     if (p < 0.1) {
 #       warning(paste0(
@@ -350,7 +350,7 @@ gpd_transformer <- function(df, metadata, var, q, chunksize=256) {
 #     # fit ECDF & GPD on train set only...
 #     newrow <- tryCatch({
 #       fit <- gpdAd(
-#         train$variable[train$variable >= thresh],
+#         train$variable[train$variable > thresh],
 #         bootstrap     = TRUE,
 #         bootnum       = 10,
 #         allowParallel = FALSE,
