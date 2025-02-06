@@ -4,6 +4,9 @@ library(extRemes)
 library(dplyr)
 library(lubridate)
 library(parallel)
+library(future)
+library(furrr)
+library(data.table)
 
 ########### HELPER FUNCTIONS ###################################################
 `%ni%` <- Negate(`%in%`)
@@ -170,33 +173,36 @@ storm_extractor <- function(daily, var, rfunc) {
 }
 
 
-gpd_transformer <- function(df, metadata, var, q) {
+gpd_transformer <- function(df, metadata, var, q, chunksize=256) {
   gridcells <- unique(df$grid)
-  ngrid <- length(gridcells)
-
-  update_progress <- progress_bar(ngrid, "Fitting GPD to excesses:", "Complete")
-
   df <- df[df$time %in% metadata$time, ]
+  ngrid <- length(gridcells)
+  
+  # save df to RDS for worker access
+  tmp <- tempfile(fileext = ".rds")
+  saveRDS(df, tmp)
+  rm(df)
+  gc() 
 
-  fields <- c("storm", "variable", "time", "storm.rp",
-              "grid", "thresh", "scale", "shape", "p", "ecdf")
-  transformed <- data.frame(matrix(nrow = 0, ncol = length(fields)))
-  colnames(transformed) <- fields
+  # chunk data for memory efficiency
+  gridchunks <- split(gridcells, ceiling(seq_along(gridcells)/chunksize))
+  gridchunks <- unname(gridchunks)
+  nchunks <- length(gridchunks)
 
-  ncores  <- min(detectCores(), ngrid)
-  cluster <- makeCluster(ncores)
-  clusterExport(cluster, c("df", "var", "q", "TEST.YEARS", "gpdAd", "scdf", "ecdf"))
+  # multiprocessing intiation
+  plan(multisession, workers = min(availableCores() - 2, nchunks))
+  pb <- progress::progress_bar$new(
+    format = "Processing grid cells [:bar] :percent eta: :eta",
+    total  = ngrid
+  )
 
-  progress_file <- tempfile()
-  writeLines("0", progress_file)
-
-  transformed <- parLapply(cluster, 1:ngrid, function(i) {
-  # for (i in 1:ngrid){
-    grid_i <- gridcells[i]
+  # main GPD fitting function
+  process_gridcell <- function(grid_i, df) {
     gridcell <- df[df$grid == grid_i, ]
     gridcell <- left_join(gridcell,
                           metadata[, c("time", "storm", "storm.rp")],
                           by = c("time" = "time"))
+    
     maxima <- gridcell %>%
       group_by(storm) %>%
       slice(which.max(get(var))) %>%
@@ -206,7 +212,6 @@ gpd_transformer <- function(df, metadata, var, q) {
         storm.rp = storm.rp,
         grid = grid
       )
-    
     train <- maxima[year(maxima$time) %ni% TEST.YEARS,]
     thresh <- quantile(train$variable, q)
 
@@ -216,18 +221,18 @@ gpd_transformer <- function(df, metadata, var, q) {
     if (p < 0.1) {
       warning(paste0(
         "p-value ≤ 10% for H0 of independent exceedences for gridcell ",
-        i, ". Value: ", round(p, 4)
+        grid_i, ". Value: ", round(p, 4)
       ))
     }
 
     # fit ECDF & GPD on train set only...
-    newrow <- tryCatch({
+    maxima <- tryCatch({
       fit <- gpdAd(
         train$variable[train$variable >= thresh],
         bootstrap     = TRUE,
         bootnum       = 10,
         allowParallel = FALSE,
-        numCores      = 2
+        numCores      = 1
       ) # H0: GPD distribution
 
       scale <- fit$theta[1]
@@ -238,33 +243,155 @@ gpd_transformer <- function(df, metadata, var, q) {
       maxima$p      <- fit$p.value
 
       # empirical cdf transform
-      maxima$scdf <- scdf(train$variable, thresh,
-                          scale, shape)(maxima$variable)
+      maxima$scdf <- scdf(train$variable, thresh, scale, shape)(maxima$variable)
       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
-
-      maxima # assigns maxima to newrow
+      maxima
     }, error = function(e) {
-      print(paste0("MLE failed for grid cell ", grid_i, " ", e))
+      warning(sprintf("MLE failed for grid cell %d: %s. Resorting to fully empirical fits.",
+                      grid_i, e$message))
       maxima$thresh <- NA
       maxima$scale  <- NA
       maxima$shape  <- NA
       maxima$p      <- 0
       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
       maxima$scdf <- maxima$ecdf
-      return(maxima)
+      maxima
     })
-
-    # update progress
-    progress <- as.integer(readLines(progress_file)[1])
-    writeLines(as.character(progress + 1), progress_file)
-    update_progress(as.integer(readLines(progress_file)[1]))
-
-    return(newrow)
-  })
-
-  stopCluster(cluster)
-  unlink(progress_file)
-  transformed <- do.call(rbind, transformed)
+    #pb$tick()
+    return(maxima)
+  }
+  
+  
+  # wrapper for process_gridcell()
+  process_gridchunk <- function(gridchunk) {
+    df <- readRDS(tmp)
+    df <- df[df$grid %in% gridchunk, ]
+    gc()
+    
+    maxima <- lapply(gridchunk, function(grid_i) {
+      process_gridcell(grid_i, df)
+    })
+    
+    bind_rows(maxima)
+  }
+  
+  # apply multiprocessing
+  transformed <- future_map_dfr(
+    .x = gridchunks,
+    .f = process_gridchunk,
+    .options = furrr_options(
+      seed = TRUE,
+      scheduling = 1
+    )
+  )
+  
+  unlink(tmp)
+  
+  fields <- c("storm", "variable", "time", "storm.rp",
+              "grid", "thresh", "scale", "shape", "p",
+              "ecdf", "scdf")
+  transformed <- transformed[, fields]
   
   return(transformed)
 }
+
+
+# # OLD
+# gpd_transformer <- function(df, metadata, var, q) {
+#   gridcells <- unique(df$grid)
+#   ngrid <- length(gridcells)
+
+#   update_progress <- progress_bar(ngrid, "Fitting GPD to excesses:", "Complete")
+
+#   df <- df[df$time %in% metadata$time, ]
+
+#   fields <- c("storm", "variable", "time", "storm.rp",
+#               "grid", "thresh", "scale", "shape", "p", "ecdf")
+#   transformed <- data.frame(matrix(nrow = 0, ncol = length(fields)))
+#   colnames(transformed) <- fields
+
+#   ncores  <- min(detectCores(), ngrid)
+#   cluster <- makeCluster(ncores)
+#   clusterExport(cluster, c("df", "var", "q", "TEST.YEARS", "gpdAd", "scdf", "ecdf"))
+
+#   progress_file <- tempfile()
+#   writeLines("0", progress_file)
+
+#   transformed <- parLapply(cluster, 1:ngrid, function(i) {
+#   # for (i in 1:ngrid){
+#     grid_i <- gridcells[i]
+#     gridcell <- df[df$grid == grid_i, ]
+#     gridcell <- left_join(gridcell,
+#                           metadata[, c("time", "storm", "storm.rp")],
+#                           by = c("time" = "time"))
+#     maxima <- gridcell %>%
+#       group_by(storm) %>%
+#       slice(which.max(get(var))) %>%
+#       summarise(
+#         variable = max(get(var)),
+#         time = time,
+#         storm.rp = storm.rp,
+#         grid = grid
+#       )
+    
+#     train <- maxima[year(maxima$time) %ni% TEST.YEARS,]
+#     thresh <- quantile(train$variable, q)
+
+#     # validation
+#     excesses <- maxima$variable[maxima$variable >= thresh]
+#     p <- Box.test(excesses)[["p.value"]] # H0: independent
+#     if (p < 0.1) {
+#       warning(paste0(
+#         "p-value ≤ 10% for H0 of independent exceedences for gridcell ",
+#         i, ". Value: ", round(p, 4)
+#       ))
+#     }
+
+#     # fit ECDF & GPD on train set only...
+#     newrow <- tryCatch({
+#       fit <- gpdAd(
+#         train$variable[train$variable >= thresh],
+#         bootstrap     = TRUE,
+#         bootnum       = 10,
+#         allowParallel = FALSE,
+#         numCores      = 2
+#       ) # H0: GPD distribution
+
+#       scale <- fit$theta[1]
+#       shape <- fit$theta[2]
+#       maxima$thresh <- thresh
+#       maxima$scale  <- scale
+#       maxima$shape  <- shape
+#       maxima$p      <- fit$p.value
+
+#       # empirical cdf transform
+#       maxima$scdf <- scdf(train$variable, thresh,
+#                           scale, shape)(maxima$variable)
+#       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
+
+#       maxima # assigns maxima to newrow
+#     }, error = function(e) {
+#       print(paste0("MLE failed for grid cell ", grid_i, " ", e))
+#       maxima$thresh <- NA
+#       maxima$scale  <- NA
+#       maxima$shape  <- NA
+#       maxima$p      <- 0
+#       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
+#       maxima$scdf <- maxima$ecdf
+#       return(maxima)
+#     })
+
+#     # update progress
+#     progress <- as.integer(readLines(progress_file)[1])
+#     writeLines(as.character(progress + 1), progress_file)
+#     update_progress(as.integer(readLines(progress_file)[1]))
+
+#     return(newrow)
+#   })
+
+#   stopCluster(cluster)
+#   unlink(progress_file)
+#   transformed <- do.call(rbind, transformed)
+  
+#   return(transformed)
+# }

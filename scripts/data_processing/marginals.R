@@ -46,7 +46,7 @@ WD         <- paste0(WD, "/", res2str(RES))
 RFUNC      <- max                     # nolint, https://doi.org/10.1111/rssb.12498
 TEST.YEARS <- c(2022)                 # nolint, exclude from ecdf + gpd fitting
 VISUALS    <- TRUE                    # nolint
-Q          <- 0.8                     # nolint
+Q          <- 0.95                    # nolint
 
 #%%######### LOAD AND STANDARDISE DATA #########################################
 print("Loading and standardising data...")
@@ -70,7 +70,8 @@ daily$tp <- standardise_by_month(daily, "tp")
 
 #%%######## EXTRACT AND TRANSFORM STORMS #######################################
 print("Extracting storms...")
-metadata <- storm_extractor(daily, "u10", RFUNC)
+metadata   <- storm_extractor(daily, "u10", RFUNC)
+#metadata$Q <- Q
 
 # fit to marginal data
 print("Tranforming fields...")

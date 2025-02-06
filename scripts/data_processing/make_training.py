@@ -36,7 +36,7 @@ from hazGAN.utils import res2str
 
 
 plt.rcParams['font.family'] = 'serif'
-hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k'}
+hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k', 'density': True}
 
 FIELDS = ["u10", "tp", 'mslp']
 VISUALISATIONS = True
@@ -149,7 +149,7 @@ def main(datadir):
             gdf[gdf["storm"] == s0].plot(column=f"p_{var}", marker="s", cmap=p_cmap, vmin=p_crit, ax=axs[0])
             gdf[gdf["storm"] == s0].plot(column=f"thresh_{var}", legend=True, marker="s", cmap=cmap, ax=axs[1])
             gdf[gdf["storm"] == s0].plot(column=f"scale_{var}", legend=True, marker="s", cmap=cmap, ax=axs[2])
-            gdf[gdf["storm"] == s0].plot(column=f"shape_{var}", legend=True, marker="s", cmap=cmap, ax=axs[3])
+            gdf[gdf["storm"] == s0].plot(column=f"shape_{var}", legend=True, marker="s", cmap=cmap, ax=axs[3], vmin=-0.81, vmax=0.28)
 
             # extend p-values colorbar to show where H0 rejected
             scatter = axs[0].collections[0]
@@ -168,7 +168,24 @@ def main(datadir):
             fig.suptitle(f"Fit for ERA5 {var.upper()}, n = {gdf['storm'].nunique()}")
             print(gdf[gdf[f"p_{var}"] < p_crit]["grid"].nunique(), "significant p-values")
 
-    # important: check ecdfs are in (0, 1)
+        # var = 'u10'
+        # for _ in range(5):
+        #     grid_idx = np.random.randint(0, gdf["grid"].nunique(), 1)[0]
+        #     grid = gdf[gdf["grid"] == grid_idx]
+
+        #     fig, ax = plt.subplots(figsize=(10, 4))
+        #     grid.plot.hist(var, ax=ax, **hist_kws)
+
+        #     threshold = grid[f"thresh_{var}"].values
+        #     assert len(threshold.unique()) == 1, "Threshold should be unique"
+        #     threshold = threshold[0]
+        #     grid.plot.hist(f"thresh_{var}", bins=50, ax=axs[1], **hist_kws)
+        #     ax.axvline(threshold, color='r', linestyle='--', label=f"Threshold: {threshold:.2f}")
+        #     ax.legend()
+        #     ax.set_title(f"exceedences for gridcell {grid_idx}")
+        
+
+    #  important: check ecdfs are in (0, 1)
     assert gdf[['ecdf_u10', 'ecdf_tp', 'ecdf_mslp']].max().max() <= 1, "ECDF values should be between 0 and 1"
     assert gdf[['ecdf_u10', 'ecdf_tp', 'ecdf_mslp']].min().min() >= 0, "ECDF values should be between 0 and 1"
 
@@ -326,12 +343,108 @@ def main(datadir):
             ax.hist(ds.isel(field=i).anomaly.values.ravel(), **hist_kws);
         
     ds.close()
+    return gdf
 
-
+# %%
 if __name__ == "__main__":
     env = Env()
     env.read_env(recurse=True)
     datadir = os.path.join(env.str("TRAINDIR"), res2str(RES))
-    main(datadir)
+    gdf = main(datadir)
 
-# %% MAKING TESTS
+    # %% MAKING TESTS
+    from scipy.stats import genpareto
+
+    N         = 30
+    Q         = 0.9 # gdf['thresh_q'][0]
+    field     = "u10"
+
+    shapes_fitted = []
+    shapes_current = []
+    shapes_new = []
+
+    for _ in range(N):
+        gridcells = list(gdf['grid'].unique())
+        gridcell  = np.random.choice(gridcells)
+        gridvars  = gdf[gdf['grid'] == gridcell]
+
+        thresholds = gridvars[[f'thresh_{field}']].values
+        shapes     = gridvars[[f'shape_{field}']].values
+        scales     = gridvars[[f'scale_{field}']].values
+
+        assert len(np.unique(thresholds)) == 1, "Threshold should be unique"
+        assert len(np.unique(shapes)) == 1, "Shape should be unique"
+        assert len(np.unique(scales)) == 1, "Scale should be unique"
+
+        threshold = thresholds[0][0]
+        shape     = shapes[0][0]
+        scale     = scales[0][0]
+        quantile  = np.quantile(gridvars[field], Q)
+        print("Parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(threshold, scale, shape))
+        print("Very large prediction:", genpareto.ppf(1-1e-6, shape, threshold, scale))
+        print(f"Quantile at {Q} is {quantile:.2f}")
+
+        fig, axs = plt.subplots(1, 3, figsize=(13, 4))
+        ax = axs[0]
+        gridvars.hist(field, ax=ax, **hist_kws)
+        ax.axvline(threshold, color='r', linestyle='--', label=f"Threshold: {threshold:.2f}")
+        ax.axvline(quantile, color='g', linestyle='-.', label=f"Quantile at {Q}: {quantile:.2f}")
+
+        ax = axs[1]
+        try:
+            exceedences = gridvars[gridvars[field] > threshold]
+            print("\nThere are", len(exceedences), "exceedences for gridcell", int(gridcell))   
+            exceedences.hist(field, ax=ax, **hist_kws);
+
+            x = np.linspace(exceedences[field].min(), exceedences[field].max(), 100)
+            y_fitted = genpareto.pdf(x, shape, threshold, scale)
+            ax.plot(x, y_fitted, color='r', linestyle='--', label='Fitted')
+
+            c, loc, scale = genpareto.fit(exceedences[field])
+        except Exception as e:
+            c, loc, scale = np.nan, np.nan, np.nan
+
+        print("Fitted parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(loc, scale, c))
+        print("Very large prediction:", genpareto.ppf(1-1e-6, c, threshold, scale))
+
+        if not np.isnan(c):
+            y_current = genpareto.pdf(x, c, threshold, scale)
+            ax.plot(x, y_current, color='g', linestyle='-.', label='Current')
+        ax.legend()
+        shapes_fitted.append(shape)
+        shapes_current.append(c)
+
+        # situation if we take quantile exceedences
+        ax = axs[2]
+        try:
+            exceedences = gridvars[gridvars[field] > quantile]
+            print("\nThere are", len(exceedences), "quantile exceedences for gridcell", int(gridcell))
+            exceedences[field].hist(ax=ax, **hist_kws)
+            c, loc, scale = genpareto.fit(exceedences[field])
+        except Exception as e:
+            c, loc, scale = np.nan, np.nan, np.nan
+        
+        if not np.isnan(c):
+            y_new = genpareto.pdf(x, c, quantile, scale)
+            ax.plot(x, y_new, color='r', linestyle='-.', label='New')
+        ax.legend()
+
+        print("Fitted parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(loc, scale, c))
+        print("Very large prediction:", genpareto.ppf(1-1e-6, c, quantile, scale))
+        shapes_new.append(c)
+    # %%
+    fig, ax = plt.subplots(1, 1, figsize=(6, 3))
+    ax.hist(shapes_fitted, color='lightgrey', edgecolor='k', alpha=0.5, label='Fitted')
+    ax.hist(shapes_current, color='b', edgecolor='k', alpha=0.5, label='Current')
+    ax.hist(shapes_new, color='r', edgecolor='k', alpha=0.5, label=f'New (q={Q})')
+    ax.legend()
+    # %%
+    fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+    axs[0].hist(shapes_fitted, color='lightgrey', edgecolor='k', alpha=0.5, label='Fitted')
+    axs[1].hist(shapes_current, color='b', edgecolor='k', alpha=0.5, label='Current')
+    axs[2].hist(shapes_new, color='r', edgecolor='k', alpha=0.5, label=f'New (q={Q})')
+
+    axs[0].set_title('Fitted')
+    axs[1].set_title('Current')
+    axs[2].set_title(f'New (q={Q})')
+    # %%
