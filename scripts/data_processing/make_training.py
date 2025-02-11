@@ -40,7 +40,7 @@ hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k', 'density': True}
 
 FIELDS = ["u10", "tp", 'mslp']
 VISUALISATIONS = True
-THRESHOLD = 0.75 # rough manual bisection for this
+THRESHOLD = 0.75 # (for outliers, not using)
 PROCESS_OUTLIERS = False
 RES = (64, 64)
 
@@ -356,7 +356,7 @@ if __name__ == "__main__":
     from scipy.stats import genpareto
 
     N         = 30
-    Q         = 0.9 # gdf['thresh_q'][0]
+    Q         = 0.95 # gdf['thresh_q'][0]
     field     = "u10"
 
     shapes_fitted = []
@@ -380,15 +380,17 @@ if __name__ == "__main__":
         shape     = shapes[0][0]
         scale     = scales[0][0]
         quantile  = np.quantile(gridvars[field], Q)
-        print("Parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(threshold, scale, shape))
+        print("\n\nFitted parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(threshold, scale, shape))
         print("Very large prediction:", genpareto.ppf(1-1e-6, shape, threshold, scale))
         print(f"Quantile at {Q} is {quantile:.2f}")
 
         fig, axs = plt.subplots(1, 3, figsize=(13, 4))
+
         ax = axs[0]
         gridvars.hist(field, ax=ax, **hist_kws)
         ax.axvline(threshold, color='r', linestyle='--', label=f"Threshold: {threshold:.2f}")
         ax.axvline(quantile, color='g', linestyle='-.', label=f"Quantile at {Q}: {quantile:.2f}")
+        ax.legend()
 
         ax = axs[1]
         try:
@@ -400,11 +402,11 @@ if __name__ == "__main__":
             y_fitted = genpareto.pdf(x, shape, threshold, scale)
             ax.plot(x, y_fitted, color='r', linestyle='--', label='Fitted')
 
-            c, loc, scale = genpareto.fit(exceedences[field])
+            c, loc, scale = genpareto.fit(gridvars[field], loc=threshold)
         except Exception as e:
             c, loc, scale = np.nan, np.nan, np.nan
 
-        print("Fitted parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(loc, scale, c))
+        print("Current parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(loc, scale, c))
         print("Very large prediction:", genpareto.ppf(1-1e-6, c, threshold, scale))
 
         if not np.isnan(c):
@@ -420,7 +422,7 @@ if __name__ == "__main__":
             exceedences = gridvars[gridvars[field] > quantile]
             print("\nThere are", len(exceedences), "quantile exceedences for gridcell", int(gridcell))
             exceedences[field].hist(ax=ax, **hist_kws)
-            c, loc, scale = genpareto.fit(exceedences[field])
+            c, loc, scale = genpareto.fit(gridvars[field], loc=quantile)
         except Exception as e:
             c, loc, scale = np.nan, np.nan, np.nan
         
@@ -429,7 +431,7 @@ if __name__ == "__main__":
             ax.plot(x, y_new, color='r', linestyle='-.', label='New')
         ax.legend()
 
-        print("Fitted parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(loc, scale, c))
+        print("New parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(loc, scale, c))
         print("Very large prediction:", genpareto.ppf(1-1e-6, c, quantile, scale))
         shapes_new.append(c)
     # %%

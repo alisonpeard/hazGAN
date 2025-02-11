@@ -172,6 +172,30 @@ storm_extractor <- function(daily, var, rfunc) {
   return(metadata)
 }
 
+select_gpd_threshold <- function(var, min_exceedances=30, nthresholds=50, nsim=20) {
+  thresholds <- quantile(var, probs=seq(0.7, 0.999, length.out=nthresholds))
+  
+  fits <- gpdSeqTests(var, thresholds=thresholds, method="ad", nsim=nsim)
+  
+  valid_n          <- fits$num.above >= min_exceedances
+  valid_stops      <- fits$ForwardStop <1 & fits$StrongStop < 1
+  shape_stability  <- rollapply(fits$est.shape, width=3, FUN=sd, fill=NA)
+  valid_stability  <- !is.na(shape_stability < Inf)
+  valid_thresholds <- which(valid_n & valid_stops & valid_stability)
+  
+  if(length(valid_thresholds) > 0) {
+    #idx <- which.min(fits$est.shape)
+    idx <- min(valid_thresholds)
+    return(list(
+      loc   = fits$threshold[idx],
+      theta = c(fits$est.scale[idx], fits$est.shape[idx]),
+      p.value = fits$p.values[idx],
+      n_exceed = fits$num.above[idx]
+    ))
+  } else {
+    return(NULL)
+  }
+}
 
 gpd_transformer <- function(df, metadata, var, q, chunksize=256) {
   gridcells <- unique(df$grid)
