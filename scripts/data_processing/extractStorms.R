@@ -20,7 +20,7 @@ To do:
 - train-test split before ECDF & GPD fit (nearly there)
 - convert to Python!
 
-LAST RUN: 08-12-2024
+LAST RUN: 17-02-2025
 "
 #%%######### START #############################################################
 # Clear environment
@@ -32,21 +32,17 @@ library(dplyr)
 require(ggplot2)
 library(CFtime)
 library(tidync)
+source("utils.R")
+source("settings.R")
 
 # set up env (depends if running or sourcing script)
 try(setwd(getSrcDirectory(function(){})[1]))
 try(setwd(dirname(rstudioapi::getActiveDocumentContext()$path)))
-source("utils.R")
+
 readRenviron("../../.env")
 
-FILENAME   <- "data_1941_2022.nc"     # nolint
-RES        <- c(64, 64)               # nolint
 WD         <- Sys.getenv("TRAINDIR")  # nolint
 WD         <- paste0(WD, "/", res2str(RES))
-RFUNC      <- max                     # nolint, https://doi.org/10.1111/rssb.12498
-TEST.YEARS <- c(2022)                 # nolint, exclude from ecdf + gpd fitting
-VISUALS    <- TRUE                    # nolint
-Q          <- 0.95                    # nolint
 
 #%%######### LOAD AND STANDARDISE DATA #########################################
 print("Loading and standardising data...")
@@ -68,43 +64,15 @@ daily$u10 <- standardise_by_month(daily, "u10")
 daily$msl <- standardise_by_month(daily, "msl")
 daily$tp <- standardise_by_month(daily, "tp")
 
-#%%######## EXTRACT AND TRANSFORM STORMS #######################################
+#%%######## EXTRACT STORMS #####################################################
 print("Extracting storms...")
 metadata   <- storm_extractor(daily, "u10", RFUNC)
 #metadata$Q <- Q
 
-# fit to marginal data
-print("Tranforming fields...")
-storms_wind <- gpd_transformer(daily, metadata, "u10", Q)
-storms_mslp <- gpd_transformer(daily, metadata, "msl", Q)
-storms_tp   <- gpd_transformer(daily, metadata, "tp", Q)
-
-print("Done. Putting it all together...")
-renamer <- function(df, var) {
-  df <- df %>%
-    rename_with(~ paste0(., ".", var),
-                -c("grid", "storm", "storm.rp", "variable"))
-  df <- df %>% rename_with(~ var, "variable")
-  return(df)
-}
-
-storms_wind <- renamer(storms_wind, "u10")
-storms_mslp <- renamer(storms_mslp, "mslp")
-storms_tp   <- renamer(storms_tp, "tp")
-
-storms <- storms_wind %>%
-  inner_join(storms_mslp, by = c("grid", "storm", "storm.rp")) %>%
-  inner_join(storms_tp, by = c("grid", "storm", "storm.rp"))
-
-storms$thresh.q <- Q # keep track of threshold used
-
 ########### SAVE RESULTS #######################################################
-print("Saving...")
+print("Finished storm extraction. Saving...")
 write.csv(medians, paste0(WD, "/", "medians.csv"), row.names = FALSE)
 write_parquet(metadata, paste0(WD, "/", "storms_metadata.parquet"))
-write_parquet(storms, paste0(WD, "/", "storms.parquet"))
+write_parquet(daily, paste0(WD, "/", "daily.parquet"))
 
-cat("\nSaved as:", paste0(WD, "/", "storms.parquet"))
-print(paste0("Finished!", length(unique(storms$storm)), " events processed."))
-
-########### END ###############################################################
+########### END ################################################################
