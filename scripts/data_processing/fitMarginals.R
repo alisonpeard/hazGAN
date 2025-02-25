@@ -12,9 +12,17 @@ readRenviron("../../.env")
 
 WD         <- Sys.getenv("TRAINDIR")  # nolint
 WD         <- paste0(WD, "/", res2str(RES))
+DRYRUN     <- TRUE
+NDRYRUN    <- 10
 
 daily    <- read_parquet(paste0(WD, "/", "daily.parquet"))
 metadata <- read_parquet(paste0(WD, "/", "storms_metadata.parquet"))
+
+# subset to mini dataset if it's a dry run
+if(DRYRUN) {
+  subgrid <- unique(daily$grid)[1:NDRYRUN]
+  daily   <- daily[daily$grid %in% subgrid,]
+}
 
 #%%######## TRANSFORM STORMS ###################################################
 # fit to marginal data
@@ -43,9 +51,10 @@ storms <- storms_wind %>%
 storms$thresh.q <- Q # keep track of threshold used
 
 ########### SAVE RESULTS #######################################################
-print("Saving...")
-write_parquet(storms, paste0(WD, "/", "storms.parquet"))
-cat("\nSaved as:", paste0(WD, "/", "storms.parquet"))
-print(paste0("Finished!", length(unique(storms$storm)), " events processed."))
-
+if (!DRYRUN) {
+  print("Saving...")
+  write_parquet(storms, paste0(WD, "/", "storms.parquet"))
+  cat("\nSaved as:", paste0(WD, "/", "storms.parquet"))
+  print(paste0("Finished! ", length(unique(storms$storm)), " events processed."))
+}
 ########### END ################################################################

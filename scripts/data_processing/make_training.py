@@ -48,7 +48,6 @@ RES = (64, 64)
 INFILES = ['data_1941_2022.nc', 'storms.parquet', 'storms_metadata.parquet', 'medians.csv']
 OUTFILES = ['data.nc']
 
-
 # def frobenius(test:np.ndarray, template:np.ndarray) -> float:
 #     """Calculate the Frobenius norm (similarity) of two matrices."""
 #     similarity = np.sum(template * test) / (np.linalg.norm(template) * np.linalg.norm(test))
@@ -275,7 +274,7 @@ def main(datadir):
     ds.to_netcdf(os.path.join(datadir, OUTFILES[0]))
     print("Saved to", os.path.join(datadir, OUTFILES[0]))
 
-    if False:
+    if VISUALISATIONS:
         # day of storm
         cmap = mpl.cm.YlOrRd
         t = np.random.uniform(0, T, 1).astype(int)[0]
@@ -343,187 +342,188 @@ if __name__ == "__main__":
     datadir = os.path.join(env.str("TRAINDIR"), res2str(RES))
     gdf = main(datadir)
 
-    # %% MAKING TESTS
-    gdf = gdf.set_index(['lat', 'lon', 'storm'])
-    ds  = gdf.to_xarray()
-    ds
+    # %% MAKING TESTS -- OUT OF DATE SINCE WEIBULL UPDATE 25-02-2025
+    if False:
+        gdf = gdf.set_index(['lat', 'lon', 'storm'])
+        ds  = gdf.to_xarray()
+        ds
 
-    # %%
-    fig, axs = plt.subplots(1, 4, figsize=(12, 2))
-    ds.isel(storm=0).p_u10.plot(ax=axs[0])
-    ds.isel(storm=0).thresh_u10.plot(ax=axs[1])
+        # %%
+        fig, axs = plt.subplots(1, 4, figsize=(12, 2))
+        ds.isel(storm=0).p_u10.plot(ax=axs[0])
+        ds.isel(storm=0).thresh_u10.plot(ax=axs[1])
 
-    ds.isel(storm=0).scale_u10.plot(ax=axs[2])
-    ds.isel(storm=0).shape_u10.plot(ax=axs[3])
+        ds.isel(storm=0).scale_u10.plot(ax=axs[2])
+        ds.isel(storm=0).shape_u10.plot(ax=axs[3])
 
-    # %% FITS
-    from scipy.stats import genpareto
+        # %% FITS
+        from scipy.stats import genpareto
 
-    N         = 100
-    Q         = 0.95 # gdf['thresh_q'][0]
-    field     = "u10"
+        N         = 100
+        Q         = 0.95 # gdf['thresh_q'][0]
+        field     = "u10"
 
-    shapes_fitted = []
-    shapes_current = []
-    shapes_new = []
+        shapes_fitted = []
+        shapes_current = []
+        shapes_new = []
 
-    large_fitted = []
-    large_current = []
-    large_new = []
+        large_fitted = []
+        large_current = []
+        large_new = []
 
-    for _ in range(N):
-        gridcells = list(gdf['grid'].unique())
-        gridcell  = np.random.choice(gridcells)
-        gridvars  = gdf[gdf['grid'] == gridcell]
+        for _ in range(N):
+            gridcells = list(gdf['grid'].unique())
+            gridcell  = np.random.choice(gridcells)
+            gridvars  = gdf[gdf['grid'] == gridcell]
 
-        thresholds = gridvars[[f'thresh_{field}']].values
-        shapes     = gridvars[[f'shape_{field}']].values
-        scales     = gridvars[[f'scale_{field}']].values
+            thresholds = gridvars[[f'thresh_{field}']].values
+            shapes     = gridvars[[f'shape_{field}']].values
+            scales     = gridvars[[f'scale_{field}']].values
 
-        assert len(np.unique(thresholds)) == 1, "Threshold should be unique"
-        assert len(np.unique(shapes)) == 1, "Shape should be unique"
-        assert len(np.unique(scales)) == 1, "Scale should be unique"
+            assert len(np.unique(thresholds)) == 1, "Threshold should be unique"
+            assert len(np.unique(shapes)) == 1, "Shape should be unique"
+            assert len(np.unique(scales)) == 1, "Scale should be unique"
 
-        threshold = thresholds[0][0]
-        shape     = shapes[0][0]
-        scale     = scales[0][0]
-        quantile  = np.quantile(gridvars[field], Q)
-        large     = genpareto.ppf(1-1e-6, shape, threshold, scale)
-        large_fitted.append(large)
-        print("\n\nFitted parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(threshold, scale, shape))
-        print("Very large prediction:", large)
-        print(f"Quantile at {Q} is {quantile:.2f}")
+            threshold = thresholds[0][0]
+            shape     = shapes[0][0]
+            scale     = scales[0][0]
+            quantile  = np.quantile(gridvars[field], Q)
+            large     = genpareto.ppf(1-1e-6, shape, threshold, scale)
+            large_fitted.append(large)
+            print("\n\nFitted parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(threshold, scale, shape))
+            print("Very large prediction:", large)
+            print(f"Quantile at {Q} is {quantile:.2f}")
 
-        fig, axs = plt.subplots(1, 3, figsize=(13, 4))
+            fig, axs = plt.subplots(1, 3, figsize=(13, 4))
 
-        ax = axs[0]
-        gridvars.hist(field, ax=ax, **hist_kws)
-        ax.axvline(threshold, color='r', linestyle='--', label=f"Threshold: {threshold:.2f}")
-        ax.axvline(quantile, color='g', linestyle='-.', label=f"Quantile at {Q}: {quantile:.2f}")
+            ax = axs[0]
+            gridvars.hist(field, ax=ax, **hist_kws)
+            ax.axvline(threshold, color='r', linestyle='--', label=f"Threshold: {threshold:.2f}")
+            ax.axvline(quantile, color='g', linestyle='-.', label=f"Quantile at {Q}: {quantile:.2f}")
+            ax.legend()
+
+            ax = axs[1]
+            try:
+                exceedences = gridvars[gridvars[field] > threshold]
+                print("\nThere are", len(exceedences), "exceedences for gridcell", int(gridcell))   
+                exceedences.hist(field, ax=ax, **hist_kws);
+
+                x = np.linspace(exceedences[field].min(), exceedences[field].max(), 100)
+                y_fitted = genpareto.pdf(x, shape, threshold, scale)
+                ax.plot(x, y_fitted, color='r', linestyle='--', label='Fitted')
+
+                c, loc, scale = genpareto.fit(gridvars[field], loc=threshold)
+            except Exception as e:
+                c, loc, scale = np.nan, np.nan, np.nan
+
+            large = genpareto.ppf(1-1e-6, c, threshold, scale)
+            large_current.append(large)
+            print("Current parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(loc, scale, c))
+            print("Very large prediction:", large)
+
+            if not np.isnan(c):
+                y_current = genpareto.pdf(x, c, threshold, scale)
+                ax.plot(x, y_current, color='g', linestyle='-.', label='Current')
+            ax.legend()
+            shapes_fitted.append(shape)
+            shapes_current.append(c)
+
+            # situation if we take quantile exceedences
+            ax = axs[2]
+            try:
+                exceedences = gridvars[gridvars[field] > quantile]
+                print("\nThere are", len(exceedences), "quantile exceedences for gridcell", int(gridcell))
+                exceedences[field].hist(ax=ax, **hist_kws)
+                c, loc, scale = genpareto.fit(gridvars[field], loc=quantile)
+            except Exception as e:
+                c, loc, scale = np.nan, np.nan, np.nan
+            
+            if not np.isnan(c):
+                y_new = genpareto.pdf(x, c, quantile, scale)
+                ax.plot(x, y_new, color='r', linestyle='-.', label='New')
+            ax.legend()
+
+            large = genpareto.ppf(1-1e-6, c, quantile, scale)
+            large_new.append(large)
+            print("New parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(loc, scale, c))
+            print("Very large prediction:", large)
+            shapes_new.append(c)
+
+        # %%
+        fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+
+        min = np.nanmin
+        max = np.nanmax
+
+        axs[0].scatter(shapes_fitted, shapes_current, color='b', label='Fitted vs Current')
+        axs[0].set_title('Fitted vs Current')
+        axs[0].set_xlabel('Fitted')
+        axs[0].set_ylabel('Current')
+        lower = min([min(shapes_fitted), min(shapes_current)])
+        upper = max([max(shapes_fitted), max(shapes_current)])
+        axs[0].plot([lower, upper], [lower, upper], color='k', linestyle='--')
+
+        axs[1].scatter(shapes_fitted, shapes_new, color='r', label='Fitted vs New')
+        axs[1].set_title('Fitted vs New')
+        axs[1].set_xlabel('Fitted')
+        axs[1].set_ylabel('New')
+        lower = min([min(shapes_fitted), min(shapes_new)])
+        upper = max([max(shapes_fitted), max(shapes_new)])
+        axs[1].plot([lower, upper], [lower, upper], color='k', linestyle='--')
+
+        axs[2].scatter(shapes_current, shapes_new, color='g', label='Current vs New')
+        axs[2].set_title('Current vs New')
+        axs[2].set_xlabel('Current')
+        axs[2].set_ylabel('New')
+        lower = min([min(shapes_current), min(shapes_new)])
+        upper = max([max(shapes_current), max(shapes_new)])
+        axs[2].plot([lower, upper], [lower, upper], color='k', linestyle='--')
+
+        # %% plot the scatter plots of the large predictions
+        fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+        axs[0].scatter(large_fitted, large_current, color='b', label='Fitted vs Current')
+        axs[0].set_title('Fitted vs Current')
+        axs[0].set_xlabel('Fitted')
+        axs[0].set_ylabel('Current')
+        lower = min([min(large_fitted), min(large_current)])
+        upper = max([max(large_fitted), max(large_current)])
+        axs[0].plot([lower, upper], [lower, upper], color='k', linestyle='--')
+
+        axs[1].scatter(large_fitted, large_new, color='r', label='Fitted vs New')
+        axs[1].set_title('Fitted vs New')
+        axs[1].set_xlabel('Fitted')
+        axs[1].set_ylabel('New')
+        lower = min([min(large_fitted), min(large_new)])
+        upper = max([max(large_fitted), max(large_new)])
+        axs[1].plot([lower, upper], [lower, upper], color='k', linestyle='--')
+
+        axs[2].scatter(large_current, large_new, color='g', label='Current vs New')
+        axs[2].set_title('Current vs New')
+        axs[2].set_xlabel('Current')
+        axs[2].set_ylabel('New')
+        lower = min([min(large_current), min(large_new)])
+        upper = max([max(large_current), max(large_new)])
+        axs[2].plot([lower, upper], [lower, upper], color='k', linestyle='--')
+
+        # %% add histograms of the large predictions
+        fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+        axs[0].hist(large_fitted, color='lightgrey', edgecolor='k', alpha=0.5, label='Fitted')
+        axs[1].hist(large_current, color='b', edgecolor='k', alpha=0.5, label='Current')
+        axs[2].hist(large_new, color='r', edgecolor='k', alpha=0.5, label='New')
+
+        # %%
+        fig, ax = plt.subplots(1, 1, figsize=(6, 3))
+        ax.hist(shapes_fitted, color='lightgrey', edgecolor='k', alpha=0.5, label='Fitted')
+        ax.hist(shapes_current, color='b', edgecolor='k', alpha=0.5, label='Current')
+        ax.hist(shapes_new, color='r', edgecolor='k', alpha=0.5, label=f'New (q={Q})')
         ax.legend()
+        # %%
+        fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+        axs[0].hist(shapes_fitted, color='lightgrey', edgecolor='k', alpha=0.5, label='Fitted')
+        axs[1].hist(shapes_current, color='b', edgecolor='k', alpha=0.5, label='Current')
+        axs[2].hist(shapes_new, color='r', edgecolor='k', alpha=0.5, label=f'New (q={Q})')
 
-        ax = axs[1]
-        try:
-            exceedences = gridvars[gridvars[field] > threshold]
-            print("\nThere are", len(exceedences), "exceedences for gridcell", int(gridcell))   
-            exceedences.hist(field, ax=ax, **hist_kws);
-
-            x = np.linspace(exceedences[field].min(), exceedences[field].max(), 100)
-            y_fitted = genpareto.pdf(x, shape, threshold, scale)
-            ax.plot(x, y_fitted, color='r', linestyle='--', label='Fitted')
-
-            c, loc, scale = genpareto.fit(gridvars[field], loc=threshold)
-        except Exception as e:
-            c, loc, scale = np.nan, np.nan, np.nan
-
-        large = genpareto.ppf(1-1e-6, c, threshold, scale)
-        large_current.append(large)
-        print("Current parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(loc, scale, c))
-        print("Very large prediction:", large)
-
-        if not np.isnan(c):
-            y_current = genpareto.pdf(x, c, threshold, scale)
-            ax.plot(x, y_current, color='g', linestyle='-.', label='Current')
-        ax.legend()
-        shapes_fitted.append(shape)
-        shapes_current.append(c)
-
-        # situation if we take quantile exceedences
-        ax = axs[2]
-        try:
-            exceedences = gridvars[gridvars[field] > quantile]
-            print("\nThere are", len(exceedences), "quantile exceedences for gridcell", int(gridcell))
-            exceedences[field].hist(ax=ax, **hist_kws)
-            c, loc, scale = genpareto.fit(gridvars[field], loc=quantile)
-        except Exception as e:
-            c, loc, scale = np.nan, np.nan, np.nan
-        
-        if not np.isnan(c):
-            y_new = genpareto.pdf(x, c, quantile, scale)
-            ax.plot(x, y_new, color='r', linestyle='-.', label='New')
-        ax.legend()
-
-        large = genpareto.ppf(1-1e-6, c, quantile, scale)
-        large_new.append(large)
-        print("New parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(loc, scale, c))
-        print("Very large prediction:", large)
-        shapes_new.append(c)
-
-    # %%
-    fig, axs = plt.subplots(1, 3, figsize=(12, 4))
-
-    min = np.nanmin
-    max = np.nanmax
-
-    axs[0].scatter(shapes_fitted, shapes_current, color='b', label='Fitted vs Current')
-    axs[0].set_title('Fitted vs Current')
-    axs[0].set_xlabel('Fitted')
-    axs[0].set_ylabel('Current')
-    lower = min([min(shapes_fitted), min(shapes_current)])
-    upper = max([max(shapes_fitted), max(shapes_current)])
-    axs[0].plot([lower, upper], [lower, upper], color='k', linestyle='--')
-
-    axs[1].scatter(shapes_fitted, shapes_new, color='r', label='Fitted vs New')
-    axs[1].set_title('Fitted vs New')
-    axs[1].set_xlabel('Fitted')
-    axs[1].set_ylabel('New')
-    lower = min([min(shapes_fitted), min(shapes_new)])
-    upper = max([max(shapes_fitted), max(shapes_new)])
-    axs[1].plot([lower, upper], [lower, upper], color='k', linestyle='--')
-
-    axs[2].scatter(shapes_current, shapes_new, color='g', label='Current vs New')
-    axs[2].set_title('Current vs New')
-    axs[2].set_xlabel('Current')
-    axs[2].set_ylabel('New')
-    lower = min([min(shapes_current), min(shapes_new)])
-    upper = max([max(shapes_current), max(shapes_new)])
-    axs[2].plot([lower, upper], [lower, upper], color='k', linestyle='--')
-
-    # %% plot the scatter plots of the large predictions
-    fig, axs = plt.subplots(1, 3, figsize=(12, 4))
-    axs[0].scatter(large_fitted, large_current, color='b', label='Fitted vs Current')
-    axs[0].set_title('Fitted vs Current')
-    axs[0].set_xlabel('Fitted')
-    axs[0].set_ylabel('Current')
-    lower = min([min(large_fitted), min(large_current)])
-    upper = max([max(large_fitted), max(large_current)])
-    axs[0].plot([lower, upper], [lower, upper], color='k', linestyle='--')
-
-    axs[1].scatter(large_fitted, large_new, color='r', label='Fitted vs New')
-    axs[1].set_title('Fitted vs New')
-    axs[1].set_xlabel('Fitted')
-    axs[1].set_ylabel('New')
-    lower = min([min(large_fitted), min(large_new)])
-    upper = max([max(large_fitted), max(large_new)])
-    axs[1].plot([lower, upper], [lower, upper], color='k', linestyle='--')
-
-    axs[2].scatter(large_current, large_new, color='g', label='Current vs New')
-    axs[2].set_title('Current vs New')
-    axs[2].set_xlabel('Current')
-    axs[2].set_ylabel('New')
-    lower = min([min(large_current), min(large_new)])
-    upper = max([max(large_current), max(large_new)])
-    axs[2].plot([lower, upper], [lower, upper], color='k', linestyle='--')
-
-    # %% add histograms of the large predictions
-    fig, axs = plt.subplots(1, 3, figsize=(12, 4))
-    axs[0].hist(large_fitted, color='lightgrey', edgecolor='k', alpha=0.5, label='Fitted')
-    axs[1].hist(large_current, color='b', edgecolor='k', alpha=0.5, label='Current')
-    axs[2].hist(large_new, color='r', edgecolor='k', alpha=0.5, label='New')
-
-    # %%
-    fig, ax = plt.subplots(1, 1, figsize=(6, 3))
-    ax.hist(shapes_fitted, color='lightgrey', edgecolor='k', alpha=0.5, label='Fitted')
-    ax.hist(shapes_current, color='b', edgecolor='k', alpha=0.5, label='Current')
-    ax.hist(shapes_new, color='r', edgecolor='k', alpha=0.5, label=f'New (q={Q})')
-    ax.legend()
-    # %%
-    fig, axs = plt.subplots(1, 3, figsize=(12, 4))
-    axs[0].hist(shapes_fitted, color='lightgrey', edgecolor='k', alpha=0.5, label='Fitted')
-    axs[1].hist(shapes_current, color='b', edgecolor='k', alpha=0.5, label='Current')
-    axs[2].hist(shapes_new, color='r', edgecolor='k', alpha=0.5, label=f'New (q={Q})')
-
-    axs[0].set_title('Fitted')
-    axs[1].set_title('Current')
-    axs[2].set_title(f'New (q={Q})')
-    # %%
+        axs[0].set_title('Fitted')
+        axs[1].set_title('Current')
+        axs[2].set_title(f'New (q={Q})')
+        # %%
