@@ -33,6 +33,7 @@ storms_tp   <- gpd_transformer(daily, metadata, "tp", Q)
 
 print("Done. Putting it all together...")
 renamer <- function(df, var) {
+  # rename all fields for joining dataframes
   df <- df %>%
     rename_with(~ paste0(., ".", var),
                 -c("grid", "storm", "storm.rp", "variable"))
@@ -40,7 +41,7 @@ renamer <- function(df, var) {
   return(df)
 }
 
-storms_wind <- renamer(storms_wind, "u10")
+# storms_wind <- renamer(storms_wind, "u10")
 storms_mslp <- renamer(storms_mslp, "mslp")
 storms_tp   <- renamer(storms_tp, "tp")
 

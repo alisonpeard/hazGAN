@@ -175,14 +175,15 @@ storm_extractor <- function(daily, var, rfunc) {
 
   return(metadata)
 }
-select_gpd_threshold <- function(var, min_exceedances = 20,
+
+select_gpd_threshold <- function(var, min_exceedances = 50, #20
                                  nthresholds = 50, nsim = 20) {
   thresholds <- quantile(var, probs = seq(0.8, 0.98, length.out = nthresholds))
 
   fits <- gpdSeqTests(var, thresholds = thresholds, method = "ad", nsim = nsim)
 
   valid_n          <- fits$num.above >= min_exceedances
-  valid_stops      <- fits$ForwardStop < 1.5
+  valid_stops      <- fits$ForwardStop < 1. #1.5
 
   shape_changes    <- abs(diff(fits$est.shape))
   shape_stability  <- c(
@@ -192,8 +193,13 @@ select_gpd_threshold <- function(var, min_exceedances = 20,
     )
   )
 
+  # Check there are options for each
+  stopifnot(sum(valid_n) > 0, sum(valid_stops) > 0, sum(shape_stability) > 0)
+  stopifnot(sum(valid_n & valid_stops & shape_stability) > 0)
+  
   valid_thresholds <- which(valid_n & valid_stops & shape_stability)
 
+  stopifnot(length(valid_thresholds) > 0)
   if (length(valid_thresholds) > 0) {
     shape_volatility <- rollapply(fits$est.shape[valid_thresholds],
                                   width = 3,
@@ -211,6 +217,7 @@ select_gpd_threshold <- function(var, min_exceedances = 20,
     return(NULL)
   }
 }
+
 gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
   gridcells <- unique(df$grid)
   df <- df[df$time %in% metadata$time, ]
@@ -257,9 +264,9 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
     # validation
     excesses <- maxima$variable[maxima$variable > thresh]
     p <- Box.test(excesses)[["p.value"]] # H0: independent
-    if (p < 0.1) {
+    if (p < 0.05) {
       warning(paste0(
-        "p-value ≤ 10% for H0 of independent exceedences for gridcell ",
+        "p-value ≤ 5% for H0 of independent exceedences for gridcell ",
         grid_i, ". Value: ", round(p, 4)
       ))
     }
@@ -275,7 +282,7 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
       # ) # H0: GPD distribution
       
       fit <- select_gpd_threshold(train$variable)
-      
+      print(sprintf("Fit shape %d: %s", grid_i, fit$theta[2]))
       thresh <- fit$thresh
       scale  <- fit$theta[1]
       shape  <- fit$theta[2]
@@ -289,9 +296,8 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
       maxima
     }, error = function(e) {
-      warning(sprintf("MLE failed for grid cell %d: %s. Resorting to fully empirical fits.",
+      warning(sprintf("MLE failed for grid cell %d: %s - Resorting to fully empirical fits.",
                       grid_i, e$message))
-      
       maxima$thresh <- NA
       maxima$scale  <- NA
       maxima$shape  <- NA
@@ -303,7 +309,6 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
     #pb$tick()
     return(maxima)
   }
-  
   
   # wrapper for process_gridcell()
   process_gridchunk <- function(gridchunk) {
