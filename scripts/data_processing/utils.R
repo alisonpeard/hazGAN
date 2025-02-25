@@ -176,46 +176,42 @@ storm_extractor <- function(daily, var, rfunc) {
   return(metadata)
 }
 
-select_gpd_threshold <- function(var, min_exceedances = 50, #20
+select_gpd_threshold <- function(var, min_exceedances = 30,
                                  nthresholds = 50, nsim = 20) {
   thresholds <- quantile(var, probs = seq(0.8, 0.98, length.out = nthresholds))
 
   fits <- gpdSeqTests(var, thresholds = thresholds, method = "ad", nsim = nsim)
-
-  valid_n          <- fits$num.above >= min_exceedances
-  valid_stops      <- fits$ForwardStop < 1. #1.5
-
-  shape_changes    <- abs(diff(fits$est.shape))
-  shape_stability  <- c(
-    TRUE,
-    shape_changes < quantile(
-      shape_changes, 0.95, na.rm = TRUE
-    )
-  )
-
-  # Check there are options for each
-  stopifnot(sum(valid_n) > 0, sum(valid_stops) > 0, sum(shape_stability) > 0)
-  stopifnot(sum(valid_n & valid_stops & shape_stability) > 0)
   
-  valid_thresholds <- which(valid_n & valid_stops & shape_stability)
+  # Minimum standard for fits
+  valid_n          <- fits$num.above >= min_exceedances
+  valid_fwd        <- fits$ForwardStop > 0.1
+  valid_strong     <- fits$StrongStop > 0.1
+  valid_p          <- fits$p.values > 0.1
+  
+  # Check there are options for each criterion individually
+  if(sum(valid_n) == 0) stop("No thresholds meet minimum exceedances requirement")
+  if(sum(valid_fwd) == 0) stop("No thresholds meet ForwardStop criterion")
+  if(sum(valid_strong) == 0) stop("No thresholds meet StrongStop criterion")
+  if(sum(valid_p) == 0) stop("No thresholds meet p-value criterion")
+  
+  # Check there are options that meet all criteria
+  valid_mask <- valid_n & valid_fwd & valid_strong & valid_p
+  if(sum(valid_mask) == 0) stop("No thresholds meet all criteria simultaneously")
+  valid_idx <- which(valid_mask)
 
-  stopifnot(length(valid_thresholds) > 0)
-  if (length(valid_thresholds) > 0) {
-    shape_volatility <- rollapply(fits$est.shape[valid_thresholds],
-                                  width = 3,
-                                  FUN = function(x) diff(range(x)),
-                                  fill = NA)
-
-    idx <- valid_thresholds[which.min(shape_volatility)]
-    return(list(
-      thresh   = fits$threshold[idx],
-      theta    = c(fits$est.scale[idx], fits$est.shape[idx]),
-      p.value  = fits$p.values[idx],
-      n_exceed = fits$num.above[idx]
-    ))
-  } else {
-    return(NULL)
-  }
+  # Given non-significant p-values, choose the fit with the most data
+  idx <- valid_idx[which.max(fits$num.above[valid_mask])]
+  #print(idx)
+  
+  return(list(
+    idx      = idx,
+    thresh   = fits$threshold[idx],
+    theta    = c(fits$est.scale[idx], fits$est.shape[idx]),
+    p.value  = fits$p.values[idx],
+    forward  = fits$ForwardStop[idx],
+    strong   = fits$StrongStop[idx],
+    n_exceed = fits$num.above[idx]
+  ))
 }
 
 gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
@@ -282,7 +278,6 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
       # ) # H0: GPD distribution
       
       fit <- select_gpd_threshold(train$variable)
-      print(sprintf("Fit shape %d: %s", grid_i, fit$theta[2]))
       thresh <- fit$thresh
       scale  <- fit$theta[1]
       shape  <- fit$theta[2]

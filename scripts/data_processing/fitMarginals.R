@@ -12,8 +12,8 @@ readRenviron("../../.env")
 
 WD         <- Sys.getenv("TRAINDIR")  # nolint
 WD         <- paste0(WD, "/", res2str(RES))
-DRYRUN     <- TRUE
-NDRYRUN    <- 10
+DRYRUN     <- FALSE
+NDRYRUN    <- 200
 
 daily    <- read_parquet(paste0(WD, "/", "daily.parquet"))
 metadata <- read_parquet(paste0(WD, "/", "storms_metadata.parquet"))
