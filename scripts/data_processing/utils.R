@@ -78,7 +78,7 @@ progress_bar <- function(n, prefix = "", suffix = "") {
   }
 }
 
-########### EVT FUNCTIONS ###################################################
+########### EVT FUNCTIONS ######################################################
 gridsearch <- function(series, var, qmin = 60, qmax = 99, rmax = 14) {
   "Unit tests for this?"
   qvec <- c(qmin:qmax) / 100
@@ -176,44 +176,114 @@ storm_extractor <- function(daily, var, rfunc) {
   return(metadata)
 }
 
-select_gpd_threshold <- function(var, min_exceedances = 30,
-                                 nthresholds = 50, nsim = 20) {
-  thresholds <- quantile(var, probs = seq(0.8, 0.98, length.out = nthresholds))
-
-  fits <- gpdSeqTests(var, thresholds = thresholds, method = "ad", nsim = nsim)
+########## GENPARETO ###########################################################
+gpdTestFit <- function(data, thresh, scale, shape) {
+  # https://github.com/cran/eva/blob/master/R/gpdAd.R
+  n <- length(data)
+  newdata <- pgpd(data, loc = 0, scale = scale, shape = shape)
+  newdata <- sort(newdata)
+  i <- seq(1, n, 1)
+  stat <- -n - (1/n)*sum((2*i - 1)*(log(newdata) + log1p(-rev(newdata))))
   
-  # Minimum standard for fits
-  valid_n          <- fits$num.above >= min_exceedances
-  valid_fwd        <- fits$ForwardStop > 0.1
-  valid_strong     <- fits$StrongStop > 0.1
-  valid_p          <- fits$p.values > 0.1
+  ADQuantiles <- eva:::ADQuantiles
+  row <- which(rownames(ADQuantiles) == max(round(shape, 2), -0.5))
   
-  # Check there are options for each criterion individually
-  if(sum(valid_n) == 0) stop("No thresholds meet minimum exceedances requirement")
-  if(sum(valid_fwd) == 0) stop("No thresholds meet ForwardStop criterion")
-  if(sum(valid_strong) == 0) stop("No thresholds meet StrongStop criterion")
-  if(sum(valid_p) == 0) stop("No thresholds meet p-value criterion")
-  
-  # Check there are options that meet all criteria
-  valid_mask <- valid_n & valid_fwd & valid_strong & valid_p
-  if(sum(valid_mask) == 0) stop("No thresholds meet all criteria simultaneously")
-  valid_idx <- which(valid_mask)
-
-  # Given non-significant p-values, choose the fit with the most data
-  idx <- valid_idx[which.max(fits$num.above[valid_mask])]
-  #print(idx)
-  
+  if(stat > ADQuantiles[row, 999]) {
+    pvals <- -log(as.numeric(colnames(ADQuantiles[950:999])))
+    x <- as.numeric(ADQuantiles[row, 950:999])
+    y <- lm(pvals ~ x)
+    stat <- as.data.frame(stat)
+    colnames(stat) <- c("x")
+    p <- as.numeric(exp(-predict(y, stat)))
+  } else {
+    bound <- as.numeric(colnames(ADQuantiles)[which.max(stat < ADQuantiles[row,])])
+    if(bound == .999) {
+      p <- .999
+    } else {
+      lower <- ADQuantiles[row, which(colnames(ADQuantiles) == bound + 0.001)]
+      upper <- ADQuantiles[row, which(colnames(ADQuantiles) == bound)]
+      dif <- (upper - stat) / (upper - lower)
+      val <- (dif * (-log(bound) - -log(bound + 0.001))) + log(bound)
+      p <- exp(val)
+    }
+  }
   return(list(
-    idx      = idx,
-    thresh   = fits$threshold[idx],
-    theta    = c(fits$est.scale[idx], fits$est.shape[idx]),
-    p.value  = fits$p.values[idx],
-    forward  = fits$ForwardStop[idx],
-    strong   = fits$StrongStop[idx],
-    n_exceed = fits$num.above[idx]
+    statistic = stat,
+    p.value = p
   ))
 }
+gpdBackup <- function(var, threshold) {
+  # extract exceedances
+  exceedances <- var[var > threshold] - threshold
+  exceedances <- sort(exceedances)
+  num.above <- length(exceedances)
 
+  library(POT)
+  fit <- fitgpd(var, threshold = threshold, est = "pwmu")
+  scale <- fit$fitted.values[1]
+  shape <- fit$fitted.values[2]
+  
+  # library(lmom)
+  # lmom_result <- samlmu(exceedances, nmom = 3)
+  # params <- pelgpa(lmom_result)
+  # shape <- params[3]
+  # scale <- params[2]
+  
+  # goodness-of-fit test
+  gof  <- gpdTestFit(exceedances, threshold, scale, shape)
+  
+  # results
+  return(list(thresh=threshold, shape=shape, scale=scale,
+              p.value=gof$p.value,
+              num.above = num.above))
+}
+gpdBackupSeqTests <- function(var, thresholds) {
+  nthresh <- length(thresholds)
+  shapes <- vector(length=nthresh)
+  scales <- vector(length=nthresh)
+  p.values <- vector(length=nthresh)
+  num.above <- vector(length=nthresh)
+  
+  for (k in seq_along(thresholds)) {
+    thresh        <- thresholds[k]
+    fit           <- gpdBackup(var, thresh)
+    shapes[k]     <- fit$shape
+    scales[k]     <- fit$scale
+    p.values[k]   <- fit$p.value
+    num.above[k]  <- fit$num.above
+  }
+  
+  ForwardStop <-  cumsum(-log(1 - p.values)) / (seq_along(p.values))
+
+  out <- list(threshold = thresholds, num.above = num.above, p.value = p.values, 
+              ForwardStop = ForwardStop, est.scale = scales,
+              est.shape = shapes)
+  return(as.data.frame(out))
+}
+gpdSeqTestsWithFallback <- function(var, thresholds, method, nsim) {
+  fits <- tryCatch({
+    fits <- gpdSeqTests(var, thresholds = thresholds, method = method, nsim = nsim)
+  },
+  error = function(e) {
+    fits <- gpdBackupSeqTests(var, thresholds)
+  })
+}
+select_gpd_threshold <- function(var, nthresholds = 50, nsim = 20, alpha = 0.05) {
+  thresholds <- quantile(var, probs = seq(0.7, 0.98, length.out = nthresholds))
+  fits <- gpdSeqTestsWithFallback(var, thresholds, method = "ad", nsim = nsim)
+  valid_pk <- fits$ForwardStop
+  k    <- min(which(valid_pk > 0.1)); # lowest index being "accepted"
+  k    <- ifelse(is.finite(k), k, 1); # use first index if none satisfy it
+  
+  return(list(
+    k        = k,
+    thresh   = fits$threshold[k],
+    theta    = c(fits$est.scale[k], fits$est.shape[k]),
+    p.value  = fits$p.values[k],
+    forward  = fits$ForwardStop[k],
+    n_exceed = fits$num.above[k]
+  ))
+}
 gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
   gridcells <- unique(df$grid)
   df <- df[df$time %in% metadata$time, ]
@@ -269,14 +339,6 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
 
     # fit ECDF & GPD on train set only...
     maxima <- tryCatch({
-      # fit <- gpdAd(
-      #   train$variable[train$variable > thresh],
-      #   bootstrap     = TRUE,
-      #   bootnum       = 10,
-      #   allowParallel = FALSE,
-      #   numCores      = 1
-      # ) # H0: GPD distribution
-      
       fit <- select_gpd_threshold(train$variable)
       thresh <- fit$thresh
       scale  <- fit$theta[1]
@@ -291,8 +353,7 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
       maxima
     }, error = function(e) {
-      warning(sprintf("MLE failed for grid cell %d: %s - Resorting to fully empirical fits.",
-                      grid_i, e$message))
+      warning(sprintf("MLE failed for grid cell %d: %s. Resorting to fully empirical fits.", grid_i, e$message))
       maxima$thresh <- NA
       maxima$scale  <- NA
       maxima$shape  <- NA
@@ -301,7 +362,6 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
       maxima$scdf <- maxima$ecdf
       maxima
     })
-    #pb$tick()
     return(maxima)
   }
   
@@ -338,61 +398,54 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
   return(transformed)
 }
 
-##### WEIBULL DISTRIBUTION FUNCTIONS
-ad_gof <- function(x, shape, scale, eps=0.05, verbose=FALSE) {
-  # https://web.cortland.edu/matresearch/AndrsDarlSTART.pdf
-  # H0: X~WEIBULL(SHAPE, SCALE)
-  n <- length(x)
-  x <- sort(x)
-  z <- (x / scale)**shape # standardize
-  
-  Fz <- 1 - exp(-z)
-  ad <- -n - (1/n) * sum(
-    (2 * seq(1:n) - 1) * (log(Fz) + log(1 - rev(Fz)))
-  )
-  
-  adstar <- (1 + ( 0.2 / sqrt(n))) * ad
-  
-  osl <- 1 / (
-    1 + exp(
-      -0.1 + 1.24 * log(adstar) + 4.48 * adstar
-    )
-  )
-  
-  if (verbose) {
-    # Print diagnostic information
-    cat("A-D statistic:", ad, "\n")
-    cat("Modified A-D statistic:", adstar, "\n")
-    cat("OSL (p-value):", osl, "\n")
-    cat("Significance threshold: ", eps, "\n")
-  }
-  
-  return(list(
-    statistic = ad,
-    modified = adstar,
-    p.value = osl
-  ))
-}
-
-ks_gof <- function(x, shape, scale) {
-  # H0: Distributions match. Not as sensitive as Anderson-Darling.
-  result <- ks.test(x, pweibull, shape = shape, scale = scale)
-  result
-}
-
-select_weibull_threshold <- function(var, min_exceedances = 20, nthresholds = 50) {
+########## WEIBULL #############################################################
+select_weibull_threshold <- function(var, alpha = 0.05, nthresholds = 50) {
   loglikelihood <- function(params, data) {
     # Calculate negative Weibull log-likelihood.
     shape <- params[1]
     scale <- params[2]
     -sum(dweibull(data, shape = shape, scale = scale, log = TRUE))
   }
-
-  thresholds <- quantile(var, probs = seq(0.8, 0.98, length.out = nthresholds))
+  ad_test <- function(x, shape, scale, eps=0.05, verbose=FALSE) {
+    # https://web.cortland.edu/matresearch/AndrsDarlSTART.pdf
+    # H0: X~WEIBULL(SHAPE, SCALE)
+    n <- length(x)
+    x <- sort(x)
+    z <- (x / scale)**shape # standardize
+    
+    Fz <- 1 - exp(-z)
+    ad <- -n - (1/n) * sum(
+      (2 * seq(1:n) - 1) * (log(Fz) + log(1 - rev(Fz)))
+    )
+    
+    adstar <- (1 + ( 0.2 / sqrt(n))) * ad
+    
+    osl <- 1 / (
+      1 + exp(
+        -0.1 + 1.24 * log(adstar) + 4.48 * adstar
+      )
+    )
+    
+    if (verbose) {
+      # Print diagnostic information
+      cat("A-D statistic:", ad, "\n")
+      cat("Modified A-D statistic:", adstar, "\n")
+      cat("OSL (p-value):", osl, "\n")
+      cat("Significance threshold: ", eps, "\n")
+    }
+    
+    return(list(
+      statistic = ad,
+      modified = adstar,
+      p.value = osl
+    ))
+  }
+  thresholds <- quantile(var, probs = seq(0.7, 0.98, length.out = nthresholds))
+  
   shapes <- vector(length = length(thresholds))
   scales <- vector(length = length(thresholds))
-  likelihoods <- vector(length = length(thresholds))
-  n_exceeds <- vector(length = length(thresholds))
+  num_above <- vector(length = length(thresholds))
+  pvals  <- vector(length = length(thresholds))
 
   for (i in seq_along(thresholds)) {
     q <- thresholds[i]
@@ -410,31 +463,31 @@ select_weibull_threshold <- function(var, min_exceedances = 20, nthresholds = 50
                  method = "L-BFGS-B",
                  lower = c(0.1, 0.1),
                  upper = c(2, 10))
-
+    
     shapes[i]      <- fit$par[1]
     scales[i]      <- fit$par[2]
-    likelihoods[i] <- fit$value
-    n_exceeds[i] <- length(exceedances)
+    num_above[i] <- length(exceedances)
+    pvals[i] <- ad_test(exceedances, shapes[i], scales[i])$p.value
   }
 
-  best   <- which.min(likelihoods)
-  thresh <- thresholds[best]
-  shape  <- shapes[best]
-  scale  <- scales[best]
-  likelihood  <- likelihoods[best]
+  # https://doi.org/10.1214/17-AOAS1092
+  pk <- cumsum(-log(1 - pvals)) / (seq_along(pvals))
+  k  <- min(which(pk > alpha))
+  
+  thresh <- thresholds[k]
+  shape  <- shapes[k]
+  scale  <- scales[k]
   exceedances <- var[var > thresh] - thresh
-  n_exceed    <- length(exceedances)
-  #pval        <- ks_gof(exceedances, shape, scale)$p.value
-  pval        <- ad_gof(exceedances, shape, scale)$p.value
+  num_above    <- length(exceedances)
+  pval <- pvals[k]
 
   return(list(
     thresh = thresh,
     theta = c(scale, shape),
     p.value = pval,
-    n_exceed = n_exceed
+    n_exceed = num_above
   ))
 }
-
 weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
   gridcells <- unique(df$grid)
   df <- df[df$time %in% metadata$time, ]
@@ -478,7 +531,7 @@ weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
     p <- Box.test(excesses)[["p.value"]] # H0: independent
     if (p < 0.1) {
       warning(paste0(
-        "p-value ≤ 10% for H0 of independent exceedences for gridcell ",
+        "p-value ≤ 10% for H0:independent exceedences in ",
         grid_i, ". Value: ", round(p, 4)
       ))
     }
@@ -549,103 +602,3 @@ weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
   transformed <- transformed[, fields]
   return(transformed)
 }
-
-# # OLD
-# gpd_transformer <- function(df, metadata, var, q) {
-#   gridcells <- unique(df$grid)
-#   ngrid <- length(gridcells)
-
-#   update_progress <- progress_bar(ngrid, "Fitting GPD to excesses:", "Complete")
-
-#   df <- df[df$time %in% metadata$time, ]
-
-#   fields <- c("storm", "variable", "time", "storm.rp",
-#               "grid", "thresh", "scale", "shape", "p", "ecdf")
-#   transformed <- data.frame(matrix(nrow = 0, ncol = length(fields)))
-#   colnames(transformed) <- fields
-
-#   ncores  <- min(detectCores(), ngrid)
-#   cluster <- makeCluster(ncores)
-#   clusterExport(cluster, c("df", "var", "q", "TEST.YEARS", "gpdAd", "scdf", "ecdf"))
-
-#   progress_file <- tempfile()
-#   writeLines("0", progress_file)
-
-#   transformed <- parLapply(cluster, 1:ngrid, function(i) {
-#   # for (i in 1:ngrid){
-#     grid_i <- gridcells[i]
-#     gridcell <- df[df$grid == grid_i, ]
-#     gridcell <- left_join(gridcell,
-#                           metadata[, c("time", "storm", "storm.rp")],
-#                           by = c("time" = "time"))
-#     maxima <- gridcell %>%
-#       group_by(storm) %>%
-#       slice(which.max(get(var))) %>%
-#       summarise(
-#         variable = max(get(var)),
-#         time = time,
-#         storm.rp = storm.rp,
-#         grid = grid
-#       )
-    
-#     train <- maxima[year(maxima$time) %ni% TEST.YEARS,]
-#     thresh <- quantile(train$variable, q)
-
-#     # validation
-#     excesses <- maxima$variable[maxima$variable > thresh]
-#     p <- Box.test(excesses)[["p.value"]] # H0: independent
-#     if (p < 0.1) {
-#       warning(paste0(
-#         "p-value ≤ 10% for H0 of independent exceedences for gridcell ",
-#         i, ". Value: ", round(p, 4)
-#       ))
-#     }
-
-#     # fit ECDF & GPD on train set only...
-#     newrow <- tryCatch({
-#       fit <- gpdAd(
-#         train$variable[train$variable > thresh],
-#         bootstrap     = TRUE,
-#         bootnum       = 10,
-#         allowParallel = FALSE,
-#         numCores      = 2
-#       ) # H0: GPD distribution
-
-#       scale <- fit$theta[1]
-#       shape <- fit$theta[2]
-#       maxima$thresh <- thresh
-#       maxima$scale  <- scale
-#       maxima$shape  <- shape
-#       maxima$p      <- fit$p.value
-
-#       # empirical cdf transform
-#       maxima$scdf <- scdf(train$variable, thresh,
-#                           scale, shape)(maxima$variable)
-#       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
-
-#       maxima # assigns maxima to newrow
-#     }, error = function(e) {
-#       print(paste0("MLE failed for grid cell ", grid_i, " ", e))
-#       maxima$thresh <- NA
-#       maxima$scale  <- NA
-#       maxima$shape  <- NA
-#       maxima$p      <- 0
-#       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
-#       maxima$scdf <- maxima$ecdf
-#       return(maxima)
-#     })
-
-#     # update progress
-#     progress <- as.integer(readLines(progress_file)[1])
-#     writeLines(as.character(progress + 1), progress_file)
-#     update_progress(as.integer(readLines(progress_file)[1]))
-
-#     return(newrow)
-#   })
-
-#   stopCluster(cluster)
-#   unlink(progress_file)
-#   transformed <- do.call(rbind, transformed)
-  
-#   return(transformed)
-# }

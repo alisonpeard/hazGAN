@@ -13,7 +13,7 @@ readRenviron("../../.env")
 WD         <- Sys.getenv("TRAINDIR")  # nolint
 WD         <- paste0(WD, "/", res2str(RES))
 DRYRUN     <- FALSE
-NDRYRUN    <- 200
+NDRYRUN    <- 4
 
 daily    <- read_parquet(paste0(WD, "/", "daily.parquet"))
 metadata <- read_parquet(paste0(WD, "/", "storms_metadata.parquet"))
@@ -27,9 +27,9 @@ if(DRYRUN) {
 #%%######## TRANSFORM STORMS ###################################################
 # fit to marginal data
 print("Tranforming fields...")
-storms_wind <- weibull_transformer(daily, metadata, "u10", Q)
-storms_mslp <- gpd_transformer(daily, metadata, "msl", Q)
-storms_tp   <- gpd_transformer(daily, metadata, "tp", Q)
+storms_wind <- weibull_transformer(daily, metadata, "u10", Q);warnings()
+storms_mslp <- gpd_transformer(daily, metadata, "msl", Q);warnings()
+storms_tp   <- gpd_transformer(daily, metadata, "tp", Q);warnings()
 
 print("Done. Putting it all together...")
 renamer <- function(df, var) {
@@ -41,9 +41,12 @@ renamer <- function(df, var) {
   return(df)
 }
 
-storms_wind <- renamer(storms_wind, "u10")
+#storms_wind <- renamer(storms_wind, "u10")
+warnings()
 storms_mslp <- renamer(storms_mslp, "mslp")
+warnings()
 storms_tp   <- renamer(storms_tp, "tp")
+warnings()
 
 storms <- storms_wind %>%
   inner_join(storms_mslp, by = c("grid", "storm", "storm.rp")) %>%
