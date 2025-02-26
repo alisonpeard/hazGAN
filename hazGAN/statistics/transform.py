@@ -1,6 +1,7 @@
 # %%
 import numpy as np
 import xarray as xr
+from functools import partial
 
 if __name__ == "__main__":
     from base import *
@@ -8,7 +9,6 @@ if __name__ == "__main__":
 else:
     from .base import *
     from .empirical import quantile, semiparametric_quantile
-
 
 
 def invPITDataset(ds:xr.Dataset, theta_var:str="params",
@@ -27,12 +27,12 @@ def invPITDataset(ds:xr.Dataset, theta_var:str="params",
     return x_inv
 
 
-
 def invPIT(
         u:np.ndarray,
         x:np.ndarray,
         theta:np.ndarray=None,
-        gumbel_margins:bool=False
+        gumbel_margins:bool=False,
+        distribution:str="genpareto"
     ) -> np.ndarray:
     """
     Transform uniform marginals to original distributions via inverse interpolation of empirical CDF.
@@ -58,6 +58,7 @@ def invPIT(
     # assert x.shape[1:] == u.shape[1:], (
     #     f"Marginal dimensions mismatch: {u.shape[1:]} != {x.shape[1:]}"
     # )
+    semiparametric_quantile = partial(semiparametric_quantile, distribution=distribution)
 
     # flatten along spatial dimensions
     original_shape = u.shape

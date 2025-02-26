@@ -1,6 +1,10 @@
 import numpy as np
+from warnings import warn
 from scipy.stats import genpareto
+from scipy.stats import weibull_min as weibull
+# %%
 
+# %%
 # the following functions are simple wrappers for the classes below
 def ecdf(x:np.ndarray, *args, **kwargs) -> callable:
     """Simple wrapper to mimic R ecdf."""
@@ -12,16 +16,16 @@ def quantile(x:np.ndarray, *args, **kwargs) -> callable:
     return Empirical(x).inverse
 
 
-def semiparametric_cdf(x, params, *args, **kwargs) -> callable:
+def semiparametric_cdf(x, params, distribution="genpareto", *args, **kwargs) -> callable:
     """Semi-parametric CDF."""
     loc, scale, shape = params
-    return GenPareto(x, loc, scale, shape).forward
+    return Parametric(x, loc, scale, shape, distribution=distribution).forward
 
 
-def semiparametric_quantile(u, params, *args, **kwargs) -> callable:
+def semiparametric_quantile(u, params, distribution="genpareto", *args, **kwargs) -> callable:
     """Semi-parametric quantile."""
     loc, scale, shape = params
-    return GenPareto(u, loc, scale, shape).inverse
+    return Parametric(u, loc, scale, shape, distribution=distribution).inverse
 
 
 # class definitions
@@ -96,16 +100,21 @@ class Empirical(object):
         return interpolator
 
 
-class GenPareto(Empirical):
+class Parametric(Empirical):
     """Semi-empirical GPD distribution object."""
     def __init__(self, x,
                  loc=0, scale=1, shape=1,
+                 distribution="genpareto",
                  alpha=0, beta=0) -> None:
         super().__init__(x, alpha, beta)
 
         self.loc = loc
         self.scale = scale
         self.shape = shape
+
+        if distribution == "weibull":
+            warn("Weibull distribution hasn't been checked yet.")
+        self.dist = locals().get(distribution)
 
         self.ecdf = super()._ecdf()
         self.quantile = super()._quantile()
@@ -125,7 +134,7 @@ class GenPareto(Empirical):
             tail_mask = x > self.loc
             tail_x = x[tail_mask]
 
-            tail_fit = genpareto.cdf(tail_x, self.shape, loc=self.loc, scale=self.scale)
+            tail_fit = self.dist.cdf(tail_x, self.shape, loc=self.loc, scale=self.scale)
             tail_u = 1 - (1 - loc_u) * (1 - tail_fit)
             u[tail_mask] = tail_u
 
@@ -164,7 +173,7 @@ class GenPareto(Empirical):
             tail_u = u[tail_mask]
 
             tail_u = 1 - ((1 - tail_u) / (1 - loc_u))
-            tail_x = genpareto.ppf(tail_u, self.shape, loc=self.loc, scale=self.scale)
+            tail_x = self.dist.ppf(tail_u, self.shape, loc=self.loc, scale=self.scale)
 
             x[tail_mask] = tail_x
 
@@ -187,3 +196,10 @@ class GenPareto(Empirical):
         return x
     
 
+class GenPareto(Parametric):
+    def __init__(self, x, loc=0, scale=1, shape=1, alpha=0, beta=0) -> None:
+        super().__init__(x, loc, scale, shape, distribution="genpareto", alpha=alpha, beta=beta)
+
+class Weibull(Parametric):
+    def __init__(self, x, loc=0, scale=1, shape=1, alpha=0, beta=0) -> None:
+        super().__init__(x, loc, scale, shape, distribution="weibull", alpha=alpha, beta=beta)

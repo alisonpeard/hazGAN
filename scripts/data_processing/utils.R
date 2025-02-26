@@ -176,7 +176,7 @@ storm_extractor <- function(daily, var, rfunc) {
   return(metadata)
 }
 
-########## GENPARETO ###########################################################
+########## TRANSFORMS ##########################################################
 gpdBackup <- function(var, threshold) {
   library(POT)
   ad_test <- function(x, shape, scale, eps=0.05){
@@ -431,24 +431,24 @@ marginal_transformer <- function(df, threshold_selector, metadata, var, q, chunk
   return(transformed)
 }
 gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
-  evt_transformer(
+  marginal_transformer(
     df = df,
+    threshold_selector = select_gpd_threshold,
     metadata = metadata,
     var = var,
     q = q,
     chunksize = chunksize,
-    threshold_selector = select_gpd_threshold,
     cdf_function = pgpd
   )
 }
 weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
-  evt_transformer(
+  marginal_transformer(
     df = df,
+    threshold_selector = select_weibull_threshold,
     metadata = metadata,
     var = var,
     q = q,
     chunksize = chunksize,
-    threshold_selector = select_weibull_threshold,
     cdf_function = pweibull
   )
 }
