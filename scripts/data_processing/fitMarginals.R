@@ -41,7 +41,7 @@ renamer <- function(df, var) {
   return(df)
 }
 
-#storms_wind <- renamer(storms_wind, "u10")
+storms_wind <- renamer(storms_wind, "u10")
 warnings()
 storms_mslp <- renamer(storms_mslp, "mslp")
 warnings()

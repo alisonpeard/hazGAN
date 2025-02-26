@@ -280,7 +280,7 @@ select_gpd_threshold <- function(var, nthresholds = 50, nsim = 20, alpha = 0.05)
     thresh   = fits$threshold[k],
     theta    = c(fits$est.scale[k], fits$est.shape[k]),
     p.value  = fits$p.values[k],
-    forward  = fits$ForwardStop[k],
+    pk  = fits$ForwardStop[k],
     n_exceed = fits$num.above[k]
   ))
 }
@@ -327,16 +327,6 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
     train <- maxima[year(maxima$time) %ni% TEST.YEARS,]
     thresh <- quantile(train$variable, q)
 
-    # validation
-    excesses <- maxima$variable[maxima$variable > thresh]
-    p <- Box.test(excesses)[["p.value"]] # H0: independent
-    if (p < 0.05) {
-      warning(paste0(
-        "p-value ≤ 5% for H0 of independent exceedences for gridcell ",
-        grid_i, ". Value: ", round(p, 4)
-      ))
-    }
-
     # fit ECDF & GPD on train set only...
     maxima <- tryCatch({
       fit <- select_gpd_threshold(train$variable)
@@ -347,6 +337,7 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
       maxima$scale  <- scale
       maxima$shape  <- shape
       maxima$p      <- fit$p.value
+      maxima$pk     <- fit$pk
 
       # empirical cdf transform
       maxima$scdf <- scdf(train$variable, thresh, scale, shape)(maxima$variable)
@@ -358,12 +349,24 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
       maxima$scale  <- NA
       maxima$shape  <- NA
       maxima$p      <- 0
+      maxima$pk     <-pk
       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
       maxima$scdf <- maxima$ecdf
       maxima
     })
     return(maxima)
   }
+  
+  # validation
+  excesses <- maxima$variable[maxima$variable > thresh]
+  p <- Box.test(excesses)[["p.value"]] # H0: independent
+  if (p < 0.05) {
+    warning(paste0(
+      "p-value ≤ 5% for H0 of independent exceedences for gridcell ",
+      grid_i, ". Value: ", round(p, 4)
+    ))
+  }
+  maxima$box.test <- p
   
   # wrapper for process_gridcell()
   process_gridchunk <- function(gridchunk) {
@@ -392,7 +395,7 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
   
   fields <- c("storm", "variable", "time", "storm.rp",
               "grid", "thresh", "scale", "shape", "p",
-              "ecdf", "scdf")
+              "ecdf", "scdf", "box.test")
   transformed <- transformed[, fields]
   
   return(transformed)
@@ -406,39 +409,10 @@ select_weibull_threshold <- function(var, alpha = 0.05, nthresholds = 50) {
     scale <- params[2]
     -sum(dweibull(data, shape = shape, scale = scale, log = TRUE))
   }
-  ad_test <- function(x, shape, scale, eps=0.05, verbose=FALSE) {
-    # https://web.cortland.edu/matresearch/AndrsDarlSTART.pdf
-    # H0: X~WEIBULL(SHAPE, SCALE)
-    n <- length(x)
-    x <- sort(x)
-    z <- (x / scale)**shape # standardize
-    
-    Fz <- 1 - exp(-z)
-    ad <- -n - (1/n) * sum(
-      (2 * seq(1:n) - 1) * (log(Fz) + log(1 - rev(Fz)))
-    )
-    
-    adstar <- (1 + ( 0.2 / sqrt(n))) * ad
-    
-    osl <- 1 / (
-      1 + exp(
-        -0.1 + 1.24 * log(adstar) + 4.48 * adstar
-      )
-    )
-    
-    if (verbose) {
-      # Print diagnostic information
-      cat("A-D statistic:", ad, "\n")
-      cat("Modified A-D statistic:", adstar, "\n")
-      cat("OSL (p-value):", osl, "\n")
-      cat("Significance threshold: ", eps, "\n")
-    }
-    
-    return(list(
-      statistic = ad,
-      modified = adstar,
-      p.value = osl
-    ))
+  ad_test <- function(x, shape, scale, eps=0.05){
+    cdf <- function(x) pweibull(x, shape=shape, scale=scale)
+    result <- ad.test(x, cdf)
+    return(list(p.value = result$p.value))
   }
   thresholds <- quantile(var, probs = seq(0.7, 0.98, length.out = nthresholds))
   
@@ -480,11 +454,13 @@ select_weibull_threshold <- function(var, alpha = 0.05, nthresholds = 50) {
   exceedances <- var[var > thresh] - thresh
   num_above    <- length(exceedances)
   pval <- pvals[k]
+  pk<-pk[k]
 
   return(list(
     thresh = thresh,
     theta = c(scale, shape),
     p.value = pval,
+    pk = pk,
     n_exceed = num_above
   ))
 }
@@ -526,16 +502,6 @@ weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
     train <- maxima[year(maxima$time) %ni% TEST.YEARS,]
     thresh <- quantile(train$variable, q)
 
-    # validation
-    excesses <- maxima$variable[maxima$variable > thresh]
-    p <- Box.test(excesses)[["p.value"]] # H0: independent
-    if (p < 0.1) {
-      warning(paste0(
-        "p-value ≤ 10% for H0:independent exceedences in ",
-        grid_i, ". Value: ", round(p, 4)
-      ))
-    }
-
     # fit ECDF & GPD on train set only...
     maxima <- tryCatch({
       fit <- select_weibull_threshold(train$variable)
@@ -543,10 +509,12 @@ weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
       scale  <- fit$theta[1]
       shape  <- fit$theta[2]
       pval   <- fit$p.value
+      pk<- fit$pk
       maxima$thresh <- thresh
       maxima$scale  <- scale
       maxima$shape  <- shape
       maxima$p      <- pval
+      maxima$pk     <- pk
 
       # parametric cdf (tail only)
       maxima$scdf <- scdf(train$variable, thresh, scale, shape,
@@ -566,13 +534,25 @@ weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
       maxima$scale  <- NA
       maxima$shape  <- NA
       maxima$p      <- 0
+      maxima$pk     <- 0
       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
       maxima$scdf <- maxima$ecdf
       maxima
     })
     return(maxima)
   }
-
+  
+  # validation
+  excesses <- maxima$variable[maxima$variable > thresh]
+  p <- Box.test(excesses)[["p.value"]] # H0: independent
+  if (p < 0.1) {
+    warning(paste0(
+      "p-value ≤ 10% for H0:independent exceedences in ",
+      grid_i, ". Value: ", round(p, 4)
+    ))
+  }
+  maxima$box.test <- p
+  
   # wrapper for process_gridcell()
   process_gridchunk <- function(gridchunk) {
     df <- readRDS(tmp)
@@ -598,7 +578,7 @@ weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
 
   fields <- c("storm", "variable", "time", "storm.rp",
               "grid", "thresh", "scale", "shape", "p",
-              "ecdf", "scdf")
+              "ecdf", "scdf", 'box.test')
   transformed <- transformed[, fields]
   return(transformed)
 }
