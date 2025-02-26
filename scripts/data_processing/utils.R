@@ -177,60 +177,25 @@ storm_extractor <- function(daily, var, rfunc) {
 }
 
 ########## GENPARETO ###########################################################
-gpdTestFit <- function(data, thresh, scale, shape) {
-  # https://github.com/cran/eva/blob/master/R/gpdAd.R
-  n <- length(data)
-  newdata <- pgpd(data, loc = 0, scale = scale, shape = shape)
-  newdata <- sort(newdata)
-  i <- seq(1, n, 1)
-  stat <- -n - (1/n)*sum((2*i - 1)*(log(newdata) + log1p(-rev(newdata))))
-  
-  ADQuantiles <- eva:::ADQuantiles
-  row <- which(rownames(ADQuantiles) == max(round(shape, 2), -0.5))
-  
-  if(stat > ADQuantiles[row, 999]) {
-    pvals <- -log(as.numeric(colnames(ADQuantiles[950:999])))
-    x <- as.numeric(ADQuantiles[row, 950:999])
-    y <- lm(pvals ~ x)
-    stat <- as.data.frame(stat)
-    colnames(stat) <- c("x")
-    p <- as.numeric(exp(-predict(y, stat)))
-  } else {
-    bound <- as.numeric(colnames(ADQuantiles)[which.max(stat < ADQuantiles[row,])])
-    if(bound == .999) {
-      p <- .999
-    } else {
-      lower <- ADQuantiles[row, which(colnames(ADQuantiles) == bound + 0.001)]
-      upper <- ADQuantiles[row, which(colnames(ADQuantiles) == bound)]
-      dif <- (upper - stat) / (upper - lower)
-      val <- (dif * (-log(bound) - -log(bound + 0.001))) + log(bound)
-      p <- exp(val)
-    }
-  }
-  return(list(
-    statistic = stat,
-    p.value = p
-  ))
-}
 gpdBackup <- function(var, threshold) {
+  library(POT)
+  ad_test <- function(x, shape, scale, eps=0.05){
+    cdf <- function(x) pgpd(x, loc = 0, shape = shape, scale = scale)
+    result <- ad.test(x, cdf)
+    return(list(p.value = result$p.value))
+  }
+  
   # extract exceedances
   exceedances <- var[var > threshold] - threshold
   exceedances <- sort(exceedances)
   num.above <- length(exceedances)
 
-  library(POT)
   fit <- fitgpd(var, threshold = threshold, est = "pwmu")
   scale <- fit$fitted.values[1]
   shape <- fit$fitted.values[2]
-  
-  # library(lmom)
-  # lmom_result <- samlmu(exceedances, nmom = 3)
-  # params <- pelgpa(lmom_result)
-  # shape <- params[3]
-  # scale <- params[2]
-  
+
   # goodness-of-fit test
-  gof  <- gpdTestFit(exceedances, threshold, scale, shape)
+  gof  <- ad_test(exceedances, threshold, scale, shape)
   
   # results
   return(list(thresh=threshold, shape=shape, scale=scale,
@@ -284,124 +249,6 @@ select_gpd_threshold <- function(var, nthresholds = 50, nsim = 20, alpha = 0.05)
     n_exceed = fits$num.above[k]
   ))
 }
-gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
-  gridcells <- unique(df$grid)
-  df <- df[df$time %in% metadata$time, ]
-  ngrid <- length(gridcells)
-  
-  # save df to RDS for worker access
-  tmp <- tempfile(fileext = ".rds")
-  saveRDS(df, tmp)
-  rm(df)
-  gc() 
-
-  # chunk data for memory efficiency
-  gridchunks <- split(gridcells, ceiling(seq_along(gridcells) / chunksize))
-  gridchunks <- unname(gridchunks)
-  nchunks <- length(gridchunks)
-
-  # multiprocessing intiation
-  plan(multisession, workers = min(availableCores() - 4, nchunks))
-  pb <- progress::progress_bar$new(
-    format = "Processing grid cells [:bar] :percent eta: :eta",
-    total  = ngrid
-  )
-
-  # main GPD fitting function
-  process_gridcell <- function(grid_i, df) {
-    gridcell <- df[df$grid == grid_i, ]
-    gridcell <- left_join(gridcell,
-                          metadata[, c("time", "storm", "storm.rp")],
-                          by = c("time" = "time"))
-    
-    maxima <- gridcell %>%
-      group_by(storm) %>%
-      slice(which.max(get(var))) %>%
-      summarise(
-        variable = max(get(var)),
-        time = time,
-        storm.rp = storm.rp,
-        grid = grid
-      )
-    
-    train <- maxima[year(maxima$time) %ni% TEST.YEARS,]
-    thresh <- quantile(train$variable, q)
-
-    # fit ECDF & GPD on train set only...
-    maxima <- tryCatch({
-      fit <- select_gpd_threshold(train$variable)
-      thresh <- fit$thresh
-      scale  <- fit$theta[1]
-      shape  <- fit$theta[2]
-      maxima$thresh <- thresh
-      maxima$scale  <- scale
-      maxima$shape  <- shape
-      maxima$p      <- fit$p.value
-      maxima$pk     <- fit$pk
-
-      # empirical cdf transform
-      maxima$scdf <- scdf(train$variable, thresh, scale, shape)(maxima$variable)
-      maxima$ecdf <- ecdf(train$variable)(maxima$variable)
-      maxima
-    }, error = function(e) {
-      warning(sprintf("MLE failed for grid cell %d: %s. Resorting to fully empirical fits.", grid_i, e$message))
-      maxima$thresh <- NA
-      maxima$scale  <- NA
-      maxima$shape  <- NA
-      maxima$p      <- 0
-      maxima$pk     <-pk
-      maxima$ecdf <- ecdf(train$variable)(maxima$variable)
-      maxima$scdf <- maxima$ecdf
-      maxima
-    })
-    return(maxima)
-  }
-  
-  # validation
-  excesses <- maxima$variable[maxima$variable > thresh]
-  p <- Box.test(excesses)[["p.value"]] # H0: independent
-  if (p < 0.05) {
-    warning(paste0(
-      "p-value ≤ 5% for H0 of independent exceedences for gridcell ",
-      grid_i, ". Value: ", round(p, 4)
-    ))
-  }
-  maxima$box.test <- p
-  
-  # wrapper for process_gridcell()
-  process_gridchunk <- function(gridchunk) {
-    df <- readRDS(tmp)
-    df <- df[df$grid %in% gridchunk, ]
-    gc()
-    
-    maxima <- lapply(gridchunk, function(grid_i) {
-      process_gridcell(grid_i, df)
-    })
-    
-    bind_rows(maxima)
-  }
-  
-  # apply multiprocessing
-  transformed <- future_map_dfr(
-    .x = gridchunks,
-    .f = process_gridchunk,
-    .options = furrr_options(
-      seed = TRUE,
-      scheduling = 1
-    )
-  )
-  
-  unlink(tmp)
-  
-  fields <- c("storm", "variable", "time", "storm.rp",
-              "grid", "thresh", "scale", "shape", "p",
-              "ecdf", "scdf", "box.test")
-  transformed <- transformed[, fields]
-  
-  return(transformed)
-}
-
-########## WEIBULL #############################################################
 select_weibull_threshold <- function(var, alpha = 0.05, nthresholds = 50) {
   loglikelihood <- function(params, data) {
     # Calculate negative Weibull log-likelihood.
@@ -410,7 +257,7 @@ select_weibull_threshold <- function(var, alpha = 0.05, nthresholds = 50) {
     -sum(dweibull(data, shape = shape, scale = scale, log = TRUE))
   }
   ad_test <- function(x, shape, scale, eps=0.05){
-    cdf <- function(x) pweibull(x, shape=shape, scale=scale)
+    cdf <- function(x) pweibull(x, shape = shape, scale = scale)
     result <- ad.test(x, cdf)
     return(list(p.value = result$p.value))
   }
@@ -464,31 +311,32 @@ select_weibull_threshold <- function(var, alpha = 0.05, nthresholds = 50) {
     n_exceed = num_above
   ))
 }
-weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
+
+marginal_transformer <- function(df, threshold_selector, metadata, var, q, chunksize = 256) {
   gridcells <- unique(df$grid)
   df <- df[df$time %in% metadata$time, ]
-
+  
   # save df to RDS for worker access
   tmp <- tempfile(fileext = ".rds")
   saveRDS(df, tmp)
   rm(df)
   gc()
-
+  
   # chunk data for memory efficiency
   gridchunks <- split(gridcells, ceiling(seq_along(gridcells) / chunksize))
   gridchunks <- unname(gridchunks)
   nchunks <- length(gridchunks)
-
+  
   # multiprocessing initiation
   plan(multisession, workers = min(availableCores() - 4, nchunks))
-
+  
   # main GPD fitting function
   process_gridcell <- function(grid_i, df) {
     gridcell <- df[df$grid == grid_i, ]
     gridcell <- left_join(gridcell,
                           metadata[, c("time", "storm", "storm.rp")],
                           by = c("time" = "time"))
-
+    
     maxima <- gridcell %>%
       group_by(storm) %>%
       slice(which.max(get(var))) %>%
@@ -498,13 +346,13 @@ weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
         storm.rp = storm.rp,
         grid = grid
       )
-
+    
     train <- maxima[year(maxima$time) %ni% TEST.YEARS,]
     thresh <- quantile(train$variable, q)
-
+    
     # fit ECDF & GPD on train set only...
     maxima <- tryCatch({
-      fit <- select_weibull_threshold(train$variable)
+      fit <- threshold_selector(train$variable)
       thresh <- fit$thresh
       scale  <- fit$theta[1]
       shape  <- fit$theta[2]
@@ -515,7 +363,7 @@ weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
       maxima$shape  <- shape
       maxima$p      <- pval
       maxima$pk     <- pk
-
+      
       # parametric cdf (tail only)
       maxima$scdf <- scdf(train$variable, thresh, scale, shape,
                           cdf = pweibull)(maxima$variable)
@@ -525,7 +373,7 @@ weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
     }, error = function(e) {
       warning(
         sprintf(
-        "MLE failed for grid cell %d: %s. Resorting to fully empirical fits.",
+          "MLE failed for grid cell %d: %s. Resorting to fully empirical fits.",
           grid_i,
           e$message
         )
@@ -539,19 +387,19 @@ weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
       maxima$scdf <- maxima$ecdf
       maxima
     })
+    
+    # validation
+    excesses <- maxima$variable[maxima$variable > thresh]
+    p <- Box.test(excesses)[["p.value"]] # H0: independent
+    if (p < 0.1) {
+      warning(paste0(
+        "p-value ≤ 10% for H0:independent exceedences in ",
+        grid_i, ". Value: ", round(p, 4)
+      ))
+    }
+    maxima$box.test <- p
     return(maxima)
   }
-  
-  # validation
-  excesses <- maxima$variable[maxima$variable > thresh]
-  p <- Box.test(excesses)[["p.value"]] # H0: independent
-  if (p < 0.1) {
-    warning(paste0(
-      "p-value ≤ 10% for H0:independent exceedences in ",
-      grid_i, ". Value: ", round(p, 4)
-    ))
-  }
-  maxima$box.test <- p
   
   # wrapper for process_gridcell()
   process_gridchunk <- function(gridchunk) {
@@ -563,7 +411,7 @@ weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
     })
     bind_rows(maxima)
   }
-
+  
   # apply multiprocessing
   transformed <- future_map_dfr(
     .x = gridchunks,
@@ -573,12 +421,34 @@ weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
       scheduling = 1
     )
   )
-
+  
   unlink(tmp)
-
+  
   fields <- c("storm", "variable", "time", "storm.rp",
               "grid", "thresh", "scale", "shape", "p",
               "ecdf", "scdf", 'box.test')
   transformed <- transformed[, fields]
   return(transformed)
+}
+gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
+  evt_transformer(
+    df = df,
+    metadata = metadata,
+    var = var,
+    q = q,
+    chunksize = chunksize,
+    threshold_selector = select_gpd_threshold,
+    cdf_function = pgpd
+  )
+}
+weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
+  evt_transformer(
+    df = df,
+    metadata = metadata,
+    var = var,
+    q = q,
+    chunksize = chunksize,
+    threshold_selector = select_weibull_threshold,
+    cdf_function = pweibull
+  )
 }
