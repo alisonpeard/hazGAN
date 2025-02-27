@@ -11,6 +11,7 @@ library(data.table)
 library(progress)  # Add this
 library(magrittr)  # Optional but recommended for pipe operator
 library(stats)
+library(goftest)
 
 ########### HELPER FUNCTIONS ###################################################
 `%ni%` <- Negate(`%in%`)
@@ -218,7 +219,8 @@ gpdBackupSeqTests <- function(var, thresholds) {
     num.above[k]  <- fit$num.above
   }
   
-  ForwardStop <-  cumsum(-log(1 - p.values)) / (seq_along(p.values))
+  # ForwardStop <-  cumsum(-log(1 - p.values)) / (seq_along(p.values))
+  ForwardStop <- rev(eva:::pSeqStop(rev(p.values))$ForwardStop)
 
   out <- list(threshold = thresholds, num.above = num.above, p.value = p.values, 
               ForwardStop = ForwardStop, est.scale = scales,
@@ -233,19 +235,23 @@ gpdSeqTestsWithFallback <- function(var, thresholds, method, nsim) {
     fits <- gpdBackupSeqTests(var, thresholds)
   })
 }
-select_gpd_threshold <- function(var, nthresholds = 50, nsim = 20, alpha = 0.05) {
+select_gpd_threshold <- function(var, nthresholds = 28, nsim = 5, alpha = 0.05) {
   thresholds <- quantile(var, probs = seq(0.7, 0.98, length.out = nthresholds))
   fits <- gpdSeqTestsWithFallback(var, thresholds, method = "ad", nsim = nsim)
   valid_pk <- fits$ForwardStop
-  k    <- min(which(valid_pk > 0.1)); # lowest index being "accepted"
-  k    <- ifelse(is.finite(k), k, 1); # use first index if none satisfy it
+  
+  k    <- min(which(valid_pk > alpha)); # lowest index being "accepted"
+  if (!is.finite(k)) {
+    stop("All thresholds rejected under H0:X~GPD with α=0.05")
+    k <- 1
+  }
   
   return(list(
     k        = k,
     thresh   = fits$threshold[k],
     theta    = c(fits$est.scale[k], fits$est.shape[k]),
     p.value  = fits$p.values[k],
-    pk  = fits$ForwardStop[k],
+    pk       = fits$ForwardStop[k],
     n_exceed = fits$num.above[k]
   ))
 }
@@ -261,12 +267,13 @@ select_weibull_threshold <- function(var, alpha = 0.05, nthresholds = 50) {
     result <- ad.test(x, cdf)
     return(list(p.value = result$p.value))
   }
+  
   thresholds <- quantile(var, probs = seq(0.7, 0.98, length.out = nthresholds))
   
-  shapes <- vector(length = length(thresholds))
-  scales <- vector(length = length(thresholds))
+  shapes    <- vector(length = length(thresholds))
+  scales    <- vector(length = length(thresholds))
   num_above <- vector(length = length(thresholds))
-  pvals  <- vector(length = length(thresholds))
+  pvals     <- vector(length = length(thresholds))
 
   for (i in seq_along(thresholds)) {
     q <- thresholds[i]
@@ -287,21 +294,29 @@ select_weibull_threshold <- function(var, alpha = 0.05, nthresholds = 50) {
     
     shapes[i]      <- fit$par[1]
     scales[i]      <- fit$par[2]
-    num_above[i] <- length(exceedances)
-    pvals[i] <- ad_test(exceedances, shapes[i], scales[i])$p.value
+    num_above[i]   <- length(exceedances)
+    pvals[i]       <- ad_test(exceedances, shapes[i], scales[i])$p.value
   }
 
   # https://doi.org/10.1214/17-AOAS1092
-  pk <- cumsum(-log(1 - pvals)) / (seq_along(pvals))
-  k  <- min(which(pk > alpha))
+  pk <- rev(eva:::pSeqStop(rev(pvals))$ForwardStop)
+  # m   <- length(pvals)
+  # int <- seq(1, m, 1)
+  # pk  <- cumsum(-log(1 - pvals[int]))/int
+  
+  k   <- min(which(pk > alpha)); # lowest index being "accepted"
+  if (!is.finite(k)) {
+    stop("All thresholds rejected under H0:X~Weibull with α=0.05")
+    k <- 1
+  }
   
   thresh <- thresholds[k]
   shape  <- shapes[k]
   scale  <- scales[k]
+  pval   <- pvals[k]
+  pk     <- pk[k]
   exceedances <- var[var > thresh] - thresh
-  num_above    <- length(exceedances)
-  pval <- pvals[k]
-  pk<-pk[k]
+  num_above   <- length(exceedances)
 
   return(list(
     thresh = thresh,
@@ -312,20 +327,28 @@ select_weibull_threshold <- function(var, alpha = 0.05, nthresholds = 50) {
   ))
 }
 
-marginal_transformer <- function(df, threshold_selector, metadata, var, q, chunksize = 256) {
+marginal_transformer <- function(df, threshold_selector, metadata, var, q, cdf, chunksize = 128) {
   gridcells <- unique(df$grid)
   df <- df[df$time %in% metadata$time, ]
   
-  # save df to RDS for worker access
-  tmp <- tempfile(fileext = ".rds")
-  saveRDS(df, tmp)
-  rm(df)
-  gc()
+  # # save df to RDS for worker access
+  # tmp <- tempfile(fileext = ".rds")
+  # saveRDS(df, tmp)
+  # rm(df)
   
   # chunk data for memory efficiency
   gridchunks <- split(gridcells, ceiling(seq_along(gridcells) / chunksize))
   gridchunks <- unname(gridchunks)
   nchunks <- length(gridchunks)
+
+  # save each chunk to RDS for worker access
+  tmps <- vector("list", length=nchunks) 
+  for (i in seq_along(gridchunks)) {
+    tmps[[i]] <- tempfile(fileext = ".rds")
+    saveRDS(df[df$grid %in% gridchunks[[i]], ], tmps[[i]])
+  }
+  rm(df)
+  #gc()
   
   # multiprocessing initiation
   plan(multisession, workers = min(availableCores() - 4, nchunks))
@@ -352,12 +375,12 @@ marginal_transformer <- function(df, threshold_selector, metadata, var, q, chunk
     
     # fit ECDF & GPD on train set only...
     maxima <- tryCatch({
-      fit <- threshold_selector(train$variable)
+      fit   <- threshold_selector(train$variable)
       thresh <- fit$thresh
       scale  <- fit$theta[1]
       shape  <- fit$theta[2]
       pval   <- fit$p.value
-      pk<- fit$pk
+      pk     <- fit$pk
       maxima$thresh <- thresh
       maxima$scale  <- scale
       maxima$shape  <- shape
@@ -366,18 +389,16 @@ marginal_transformer <- function(df, threshold_selector, metadata, var, q, chunk
       
       # parametric cdf (tail only)
       maxima$scdf <- scdf(train$variable, thresh, scale, shape,
-                          cdf = pweibull)(maxima$variable)
+                          cdf = cdf)(maxima$variable)
       # empirical cdf
       maxima$ecdf <- ecdf(train$variable)(maxima$variable)
       maxima
     }, error = function(e) {
-      warning(
-        sprintf(
-          "MLE failed for grid cell %d: %s. Resorting to fully empirical fits.",
-          grid_i,
-          e$message
-        )
-      )
+      cat("MLE failed for grid cell ", grid_i, ". ")
+      cat("Resorting to empirical fits", "\n")
+      cat("Error message:", conditionMessage(e), "\n")
+      cat("Call:", deparse(conditionCall(e)), "\n")
+      
       maxima$thresh <- NA
       maxima$scale  <- NA
       maxima$shape  <- NA
@@ -390,22 +411,21 @@ marginal_transformer <- function(df, threshold_selector, metadata, var, q, chunk
     
     # validation
     excesses <- maxima$variable[maxima$variable > thresh]
-    p <- Box.test(excesses)[["p.value"]] # H0: independent
-    if (p < 0.1) {
+    p.box <- Box.test(excesses)[["p.value"]] # H0: independent
+    if (p.box < 0.1) {
       warning(paste0(
         "p-value ≤ 10% for H0:independent exceedences in ",
-        grid_i, ". Value: ", round(p, 4)
+        grid_i, ". Value: ", round(p.box, 4)
       ))
     }
-    maxima$box.test <- p
+    maxima$box.test <- p.box
     return(maxima)
   }
   
   # wrapper for process_gridcell()
-  process_gridchunk <- function(gridchunk) {
-    df <- readRDS(tmp)
-    df <- df[df$grid %in% gridchunk, ]
-    gc()
+  process_gridchunk <- function(i) {
+    df <- readRDS(tmps[[i]])
+    gridchunk <- gridchunks[[i]]
     maxima <- lapply(gridchunk, function(grid_i) {
       process_gridcell(grid_i, df)
     })
@@ -414,7 +434,7 @@ marginal_transformer <- function(df, threshold_selector, metadata, var, q, chunk
   
   # apply multiprocessing
   transformed <- future_map_dfr(
-    .x = gridchunks,
+    .x = seq_along(tmps),
     .f = process_gridchunk,
     .options = furrr_options(
       seed = TRUE,
@@ -422,11 +442,12 @@ marginal_transformer <- function(df, threshold_selector, metadata, var, q, chunk
     )
   )
   
-  unlink(tmp)
+  unlink(tmps[[i]])
   
   fields <- c("storm", "variable", "time", "storm.rp",
               "grid", "thresh", "scale", "shape", "p",
-              "ecdf", "scdf", 'box.test')
+              "pk", "ecdf", "scdf", 'box.test')
+  
   transformed <- transformed[, fields]
   return(transformed)
 }
@@ -437,8 +458,8 @@ gpd_transformer <- function(df, metadata, var, q, chunksize = 256) {
     metadata = metadata,
     var = var,
     q = q,
-    chunksize = chunksize,
-    cdf_function = pgpd
+    cdf = pgpd,
+    chunksize = chunksize
   )
 }
 weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
@@ -448,7 +469,7 @@ weibull_transformer <- function(df, metadata, var, q, chunksize = 256) {
     metadata = metadata,
     var = var,
     q = q,
-    chunksize = chunksize,
-    cdf_function = pweibull
+    cdf = pweibull,
+    chunksize = chunksize
   )
 }

@@ -48,62 +48,6 @@ RES = (64, 64)
 INFILES = ['data_1941_2022.nc', 'storms.parquet', 'storms_metadata.parquet', 'medians.csv']
 OUTFILES = ['data.nc']
 
-# def frobenius(test:np.ndarray, template:np.ndarray) -> float:
-#     """Calculate the Frobenius norm (similarity) of two matrices."""
-#     similarity = np.sum(template * test) / (np.linalg.norm(template) * np.linalg.norm(test))
-#     return similarity
-#
-# def process_outliers(ds:xr.Dataset, threshold:float=THRESHOLD,
-#                      datadir:str='.', visuals:bool=VISUALISATIONS) -> xr.Dataset:
-#     """
-#     Remove "wind bomb" outliers from data.
-#
-#     Args:
-#     -----
-#     ds: xr.Dataset
-#         The dataset to process
-#     threshold: float
-#         The threshold for the Frobenius norm similarity between the template and the test matrix.
-#     """
-#     ds = ds.copy()
-#     ds['maxwind'] = ds.sel(field='u10')['anomaly'].max(dim=['lon', 'lat'])
-#     sorting = ds.sel(field='u10')['maxwind'].argsort()
-#
-#     if visuals:
-#         fig, axs = plt.subplots(1, 2, figsize=(12, 6))
-#         ds['anomaly'].isel(field=0, time=sorting[-1]).plot(ax=axs[0])
-#         axs[0].set_title('Largest sample before filtering.')
-#
-#     if not os.path.exists(os.path.join(datadir, "windbomb.npy")):
-#         print('Creating outlier template.')
-#         template = ds['anomaly'].isel(field=0, time=sorting[-1]).data # this has a "wind bomb"
-#         np.save(os.path.join(datadir, "windbomb.npy"), template)    
-#     else:
-#         print('Loading outlier template.')
-#         template = np.load(os.path.join(datadir, "windbomb.npy"))
-#
-#     similarities = [] * ds['time'].data.size
-#     for i in range(ds['time'].data.size):
-#         test_matrix = ds['anomaly'].isel(field=0, time=i).data
-#         similarity = frobenius(test_matrix, template)
-#         similarities.append(similarity)
-#     similarities = np.array(similarities)
-#
-#     print(f'{sum(similarities > threshold)} ERA5 "wind bombs" detected in dataset for threshold {threshold}.')
-#     mask = similarities <= threshold 
-#
-#     ds_filtered = ds.sel(time=mask)
-#     sorting = ds_filtered.sel(field='u10')['maxwind'].argsort().data
-#     ds_filtered = ds_filtered.isel(time=sorting[-60000:]) # 60,000 like MNIST
-#     sorting = ds_filtered.sel(field='u10')['maxwind'].argsort().data # again
-#
-#     if visuals:
-#         ds_filtered['anomaly'].isel(field=0, time=sorting[-1]).plot(ax=axs[1])
-#         axs[1].set_title('Largest sample after filtering.')
-#
-#     print("Returning 60,000 largest filtered samples.")
-#     return ds_filtered
-
 
 def main(datadir):
     # load coordinates
@@ -147,12 +91,12 @@ def main(datadir):
             p_cmap = plt.get_cmap(cmap)
             p_cmap.set_under("crimson")
 
-            ds[f"p_{var}"].plot(ax=axs[0], cmap=p_cmap, vmin=p_crit)
+            ds[f"pk_{var}"].plot(ax=axs[0], cmap=p_cmap, vmin=p_crit)
             ds[f"thresh_{var}"].plot(ax=axs[1], cmap=cmap)
             ds[f"scale_{var}"].plot(ax=axs[2], cmap=cmap)
             ds[f"shape_{var}"].plot(ax=axs[3], cmap=cmap) #, vmin=-0.81, vmax=0.28)
 
-            axs[0].set_title("H₀: X~GPD(ξ,μ,σ)")
+            axs[0].set_title("H₀: X~GPD(ξ,μ,σ) (transformed)")
             axs[1].set_title("μ")
             axs[2].set_title("σ")
             axs[3].set_title("ξ")
@@ -163,14 +107,14 @@ def main(datadir):
                 ax.set_ylabel("Latitude")
 
             fig.suptitle(f"Fit for ERA5 {var.upper()}, n = {gdf['storm'].nunique()}")
-            print(gdf[gdf[f"p_{var}"] < p_crit]["grid"].nunique(), "significant p-values")
+            print(gdf[gdf[f"pk_{var}"] < p_crit]["grid"].nunique(), "significant p-values")
 
             fig, axs = plt.subplots(1, 4, figsize=(18, 3))
-            gdf['p_u10'].hist(ax=axs[0], **hist_kws)
+            gdf['pk_u10'].hist(ax=axs[0], **hist_kws)
             gdf[f"thresh_{var}"].hist(ax=axs[1], **hist_kws)
             gdf[f"scale_{var}"].hist(ax=axs[2], **hist_kws)
             gdf[f"shape_{var}"].hist(ax=axs[3], **hist_kws)
-            axs[0].set_title("H₀: X~GPD(ξ,μ,σ)")
+            axs[0].set_title("H₀: X~GPD(ξ,μ,σ) (transformed)")
             axs[1].set_title("μ")
             axs[2].set_title("σ")
             axs[3].set_title("ξ")
