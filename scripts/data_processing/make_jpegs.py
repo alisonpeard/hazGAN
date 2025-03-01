@@ -11,7 +11,7 @@ import glob
 
 from hazGAN.utils import res2str
 # %%
-WINDTHRESHOLD = -float('inf')  #15 for storms
+WINDTHRESHOLD = 15  #15 for storms, -float('inf') for all
 DOMAIN        = "gumbel" # ["uniform", "gumbel"]
 EPS           = 1e-6
 
@@ -66,7 +66,7 @@ ds   = ds.isel(time=idx)
 # %%
 ds.isel(time=0, field=0).uniform.plot(cmap=CMAP)
 ds.isel(time=0, field=0).uniform
-ds = ds.fillna(1.) #! TEMPORARY
+# ds = ds.fillna(1.) #! TEMPORARY
 
 print(f"\nFound {ds.time.size} images with maximum wind exceeding {WINDTHRESHOLD} m/s")
 
@@ -121,7 +121,7 @@ for i in range(nimgs):
     test_load = Image.open(output_path)
 
 storm_paths = sorted(glob.glob(os.path.join(stormdir, "storm_*.png")))
-wind_paths = sorted(glob.glob(os.path.join(winddir, "wind_*.png")))
+wind_paths  = sorted(glob.glob(os.path.join(winddir, "wind_*.png")))
 
 # Create grids
 create_image_grid(storm_paths, (8, 8), os.path.join(stormdir, "..", "percentiles_storm.png"))
@@ -140,7 +140,7 @@ for i in range(nimgs):
     array = np.flip(array, axis=0)
 
     if not ((array.max() <= 1.) and (array.min() >= 0.)):
-        print("WARNING: Data not in [0,1] range, normalizing...")
+        print("WARNING: Quantile data not in [0,1] range, normalizing...")
         minima = np.min(array, axis=(0, 1), keepdims=True)
         maxima = np.max(array, axis=(0, 1), keepdims=True)
         array  = (array - minima) / (maxima - minima)
@@ -163,7 +163,7 @@ for i in range(nimgs):
     test_load = Image.open(output_path)
 
 storm_paths = sorted(glob.glob(os.path.join(stormdir, "storm_*.png")))
-wind_paths = sorted(glob.glob(os.path.join(winddir, "wind_*.png")))
+wind_paths  = sorted(glob.glob(os.path.join(winddir, "wind_*.png")))
 
 print("{} storms processed".format(len(storm_paths)))
 
