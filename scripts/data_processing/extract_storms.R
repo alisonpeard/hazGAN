@@ -1,24 +1,17 @@
-"Identify events and fit to marginals.
+"Identify independent storm events.
 
 Includes event metadata such as return period and frequency. Only fit ECDF and 
 GPD to 1940-2022 data. Keep 2021 as a holdout test set.
 
-Best run in VS code.
-
 Files:
 ------
 - input:
-  - data_1940_2022.nc
+  - data_1941_2022.nc
 
 - output:
   - storms.parquet
   - metadata.parquet
   - medians.csv
-
-To do:
-------
-- train-test split before ECDF & GPD fit (nearly there)
-- convert to Python!
 
 LAST RUN: 17-02-2025
 "
@@ -53,12 +46,12 @@ src <- tidync(paste0(WD, "/", FILENAME))
 if(DRYRUN) {
   lats <- seq(10, 25, length.out=RES[1])
   lons <- seq(80, 95, length.out=RES[2])
-  
+
   src <- src %>%
     hyper_filter(
       lon = lon <= lons[NDRYRUN],
       lat = lat <= lats[NDRYRUN]
-    ) 
+    )
 }
 
 daily  <- src %>% hyper_tibble(force = TRUE)
@@ -72,10 +65,6 @@ daily$msl  <- -daily$msl # negate pressure so maximizing all vars
 daily$time <- as.Date(STARTDATE) + days(daily$time)
 daily$grid <- as.integer(daily$grid)
 
-#deseasonalised <- remove_seasonality(daily, c("u10", "msl", "tp"))
-#daily[c("u10", "msl", "tp")] <- deseasonalised$standardised
-#medians <- as_tibble(deseasonalised$medians)
-
 std_u10 <- standardise_by_month(daily, "u10")
 std_msl <- standardise_by_month(daily, "msl")
 std_tp  <- standardise_by_month(daily, "tp")
@@ -83,7 +72,6 @@ std_tp  <- standardise_by_month(daily, "tp")
 #%%######## EXTRACT STORMS #####################################################
 print("Extracting storms...")
 metadata   <- storm_extractor(daily, "u10", RFUNC)
-#metadata$Q <- Q
 
 ########### SAVE RESULTS #######################################################
 print("Finished storm extraction. Saving...")

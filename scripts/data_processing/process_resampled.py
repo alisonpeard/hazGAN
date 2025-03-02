@@ -1,25 +1,21 @@
 """
-Environment: hazGAN
+Process data resampled using resample.py script and remove "wind bombs" from the dataset.
 
-Need to go back to this once I have found the source of the NaNs.
-
-Process ERA5 data daily variables with the following aggregations:
+Process  daily variables with the following aggregations:
     - sqrt(u10^2 + v10^2): maximum
     - mslp: minimum
     - tp: sum
 
 Remove wind bombs using a similarity metric based on Frobenius norm.
 
-Input:
-------
-- resampled ERA5 data (netcdf) of form
-    <datadir>/era5/bay_of_bengal__daily/resampled/<resolution>*bangladesh*.nc
-    (resampled using resample_era5.py script)
+Input files:
+    - resampled ERA5 data (netcdf) of form
+        <ERA5DIR>/resampled/<resolution>/*.nc
 
-Output:
--------
-- netcdf file of processed data (max wind speed, min MSLP) in <target_dir>/training/res_<>x<>/data_{year0}_{yearn}.nc
-- parquet file of processed data in target_dir/training/res_<>x<>/data_{year0}_{yearn}.parquet
+Output files:
+    - netcdf file of processed data (max wind speed, min MSLP) in <TRAINDIR>/<resolution>/data_{year0}_{yearn}.nc
+    - numpy file of wind bomb template in <TRAINDIR>/<resolution>/windbomb.npy
+
 """
 # %%
 import os

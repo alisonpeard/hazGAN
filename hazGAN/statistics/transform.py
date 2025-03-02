@@ -5,26 +5,13 @@ from functools import partial
 
 if __name__ == "__main__":
     from base import *
-    from empirical import quantile, semiparametric_quantile
+    from empirical import quantile
+    from empirical import semiparametric_quantile as semiparametric_quantile0
 else:
     from .base import *
-    from .empirical import quantile, semiparametric_quantile
+    from .empirical import quantile
+    from .empirical import semiparametric_quantile as semiparametric_quantile0
 
-
-def invPITDataset(ds:xr.Dataset, theta_var:str="params",
-                  u_var:str="uniform", x_var:str="anomaly",
-                  gumbel_margins:bool=False) -> xr.DataArray:
-    """
-    Wrapper of invPIT for xarray.Dataset.
-    """
-    u = ds[u_var].values
-    x = ds[x_var].values
-    theta = ds[theta_var].values if theta_var in ds else None
-
-    x_inv = invPIT(u, x, theta, gumbel_margins)
-    x_inv = xr.DataArray(x_inv, dims=ds[x_var].dims, coords=ds[x_var].coords)
-
-    return x_inv
 
 
 def invPIT(
@@ -58,7 +45,7 @@ def invPIT(
     # assert x.shape[1:] == u.shape[1:], (
     #     f"Marginal dimensions mismatch: {u.shape[1:]} != {x.shape[1:]}"
     # )
-    semiparametric_quantile = partial(semiparametric_quantile, distribution=distribution)
+    semiparametric_quantile = partial(semiparametric_quantile0, distribution=distribution)
 
     # flatten along spatial dimensions
     original_shape = u.shape
@@ -99,6 +86,22 @@ def invPIT(
     quantiles = quantiles.reshape(*original_shape)
 
     return quantiles
+
+
+def invPITDataset(ds:xr.Dataset, theta_var:str="params",
+                  u_var:str="uniform", x_var:str="anomaly",
+                  gumbel_margins:bool=False) -> xr.DataArray:
+    """
+    Wrapper of invPIT for xarray.Dataset.
+    """
+    u = ds[u_var].values
+    x = ds[x_var].values
+    theta = ds[theta_var].values if theta_var in ds else None
+
+    x_inv = invPIT(u, x, theta, gumbel_margins)
+    x_inv = xr.DataArray(x_inv, dims=ds[x_var].dims, coords=ds[x_var].coords)
+
+    return x_inv
 
 
 # %% Developing tests

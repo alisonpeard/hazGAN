@@ -1,5 +1,22 @@
 """
-srun -p Short --pty python resample_era5.py -y 1984 --redo
+Resample ERA5 (or other gridded) data to a lower resolution using GDAL
+
+Usage:
+    - python resample_era5.py -y 1984
+    - python resample_era5.py -y 1984 -r 64 64
+    - python resample_era5.py -y 1984 --redo
+    - use in SLURM with resample.sh
+
+Input files:
+    - ERA5 data in netCDF format
+    - Files should have variables 'u10', 'v10', 'msl', 'tp'
+    - Files should be in a directory named 'original' in the ERA5DIR
+    - Files should be named in the format '*YYYY.nc'
+
+Output files:
+    - Resampled data in netCDF format
+    - Files will be saved in a directory named 'resampled' in the ERA5DIR
+    - Files will be saved in a subdirectory named 'resampled/64x64' (or other resolution)
 """
 # %%
 import os
@@ -14,7 +31,7 @@ if __name__ == "__main__":
     # parse args for resolution with argparse
     parser = argparse.ArgumentParser(description='Resample ERA5 data')
     parser.add_argument('-y', '--year', type=int, help='Year to resample')
-    parser.add_argument('-r', '--resolution', type=int, nargs=2, default=[22, 18], help='Resolution of output data (lon, lat)')
+    parser.add_argument('-r', '--resolution', type=int, nargs=2, default=[64, 64], help='Resolution of output data (lon, lat)')
     parser.add_argument('--redo', action='store_true', default=False, help='Redo resampling')
     args = parser.parse_args()
     year = args.year
