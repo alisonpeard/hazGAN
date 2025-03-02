@@ -33,7 +33,7 @@ def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, 
         sorting = np.argsort(maxima)[::-1]
         return array[sorting]
 
-    fake = sort_by_wind(fake)
+    fake  = sort_by_wind(fake)
     train = sort_by_wind(train)
 
     if alpha_vlim:
@@ -46,12 +46,12 @@ def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, 
     fig, axs, cax = makegrid(8, 8, cbar_width=cbar_width, figsize=1.2)
     for i, ax in enumerate(axs.flat):
         if i < 32:
-            contourmap(train[i, ...], ax=ax, vmin=vmin, vmax=vmax, cmap=cmap, linewidth=linewidth)
+            contourmap(fake[i, ...], ax=ax, vmin=vmin, vmax=vmax, cmap=cmap, linewidth=linewidth)
         if i >= 32:
             pos = ax.get_position()
             ax.set_position([pos.x0, pos.y0 - 0.01, pos.width, pos.height])
             j = i - 32
-            im = contourmap(fake[j, ...], ax=ax, vmin=vmin, vmax=vmax, cmap=cmap, linewidth=linewidth)
+            im = contourmap(train[j, ...], ax=ax, vmin=vmin, vmax=vmax, cmap=cmap, linewidth=linewidth)
 
     # add A and B labels to top left of both blocks
     axs[0, 0].text(.25, .6, "A", transform=axs[0, 0].transAxes, ha='center', va='bottom', fontsize=22, weight='bold')

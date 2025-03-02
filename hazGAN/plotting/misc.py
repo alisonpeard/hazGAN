@@ -58,10 +58,81 @@ def windvsreturnperiod(x:np.ndarray, _lambda:float, ax=None, windchannel=0,
     return ax
 
 
+def saffirsimpson_barchart(fake, train, title='Saffir-Simpson Scale',
+                            xlabel="Category", yscale='linear', bar_width=0.35):
+    """Plot bar charts comparing fake and train data across hurricane categories."""
+    fake = maxwinds(fake)
+    train = maxwinds(train)
+    
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    
+    fake = pd.Series(fake.flatten())
+    train = pd.Series(train.flatten())
+    
+    def category(x):
+        if x < 17:
+            return -1
+        elif x < 33:
+            return 0
+        elif x < 43:
+            return 1
+        elif x < 49:
+            return 2
+        elif x < 58:
+            return 3
+        elif x < 70:
+            return 4
+        else:
+            return 5
+    
+    fake = fake.apply(category).astype(int)
+    train = train.apply(category).astype(int)
+    
+    # Count frequencies in each category
+    fake_counts = fake.value_counts().sort_index()
+    train_counts = train.value_counts().sort_index()
+    
+    # Convert to probabilities/densities
+    fake_density = fake_counts / len(fake)
+    train_density = train_counts / len(train)
+    
+    # Make sure all categories are represented (fill with zeros if missing)
+    all_categories = np.arange(-1, 6)
+    fake_density = pd.Series([fake_density.get(cat, 0) for cat in all_categories], index=all_categories)
+    train_density = pd.Series([train_density.get(cat, 0) for cat in all_categories], index=all_categories)
+    
+    # Create figure and axis
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    # Set positions of bars on x-axis
+    r1 = np.arange(len(all_categories))
+    r2 = [x + bar_width for x in r1]
+    
+    # Create bars
+    ax.bar(r1, fake_density, width=bar_width, color='#75C26A', label='Generated', edgecolor='black', linewidth=0.5)
+    ax.bar(r2, train_density, width=bar_width, color='#5D6FC4', label='Training', edgecolor='black', linewidth=0.5)
+    
+    # Add extra details
+    ax.grid(True, linestyle='--', alpha=0.7)
+    ax.set_xlabel(xlabel, fontsize=12)
+    ax.set_ylabel("Probability density", fontsize=12)
+    ax.set_title(title, fontsize=16)
+    ax.set_xticks([r + bar_width/2 for r in range(len(all_categories))])
+    ax.set_xticklabels(['Tropical\nDepression', 'Tropical\nStorm', 'Cat. 1',
+                        'Cat. 2', 'Cat. 3', 'Cat. 4', 'Cat. 5'])
+    ax.set_yscale(yscale)
+    ax.legend()
+    fig.tight_layout()
+    
+    return fig
+
+
 def histogram(fake, train, func, title='Untitled', xlabel="x", yscale='linear',
-              **func_kws) -> plt.Figure:
+              bins=100, **func_kws) -> plt.Figure:
     """Plot histograms of all pixel values."""
-    fake = func(fake, **func_kws)
+    fake  = func(fake, **func_kws)
     train = func(train, **func_kws)
 
     fig, ax = plt.subplots(figsize=(8, 3))
@@ -69,12 +140,16 @@ def histogram(fake, train, func, title='Untitled', xlabel="x", yscale='linear',
     xmin = min(np.nanmin(fake), np.nanmin(train))
     xmax = max(np.nanmax(fake), np.nanmax(train))
 
-    bins = np.linspace(xmin, xmax, 100)
+    if isinstance(bins, int):
+        bins = np.linspace(xmin, xmax, bins)
+    else: # if specific bins are given, use them as is
+        ax.set_xticks(bins)
     ax.hist(fake, bins=bins, density=True,
             color='C2', edgecolor='k', alpha=.6, label="Generated");
     ax.hist(train, bins=bins, density=True,
-            color='blue', edgecolor='k', alpha=.8, label="Training");
+            color='blue', edgecolor='k', alpha=.6, label="Training");
     ax.set_yscale(yscale)
+    ax.set_ylabel("Density")
     fig.legend(loc='center', fontsize=12)
     fig.suptitle(title, fontsize=16)
     ax.set_xlabel(xlabel, fontsize=12)

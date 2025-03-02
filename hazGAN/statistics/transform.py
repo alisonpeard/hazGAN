@@ -77,12 +77,14 @@ def invPIT(
             )    
 
     # vectorised numpy transform
+    distns = ["weibull", "genpareto", "genpareto"]
     def transform(x, u, theta, i, c):
         x_i = x[:, i, c]
         u_i = u[:, i, c]
         theta_i = theta[:, i, c] if theta is not None else None
+        distn = distns[c]
         return (
-            semiparametric_quantile(x_i, theta_i)(u_i)
+            semiparametric_quantile(x_i, theta_i, distn)(u_i)
             if theta is not None
             else quantile(x_i)(u_i)
         )
