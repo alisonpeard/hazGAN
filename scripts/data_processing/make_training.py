@@ -36,11 +36,11 @@ from hazGAN.utils import res2str
 
 
 plt.rcParams['font.family'] = 'serif'
-hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k'}
+hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k', 'density': True}
 
 FIELDS = ["u10", "tp", 'mslp']
 VISUALISATIONS = True
-THRESHOLD = 0.75 # rough manual bisection for this
+THRESHOLD = 0.75 # (for outliers, not using)
 PROCESS_OUTLIERS = False
 RES = (64, 64)
 
@@ -48,45 +48,6 @@ RES = (64, 64)
 INFILES = ['data_1941_2022.nc', 'storms.parquet', 'storms_metadata.parquet', 'medians.csv']
 OUTFILES = ['data.nc']
 
-# %%
-def check_scdf(df, var, testyear):
-    """Function to debug issue with scdf."""
-    from hazGAN.statistics import semiparametric_cdf as SemiCDF
-
-    varcols = ["{}", "grid", "time.{}", "thresh.{}", "scale.{}", "shape.{}", "scdf.{}", "ecdf.{}"]
-    varcols = [col.format(var) for col in varcols]
-
-    df         = df[varcols]
-    df.columns = ["var", "grid", "time", "thresh", "scale", "shape", "scdf_old", "ecdf"]
-    df         = df.sort_values(["grid", "time"])
-    df         = df[pd.to_datetime(df['time']).dt.year != testyear]
-
-    debug = df[['grid', 'time', 'var', 'thresh', 'scale', 'shape']]
-    debug = debug.groupby(['grid', 'thresh', 'scale', 'shape']).agg(list).reset_index()
-
-    def scdf(row):  
-        x = np.array(row['var'])
-        func = SemiCDF(x, (row['thresh'], row['scale'], row['shape']))
-        return func(x)
-
-    debug['scdf'] = debug.apply(lambda row: scdf(row), axis=1)
-    debug = debug.explode(['var','time','scdf']).reset_index(drop=True)
-    df    = df.groupby(['time', 'grid']).first() # switch to .count() to make sure only 1
-    debug = debug.groupby(['time', 'grid']).first()
-    df = df.merge(debug[['scdf']], on=['time', 'grid'])
-
-    # final output
-    res = df.copy()
-    res[res['scdf_old'].isnull()]
-    # so NaNs correspone to ones, why are we getting NaN instead of 1 in R?
-    # so wherever the shape is negative...
-    bounded = res[res['shape'] < 0].copy()
-    bounded['upperbound'] = bounded['thresh'] - bounded['scale'] / bounded['shape']
-    bounded[bounded['scdf_old'].isnull()]
-    return bounded
-
-
-# %%
 
 def main(datadir):
     # load coordinates
@@ -115,29 +76,28 @@ def main(datadir):
     # load event time data
     events = pd.read_parquet(os.path.join(datadir, INFILES[2]))
     times = pd.to_datetime(events[['storm', 'time']].groupby('storm').first()['time'].reset_index(drop=True))
-
+    
     # Check fit quality and that it looks right
     if VISUALISATIONS:
         for var in  FIELDS:
-            p_crit = 0.1
-            s0 = gdf["storm"].min()
-            fig, axs = plt.subplots(1, 4, figsize=(12, 3), sharex=True, sharey=True,
+            p_crit = 0.05
+            # s0 = gdf["storm"].min()
+
+            ds = gdf.set_index(['lat', 'lon', 'storm']).to_xarray().isel(storm=0)
+
+            fig, axs = plt.subplots(1, 4, figsize=(16, 3), sharex=True, sharey=True,
             subplot_kw={'projection': ccrs.PlateCarree()})
 
             cmap = "PuBu_r"
             p_cmap = plt.get_cmap(cmap)
             p_cmap.set_under("crimson")
 
-            gdf[gdf["storm"] == s0].plot(column=f"p_{var}", marker="s", cmap=p_cmap, vmin=p_crit, ax=axs[0])
-            gdf[gdf["storm"] == s0].plot(column=f"thresh_{var}", legend=True, marker="s", cmap=cmap, ax=axs[1])
-            gdf[gdf["storm"] == s0].plot(column=f"scale_{var}", legend=True, marker="s", cmap=cmap, ax=axs[2])
-            gdf[gdf["storm"] == s0].plot(column=f"shape_{var}", legend=True, marker="s", cmap=cmap, ax=axs[3])
+            ds[f"pk_{var}"].plot(ax=axs[0], cmap=p_cmap, vmin=p_crit)
+            ds[f"thresh_{var}"].plot(ax=axs[1], cmap=cmap)
+            ds[f"scale_{var}"].plot(ax=axs[2], cmap=cmap)
+            ds[f"shape_{var}"].plot(ax=axs[3], cmap=cmap) #, vmin=-0.81, vmax=0.28)
 
-            # extend p-values colorbar to show where H0 rejected
-            scatter = axs[0].collections[0]
-            plt.colorbar(scatter, ax=axs[0], extend="min")
-
-            axs[0].set_title("H₀: X~GPD(ξ,μ,σ)")
+            axs[0].set_title("H₀: X~GPD(ξ,μ,σ) (transformed)")
             axs[1].set_title("μ")
             axs[2].set_title("σ")
             axs[3].set_title("ξ")
@@ -148,9 +108,19 @@ def main(datadir):
                 ax.set_ylabel("Latitude")
 
             fig.suptitle(f"Fit for ERA5 {var.upper()}, n = {gdf['storm'].nunique()}")
-            print(gdf[gdf[f"p_{var}"] < p_crit]["grid"].nunique(), "significant p-values")
+            print(gdf[gdf[f"pk_{var}"] < p_crit]["grid"].nunique(), "significant p-values")
 
-    # important: check ecdfs are in (0, 1)
+            fig, axs = plt.subplots(1, 4, figsize=(18, 3))
+            gdf['pk_u10'].hist(ax=axs[0], **hist_kws)
+            gdf[f"thresh_{var}"].hist(ax=axs[1], **hist_kws)
+            gdf[f"scale_{var}"].hist(ax=axs[2], **hist_kws)
+            gdf[f"shape_{var}"].hist(ax=axs[3], **hist_kws)
+            axs[0].set_title("H₀: X~GPD(ξ,μ,σ) (transformed)")
+            axs[1].set_title("μ")
+            axs[2].set_title("σ")
+            axs[3].set_title("ξ")
+
+    #  important: check ecdfs are in (0, 1)
     assert gdf[['ecdf_u10', 'ecdf_tp', 'ecdf_mslp']].max().max() <= 1, "ECDF values should be between 0 and 1"
     assert gdf[['ecdf_u10', 'ecdf_tp', 'ecdf_mslp']].min().min() >= 0, "ECDF values should be between 0 and 1"
 
@@ -173,22 +143,22 @@ def main(datadir):
 
     #  make netcdf file
     nfields = len(FIELDS)
-    T = gdf["storm"].nunique()
-    nx = gdf["lon"].nunique()
-    ny = gdf["lat"].nunique()
+    nx      = gdf["lon"].nunique()
+    ny      = gdf["lat"].nunique()
+    T       = gdf["storm"].nunique()
 
     # make training tensors
-    gdf = gdf.sort_values(["storm", "lat", "lon"], ascending=[True, True, True]) # [T, i, j, field]
+    gdf  = gdf.sort_values(["storm", "lat", "lon"], ascending=[True, True, True]) # [T, i, j, field]
     grid = gdf["grid"].unique().reshape([ny, nx])
-    lat = gdf["lat"].unique()
-    lon = gdf["lon"].unique()
-    X = gdf[FIELDS].values.reshape([T, ny, nx, nfields])
-    D = gdf[["day_of_storm"]].values.reshape([T, ny, nx])
-    U0 = gdf[[f"ecdf_{c}" for c in FIELDS]].values.reshape([T, ny, nx, nfields])
-    U1 = gdf[[f"scdf_{c}" for c in FIELDS]].values.reshape([T, ny, nx, nfields])
-    M = gdf[[f"{c}_median" for c in FIELDS]].values.reshape([T, ny, nx, nfields])
-    z = gdf[["storm", "storm_rp"]].groupby("storm").mean().values.reshape(T)
-    s = gdf[["storm", "size"]].groupby("storm").mean().values.reshape(T)
+    lat  = gdf["lat"].unique()
+    lon  = gdf["lon"].unique()
+    X    = gdf[FIELDS].values.reshape([T, ny, nx, nfields])
+    D    = gdf[["day_of_storm"]].values.reshape([T, ny, nx])
+    U0   = gdf[[f"ecdf_{c}" for c in FIELDS]].values.reshape([T, ny, nx, nfields])
+    U1   = gdf[[f"scdf_{c}" for c in FIELDS]].values.reshape([T, ny, nx, nfields])
+    M    = gdf[[f"{c}_median" for c in FIELDS]].values.reshape([T, ny, nx, nfields])
+    z    = gdf[["storm", "storm_rp"]].groupby("storm").mean().values.reshape(T)
+    s    = gdf[["storm", "size"]].groupby("storm").mean().values.reshape(T)
 
     lifetime_max_wind = np.max((X + M)[..., 0], axis=(1,2))
     lifetime_total_precip = np.sum((X + M)[..., 1], axis=(1,2))
@@ -240,9 +210,9 @@ def main(datadir):
     ds.attrs['project'] = 'hazGAN'
     ds.attrs['note'] = "Fixed interpolation: [0, 1] --> (0, 1)."
 
-    # # remove outliers
+    # remove outliers
     # if PROCESS_OUTLIERS:
-    #     ds = process_outliers(ds, THRESHOLD, datadir=datadir, visuals=VISUALISATIONS)
+        # ds = process_outliers(ds, THRESHOLD, datadir=datadir, visuals=VISUALISATIONS)
 
     # save
     print("Finished! Saving to netcdf...")
@@ -271,7 +241,7 @@ def main(datadir):
         ds_t.plot(cmap=cmap, norm=norm, ax=ax, cbar_kwargs={'ticks': ticks})
         ax.set_title(f"Day of storm {t}")
 
-        #  view netcdf file
+        # view netcdf file
         warnings.warn("Change ds_t to (-ds_t) if looking at MSLP")
         t = np.random.uniform(0, T, 1).astype(int)[0]
         ds_t = ds.isel(time=t)
@@ -290,7 +260,7 @@ def main(datadir):
         (ds_t.isel(field=1).anomaly - ds_t.isel(field=1).medians).plot.contourf(cmap='PuBu', ax=axs[1], levels=15)
         fig.suptitle('Anomaly + Median')
 
-        #  check the highest wind speed is also the highest return period
+        # check the highest wind speed is also the highest return period
         highest_wind = ds.anomaly.isel(field=0).max(dim=['lat', 'lon']).values.max()
         highest_rp_wind = ds.anomaly.isel(field=0, time=ds.storm_rp.argmax()).max(dim=['lat', 'lon']).values
         assert highest_wind == highest_rp_wind, "Highest wind speed doesn't correspond to highest return period"
@@ -303,17 +273,202 @@ def main(datadir):
         wind_footprint.plot(cmap='Spectral_r', ax=axs[0])
         precip_footprint.plot(cmap='PuBu', ax=axs[1])
 
-        fig, axs = plt.subplots(1, 2)
+        fig, axs = plt.subplots(1, 2, figsize=(16, 4))
         for i, ax in enumerate(axs):
             ax.hist(ds.isel(field=i).anomaly.values.ravel(), **hist_kws);
         
     ds.close()
+    return gdf
 
-
+# %%
 if __name__ == "__main__":
     env = Env()
     env.read_env(recurse=True)
     datadir = os.path.join(env.str("TRAINDIR"), res2str(RES))
-    main(datadir)
+    gdf = main(datadir)
 
-# %% MAKING TESTS
+    # %% MAKING TESTS -- OUT OF DATE SINCE WEIBULL UPDATE 25-02-2025
+    if False:
+        gdf = gdf.set_index(['lat', 'lon', 'storm'])
+        ds  = gdf.to_xarray()
+        ds
+
+        # %%
+        fig, axs = plt.subplots(1, 4, figsize=(12, 2))
+        ds.isel(storm=0).p_u10.plot(ax=axs[0])
+        ds.isel(storm=0).thresh_u10.plot(ax=axs[1])
+
+        ds.isel(storm=0).scale_u10.plot(ax=axs[2])
+        ds.isel(storm=0).shape_u10.plot(ax=axs[3])
+
+        # %% FITS
+        from scipy.stats import genpareto
+
+        N         = 100
+        Q         = 0.95 # gdf['thresh_q'][0]
+        field     = "u10"
+
+        shapes_fitted = []
+        shapes_current = []
+        shapes_new = []
+
+        large_fitted = []
+        large_current = []
+        large_new = []
+
+        for _ in range(N):
+            gridcells = list(gdf['grid'].unique())
+            gridcell  = np.random.choice(gridcells)
+            gridvars  = gdf[gdf['grid'] == gridcell]
+
+            thresholds = gridvars[[f'thresh_{field}']].values
+            shapes     = gridvars[[f'shape_{field}']].values
+            scales     = gridvars[[f'scale_{field}']].values
+
+            assert len(np.unique(thresholds)) == 1, "Threshold should be unique"
+            assert len(np.unique(shapes)) == 1, "Shape should be unique"
+            assert len(np.unique(scales)) == 1, "Scale should be unique"
+
+            threshold = thresholds[0][0]
+            shape     = shapes[0][0]
+            scale     = scales[0][0]
+            quantile  = np.quantile(gridvars[field], Q)
+            large     = genpareto.ppf(1-1e-6, shape, threshold, scale)
+            large_fitted.append(large)
+            print("\n\nFitted parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(threshold, scale, shape))
+            print("Very large prediction:", large)
+            print(f"Quantile at {Q} is {quantile:.2f}")
+
+            fig, axs = plt.subplots(1, 3, figsize=(13, 4))
+
+            ax = axs[0]
+            gridvars.hist(field, ax=ax, **hist_kws)
+            ax.axvline(threshold, color='r', linestyle='--', label=f"Threshold: {threshold:.2f}")
+            ax.axvline(quantile, color='g', linestyle='-.', label=f"Quantile at {Q}: {quantile:.2f}")
+            ax.legend()
+
+            ax = axs[1]
+            try:
+                exceedences = gridvars[gridvars[field] > threshold]
+                print("\nThere are", len(exceedences), "exceedences for gridcell", int(gridcell))   
+                exceedences.hist(field, ax=ax, **hist_kws);
+
+                x = np.linspace(exceedences[field].min(), exceedences[field].max(), 100)
+                y_fitted = genpareto.pdf(x, shape, threshold, scale)
+                ax.plot(x, y_fitted, color='r', linestyle='--', label='Fitted')
+
+                c, loc, scale = genpareto.fit(gridvars[field], loc=threshold)
+            except Exception as e:
+                c, loc, scale = np.nan, np.nan, np.nan
+
+            large = genpareto.ppf(1-1e-6, c, threshold, scale)
+            large_current.append(large)
+            print("Current parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(loc, scale, c))
+            print("Very large prediction:", large)
+
+            if not np.isnan(c):
+                y_current = genpareto.pdf(x, c, threshold, scale)
+                ax.plot(x, y_current, color='g', linestyle='-.', label='Current')
+            ax.legend()
+            shapes_fitted.append(shape)
+            shapes_current.append(c)
+
+            # situation if we take quantile exceedences
+            ax = axs[2]
+            try:
+                exceedences = gridvars[gridvars[field] > quantile]
+                print("\nThere are", len(exceedences), "quantile exceedences for gridcell", int(gridcell))
+                exceedences[field].hist(ax=ax, **hist_kws)
+                c, loc, scale = genpareto.fit(gridvars[field], loc=quantile)
+            except Exception as e:
+                c, loc, scale = np.nan, np.nan, np.nan
+            
+            if not np.isnan(c):
+                y_new = genpareto.pdf(x, c, quantile, scale)
+                ax.plot(x, y_new, color='r', linestyle='-.', label='New')
+            ax.legend()
+
+            large = genpareto.ppf(1-1e-6, c, quantile, scale)
+            large_new.append(large)
+            print("New parameters (μ,σ,ξ): {:.2f},{:.2f},{:2f}".format(loc, scale, c))
+            print("Very large prediction:", large)
+            shapes_new.append(c)
+
+        # %%
+        fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+
+        min = np.nanmin
+        max = np.nanmax
+
+        axs[0].scatter(shapes_fitted, shapes_current, color='b', label='Fitted vs Current')
+        axs[0].set_title('Fitted vs Current')
+        axs[0].set_xlabel('Fitted')
+        axs[0].set_ylabel('Current')
+        lower = min([min(shapes_fitted), min(shapes_current)])
+        upper = max([max(shapes_fitted), max(shapes_current)])
+        axs[0].plot([lower, upper], [lower, upper], color='k', linestyle='--')
+
+        axs[1].scatter(shapes_fitted, shapes_new, color='r', label='Fitted vs New')
+        axs[1].set_title('Fitted vs New')
+        axs[1].set_xlabel('Fitted')
+        axs[1].set_ylabel('New')
+        lower = min([min(shapes_fitted), min(shapes_new)])
+        upper = max([max(shapes_fitted), max(shapes_new)])
+        axs[1].plot([lower, upper], [lower, upper], color='k', linestyle='--')
+
+        axs[2].scatter(shapes_current, shapes_new, color='g', label='Current vs New')
+        axs[2].set_title('Current vs New')
+        axs[2].set_xlabel('Current')
+        axs[2].set_ylabel('New')
+        lower = min([min(shapes_current), min(shapes_new)])
+        upper = max([max(shapes_current), max(shapes_new)])
+        axs[2].plot([lower, upper], [lower, upper], color='k', linestyle='--')
+
+        # %% plot the scatter plots of the large predictions
+        fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+        axs[0].scatter(large_fitted, large_current, color='b', label='Fitted vs Current')
+        axs[0].set_title('Fitted vs Current')
+        axs[0].set_xlabel('Fitted')
+        axs[0].set_ylabel('Current')
+        lower = min([min(large_fitted), min(large_current)])
+        upper = max([max(large_fitted), max(large_current)])
+        axs[0].plot([lower, upper], [lower, upper], color='k', linestyle='--')
+
+        axs[1].scatter(large_fitted, large_new, color='r', label='Fitted vs New')
+        axs[1].set_title('Fitted vs New')
+        axs[1].set_xlabel('Fitted')
+        axs[1].set_ylabel('New')
+        lower = min([min(large_fitted), min(large_new)])
+        upper = max([max(large_fitted), max(large_new)])
+        axs[1].plot([lower, upper], [lower, upper], color='k', linestyle='--')
+
+        axs[2].scatter(large_current, large_new, color='g', label='Current vs New')
+        axs[2].set_title('Current vs New')
+        axs[2].set_xlabel('Current')
+        axs[2].set_ylabel('New')
+        lower = min([min(large_current), min(large_new)])
+        upper = max([max(large_current), max(large_new)])
+        axs[2].plot([lower, upper], [lower, upper], color='k', linestyle='--')
+
+        # %% add histograms of the large predictions
+        fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+        axs[0].hist(large_fitted, color='lightgrey', edgecolor='k', alpha=0.5, label='Fitted')
+        axs[1].hist(large_current, color='b', edgecolor='k', alpha=0.5, label='Current')
+        axs[2].hist(large_new, color='r', edgecolor='k', alpha=0.5, label='New')
+
+        # %%
+        fig, ax = plt.subplots(1, 1, figsize=(6, 3))
+        ax.hist(shapes_fitted, color='lightgrey', edgecolor='k', alpha=0.5, label='Fitted')
+        ax.hist(shapes_current, color='b', edgecolor='k', alpha=0.5, label='Current')
+        ax.hist(shapes_new, color='r', edgecolor='k', alpha=0.5, label=f'New (q={Q})')
+        ax.legend()
+        # %%
+        fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+        axs[0].hist(shapes_fitted, color='lightgrey', edgecolor='k', alpha=0.5, label='Fitted')
+        axs[1].hist(shapes_current, color='b', edgecolor='k', alpha=0.5, label='Current')
+        axs[2].hist(shapes_new, color='r', edgecolor='k', alpha=0.5, label=f'New (q={Q})')
+
+        axs[0].set_title('Fitted')
+        axs[1].set_title('Current')
+        axs[2].set_title(f'New (q={Q})')
+        # %%

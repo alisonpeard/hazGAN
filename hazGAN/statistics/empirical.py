@@ -3,6 +3,7 @@ from warnings import warn
 from scipy.stats import genpareto
 from scipy.stats import weibull_min as weibull
 
+# %%
 # the following functions are simple wrappers for the classes below
 def ecdf(x:np.ndarray, *args, **kwargs) -> callable:
     """Simple wrapper to mimic R ecdf."""
