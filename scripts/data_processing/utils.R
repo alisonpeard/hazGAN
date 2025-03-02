@@ -8,13 +8,10 @@ library(parallel)
 library(future)
 library(furrr)
 library(data.table)
-<<<<<<< HEAD
-=======
 library(progress)  # Add this
 library(magrittr)  # Optional but recommended for pipe operator
 library(stats)
 library(goftest)
->>>>>>> bug-fix
 
 ########### HELPER FUNCTIONS ###################################################
 `%ni%` <- Negate(`%in%`)
@@ -23,9 +20,6 @@ res2str <- function(res){
   string <- paste0(res[1], "x", res[2])
   return(string)
 }
-<<<<<<< HEAD
-
-=======
 standardise_by_month <- function(df, var) {
   df$month <- months(df$time)
   df <- df[,c(var, "month", "grid")]
@@ -46,7 +40,6 @@ monthly_medians <- function(df, var) {
                               median)
   return(monthly_median)
 }
->>>>>>> bug-fix
 ecdf <- function(x) {
   x <- sort(x)
   n <- length(x)
@@ -63,22 +56,9 @@ ecdf <- function(x) {
   attr(rval, "call") <- sys.call()
   rval
 }
-<<<<<<< HEAD
-
-scdf <- function(train, loc, scale, shape){
-  # Add bounds checking for negative shape
-  if (shape < 0) {
-    upper_bound <- loc - scale/shape
-    # Handle values beyond the upper bound
-    beyond_bound <- x_tail >= upper_bound
-    x_tail[beyond_bound] <- upper_bound - .Machine$double.eps
-  }
-  
-=======
 scdf <- function(train, loc, scale, shape, cdf = pgpd){
   # Note, trialing using excesses and setting loc=0
   # This is for flexibility with cdf choice
->>>>>>> bug-fix
   calculator <- function(x){
     u <- ecdf(train)(x)
     pthresh <- ecdf(train)(loc)
@@ -101,64 +81,7 @@ progress_bar <- function(n, prefix = "", suffix = "") {
 }
 
 ########### EVT FUNCTIONS ######################################################
-<<<<<<< HEAD
-standardise_by_month <- function(df, var) {
-  
-  df$month       <- months(df$time)
-  df             <- df[,c(var, "month", "grid")]
-  monthly_median <- aggregate(. ~ month + grid, df, median)
-  
-  df$monthly_median <- left_join(
-    df[, c("month", "grid")],
-    monthly_median,
-    by = c("month" = "month", "grid" = "grid")
-  )[[var]]
-  
-  df[[var]] <- df[[var]] - df$monthly_median
-
-  return(list(
-    var=df[[var]],
-    medians=df[c("monthly_median", "grid", "month")]
-    ))
-}
-
-# monthly_medians <- function(df, var) {
-#   df <- df[, c(var, "time", "grid")]
-#   df$month <- months(df$time)
-#   monthly_median <- aggregate(. ~ month + grid,
-#                               df[, c(var, "grid", "month")],
-#                               median)
-#   return(monthly_median)
-# }
-
-# remove_seasonality <- function(dt, vars) {
-#   dt <- as.data.table(dt)
-#   dt$month <- month(dt$time)
-#   medians <- dt[, lapply(.SD, median), 
-#                 by = .(month, grid), 
-#                 .SDcols = vars]
-#   
-#   setkeyv(dt, c('month', 'grid'))
-#   setkeyv(medians, c('month', 'grid'))
-#   
-#   for (var in vars) {
-#     dt[medians, paste0(var, "_temp") := get(var) - get(paste0("i.", var))]
-#   }
-#   
-#   standardised <- dt[, .SD, .SDcols = paste0(vars, "_temp")]
-#   setnames(standardised, paste0(vars, "_temp"), vars)
-#   
-#   return(list(
-#     standardised = as_tibble(standardised),
-#     medians = medians
-#   ))
-# }
-
-
-gridsearch <- function(series, var, qmin = 60, qmax = 99, rmin = 1, rmax = 14) {
-=======
 gridsearch <- function(series, var, qmin = 60, qmax = 99, rmax = 14) {
->>>>>>> bug-fix
   "Unit tests for this?"
   qvec <- c(qmin:qmax) / 100
   rvec <- c(rmin:rmax)
@@ -275,31 +198,6 @@ storm_extractor <- function(daily, var, rfunc) {
   return(metadata)
 }
 
-<<<<<<< HEAD
-gpd_transformer <- function(df, metadata, var, q, chunksize=256) {
-  gridcells <- unique(df$grid)
-  df <- df[df$time %in% metadata$time, ]
-  ngrid <- length(gridcells)
-  
-  # save df to RDS for worker access
-  tmp <- tempfile(fileext = ".rds")
-  saveRDS(df, tmp)
-  rm(df)
-  gc() 
-
-  # chunk data for memory efficiency
-  gridchunks <- split(gridcells, ceiling(seq_along(gridcells)/chunksize))
-  gridchunks <- unname(gridchunks)
-  nchunks <- length(gridchunks)
-
-  # multiprocessing intiation
-  plan(multisession, workers = min(availableCores() - 2, nchunks))
-  pb <- progress::progress_bar$new(
-    format = "Processing grid cells [:bar] :percent eta: :eta",
-    total  = ngrid
-  )
-
-=======
 ########## TRANSFORMS ##########################################################
 gpdBackup <- function(var, threshold) {
   library(POT)
@@ -476,7 +374,6 @@ marginal_transformer <- function(df, threshold_selector, metadata, var, q, cdf, 
   # multiprocessing initiation
   plan(multisession, workers = min(availableCores() - 4, nchunks))
   
->>>>>>> bug-fix
   # main GPD fitting function
   process_gridcell <- function(grid_i, df) {
     gridcell <- df[df$grid == grid_i, ]
@@ -495,43 +392,6 @@ marginal_transformer <- function(df, threshold_selector, metadata, var, q, cdf, 
       )
     train <- maxima[year(maxima$time) %ni% TEST.YEARS,]
     thresh <- quantile(train$variable, q)
-<<<<<<< HEAD
-
-    # validation
-    excesses <- maxima$variable[maxima$variable >= thresh]
-    p <- Box.test(excesses)[["p.value"]] # H0: independent
-    if (p < 0.1) {
-      warning(paste0(
-        "p-value ≤ 10% for H0 of independent exceedences for gridcell ",
-        grid_i, ". Value: ", round(p, 4)
-      ))
-    }
-
-    # fit ECDF & GPD on train set only...
-    maxima <- tryCatch({
-      fit <- gpdAd(
-        train$variable[train$variable >= thresh],
-        bootstrap     = TRUE,
-        bootnum       = 10,
-        allowParallel = FALSE,
-        numCores      = 1
-      ) # H0: GPD distribution
-
-      scale <- fit$theta[1]
-      shape <- fit$theta[2]
-      maxima$thresh <- thresh
-      maxima$scale  <- scale
-      maxima$shape  <- shape
-      maxima$p      <- fit$p.value
-
-      # empirical cdf transform
-      maxima$scdf <- scdf(train$variable, thresh, scale, shape)(maxima$variable)
-      maxima$ecdf <- ecdf(train$variable)(maxima$variable)
-      maxima
-    }, error = function(e) {
-      warning(sprintf("MLE failed for grid cell %d: %s. Resorting to fully empirical fits.",
-                      grid_i, e$message))
-=======
     
     # fit ECDF & GPD on train set only...
     maxima <- tryCatch({
@@ -559,7 +419,6 @@ marginal_transformer <- function(df, threshold_selector, metadata, var, q, cdf, 
       cat("Error message:", conditionMessage(e), "\n")
       cat("Call:", deparse(conditionCall(e)), "\n")
       
->>>>>>> bug-fix
       maxima$thresh <- NA
       maxima$scale  <- NA
       maxima$shape  <- NA
@@ -569,42 +428,6 @@ marginal_transformer <- function(df, threshold_selector, metadata, var, q, cdf, 
       maxima$scdf <- maxima$ecdf
       maxima
     })
-<<<<<<< HEAD
-    #pb$tick()
-    return(maxima)
-  }
-  
-  
-  # wrapper for process_gridcell()
-  process_gridchunk <- function(gridchunk) {
-    df <- readRDS(tmp)
-    df <- df[df$grid %in% gridchunk, ]
-    gc()
-    
-    maxima <- lapply(gridchunk, function(grid_i) {
-      process_gridcell(grid_i, df)
-    })
-    
-    bind_rows(maxima)
-  }
-  
-  # apply multiprocessing
-  transformed <- future_map_dfr(
-    .x = gridchunks,
-    .f = process_gridchunk,
-    .options = furrr_options(
-      seed = TRUE,
-      scheduling = 1
-    )
-  )
-  
-  unlink(tmp)
-  
-  fields <- c("storm", "variable", "time", "storm.rp",
-              "grid", "thresh", "scale", "shape", "p",
-              "ecdf", "scdf")
-  transformed <- transformed[, fields]
-=======
     
     # validation
     excesses <- maxima$variable[maxima$variable > thresh]
@@ -618,7 +441,6 @@ marginal_transformer <- function(df, threshold_selector, metadata, var, q, cdf, 
     maxima$box.test <- p.box
     return(maxima)
   }
->>>>>>> bug-fix
   
   # wrapper for process_gridcell()
   process_gridchunk <- function(i) {
