@@ -35,7 +35,7 @@ import subprocess, os
 from hazGAN import sliding_windows
 from hazGAN.utils import res2str
 from hazGAN.statistics import ecdf
-from scripts.data_processing.makeTraining import process_outliers # borrow this function
+from scripts.data_processing.make_training import process_outliers # borrow this function
 
 RESOLUTION = (22, 18)
 VISUALISATIONS = True

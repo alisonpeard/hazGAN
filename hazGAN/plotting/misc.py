@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 
 from hazGAN.statistics import ecdf
 
+yellows = ['#fff2ccff', '#f1c232ff', '#e69138ff', '#cc4125ff']
+blues = ['#fff2ccff', '#a2c4c9ff', '#0097a7ff', '#0b5394ff']
 
 def invPITmaxima(fake_u, train_u, fake, train):
     fake_u  = fake_u[..., 0].reshape(-1, 4096)
@@ -110,9 +112,10 @@ def saffirsimpson_barchart(fake, train, title='Saffir-Simpson Scale',
     r1 = np.arange(len(all_categories))
     r2 = [x + bar_width for x in r1]
     
+    
     # Create bars
-    ax.bar(r1, fake_density, width=bar_width, color='#75C26A', label='Generated', edgecolor='black', linewidth=0.5)
-    ax.bar(r2, train_density, width=bar_width, color='#5D6FC4', label='Training', edgecolor='black', linewidth=0.5)
+    ax.bar(r1, fake_density, width=bar_width, color=yellows[1], label='HazGAN', edgecolor='black', linewidth=0.5)
+    ax.bar(r2, train_density, width=bar_width, color=yellows[2], label='ERA5', edgecolor='black', linewidth=0.5)
     
     # Add extra details
     ax.grid(True, linestyle='--', alpha=0.7)
@@ -126,7 +129,7 @@ def saffirsimpson_barchart(fake, train, title='Saffir-Simpson Scale',
     ax.legend()
     fig.tight_layout()
     
-    return fig
+    return fig, ax
 
 
 def histogram(fake, train, func, title='Untitled', xlabel="x", yscale='linear',

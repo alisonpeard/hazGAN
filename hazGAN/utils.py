@@ -101,3 +101,18 @@ def sliding_window_indices(size, n, step=1):
         windows.append(np.arange(i, i+size, 1))
     return np.array(windows)
 
+def saffirsimpson(x):
+        if x < 17:
+            return -1
+        elif x < 33:
+            return 0
+        elif x < 43:
+            return 1
+        elif x < 49:
+            return 2
+        elif x < 58:
+            return 3
+        elif x < 70:
+            return 4
+        else:
+            return 5
