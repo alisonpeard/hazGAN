@@ -97,7 +97,10 @@ def main(datadir):
             ds[f"scale_{var}"].plot(ax=axs[2], cmap=cmap)
             ds[f"shape_{var}"].plot(ax=axs[3], cmap=cmap) #, vmin=-0.81, vmax=0.28)
 
-            axs[0].set_title("H₀: X~GPD(ξ,μ,σ) (transformed)")
+            if var == 'u10':
+                axs[0].set_title("H₀: X~Weibull(ξ,μ,σ)")
+            else:
+                axs[0].set_title("H₀: X~GPD(ξ,μ,σ)")
             axs[1].set_title("μ")
             axs[2].set_title("σ")
             axs[3].set_title("ξ")

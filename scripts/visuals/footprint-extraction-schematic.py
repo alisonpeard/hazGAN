@@ -23,18 +23,34 @@ data
 # %%
 import pandas as pd
 
-tc_dates = pd.read_csv("/Users/alison/Documents/DPhil/paper1.nosync/training/18x22/ibtracs_dates.csv")
-tc_dates["time"] = pd.to_datetime(tc_dates["time"])
-tc_dates = tc_dates.sort_values("time", ascending=False)
-tc_dates = tc_dates[tc_dates['event'] != "Not_Named"]
-tc_dates
+ibtracs = pd.read_csv("/Users/alison/Documents/DPhil/paper1.nosync/training/18x22/ibtracs_dates.csv")
+ibtracs["time"] = pd.to_datetime(ibtracs["time"])
+ibtracs = ibtracs.sort_values("time", ascending=False)
+ibtracs = ibtracs[ibtracs['event'] != "Not_Named"]
+ibtracs
 
 # %%
-storms = tc_dates.groupby("event").agg({"time": ["min", "max"], "wind": "max"})
-storms.columns = ["start", "end", "wind"]
-storms = storms.sort_values("start", ascending=False)
-storms = storms.sort_values("wind", ascending=False)
-nstorms = len(storms)
+ibtracs_storms = ibtracs.groupby("event").agg({"time": ["min", "max"], "wind": "max"})
+ibtracs_storms.columns = ["start", "end", "wind"]
+stormibtracs_stormss = ibtracs_storms.sort_values("start", ascending=False)
+ibtracs_storms = ibtracs_storms.sort_values("wind", ascending=False)
+nstorms = len(ibtracs_storms)
+nstorms
+# %%
+
+from hazGAN import saffirsimpson
+
+ibtracs_storms['Category'] = ibtracs_storms['wind'].apply(saffirsimpson)
+cat_counts = ibtracs_storms['Category'].value_counts().sort_index()
+cat_density = cat_counts / len(ibtracs_storms)
+all_categories = np.arange(-1, 6)
+ibtracs_density = pd.Series(cat_density.get(cat, 0) for cat in all_categories)
+
+fig, ax = plt.subplots(figsize=(8, 5))
+
+r = np.arange(len(all_categories))
+ax.bar(r, ibtracs_density, width=0.35, color='C3', label="IBTrACs",
+       edgecolor='k', linewidth=0.5)
 
 # %%
 from scipy.ndimage import gaussian_filter

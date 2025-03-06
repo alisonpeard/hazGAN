@@ -39,25 +39,47 @@ def invPITmaxima(fake_u, train_u, fake, train):
             
 def windvsreturnperiod(x:np.ndarray, _lambda:float, ax=None, windchannel=0,
                 transpose=False, **kwargs):
-    """Plot wind speed against return period."""
-    rp = returnperiod(x, _lambda, windchannel=windchannel)
-    maxima = np.max(x[..., windchannel], axis=(1, 2)).squeeze()
+            """Plot wind speed against return period."""
+            plt.style.use('seaborn-v0_8-whitegrid')
+            rp = returnperiod(x, _lambda, windchannel=windchannel)
+            maxima = np.max(x[..., windchannel], axis=(1, 2)).squeeze()
 
-    sorting = np.argsort(maxima)
-    rp      = rp[sorting]
-    maxima  = maxima[sorting]
+            sorting = np.argsort(maxima)
+            rp      = rp[sorting]
+            maxima  = maxima[sorting]
 
-    ax = ax or plt.gca()
-    if transpose:
-        ax.plot(maxima, rp, alpha=.5, markersize=5., **kwargs)
-        ax.set_xlabel("Wind Speed [m/s]")
-        ax.set_ylabel("Return Period [years]")
-    else:
-        ax.plot(rp, maxima, alpha=.5, markersize=5., **kwargs)
-        ax.set_xlabel("Return Period [years]")
-        ax.set_ylabel("Wind Speed [m/s]")
+            ax = ax or plt.gca()
+            if transpose:
+                ax.plot(maxima, rp, **kwargs)
+                ax.set_xlabel("Wind Speed [m/s]", fontsize=14, fontweight='bold')
+                ax.set_ylabel("Return Period [years]", fontsize=14, fontweight='bold')
+            else:
+                ax.plot(rp, maxima, **kwargs)
+                ax.set_xlabel("Return Period [years]", fontsize=14, fontweight='bold')
+                ax.set_ylabel("Wind Speed [m/s]", fontsize=14, fontweight='bold')
+
+            # axes
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_linewidth(1.5)
+            ax.spines['bottom'].set_linewidth(1.5)
+            ax.tick_params(axis='both', which='major', labelsize=12, width=1.5, length=5)
+            ax.tick_params(axis='both', which='minor', width=1, length=3)
+            ax.grid(True, linestyle='--', linewidth=0.7, alpha=0.7)
+            ax.set_xscale('log')
             
-    return ax
+            # legend
+            legend = ax.legend(loc='lower right', 
+                  frameon=True, 
+                  framealpha=0.9,
+                  edgecolor='gray',
+                  fontsize=12)
+            legend.get_frame().set_linewidth(0)
+
+            # background
+            ax.set_facecolor('#F8F9FA')     
+
+            return ax
 
 
 def saffirsimpson_barchart(fake, train, title='Saffir-Simpson Scale',
@@ -148,14 +170,15 @@ def histogram(fake, train, func, title='Untitled', xlabel="x", yscale='linear',
     else: # if specific bins are given, use them as is
         ax.set_xticks(bins)
     ax.hist(fake, bins=bins, density=True,
-            color='C2', edgecolor='k', alpha=.6, label="Generated");
+            color=yellows[1], edgecolor='k', alpha=.6, label="Generated");
     ax.hist(train, bins=bins, density=True,
-            color='blue', edgecolor='k', alpha=.6, label="Training");
+            color=yellows[2], edgecolor='k', alpha=.6, label="Training");
     ax.set_yscale(yscale)
     ax.set_ylabel("Density")
     fig.legend(loc='center', fontsize=12)
     fig.suptitle(title, fontsize=16)
     ax.set_xlabel(xlabel, fontsize=12)
+    ax.set_facecolor(yellows[0])
 
     return fig
 

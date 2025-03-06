@@ -33,8 +33,8 @@ def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, 
         sorting = np.argsort(maxima)[::-1]
         return array[sorting]
 
-    fake  = sort_by_wind(fake)
-    train = sort_by_wind(train)
+    # fake  = sort_by_wind(fake)
+    # train = sort_by_wind(train)
 
     if alpha_vlim:
         vmin = vmin or np.nanquantile(np.concatenate([fake, train]), alpha)

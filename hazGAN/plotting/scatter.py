@@ -29,19 +29,19 @@ def plot(fake, real, field=0, pixels=None, cmap=CMAP, s=10,
             if ylabel:
                 ax.set_ylabel(ylabel)
             else:
-                ax.set_ylabel(f"pixel index {i}", fontsize=12)
+                ax.set_ylabel(f"pixel index {i}", fontsize=14, fontweight='bold')
 
             if xlabel:
                 ax.set_xlabel(xlabel)
             else:
-                ax.set_xlabel(f"pixel index {j}", fontsize=12)
+                ax.set_xlabel(f"pixel index {j}", fontsize=14, fontweight='bold')
 
             ax.set_facecolor('#f3f3f3ff')
             ax.label_outer()
         
         plt.tight_layout()
 
-        fig.suptitle(channel_labels[field].capitalize(), y=1.05, fontsize=14)
+        fig.suptitle(channel_labels[field].capitalize(), y=1.05, fontsize=14, fontweight='bold')
 
 
 
