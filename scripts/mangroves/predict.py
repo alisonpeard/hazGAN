@@ -19,9 +19,9 @@ import pandas as pd
 import numpy as np
 import geopandas as gpd
 from shapely.geometry import box
-from joblib import load
+# from joblib import load
 import xarray as xr
-import xagg as xa
+# import xagg as xa
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter
@@ -36,9 +36,9 @@ from hazGAN import (
     bay_of_bengal_crs,
     occurrence_rate
 )
+from hazGAN import mangrove_example as mangroves
 
-global model
-
+# global model
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Garamond'] + plt.rcParams['font.serif']
 plt.style.use('bmh')
@@ -48,16 +48,15 @@ def open_config(runname, dir):
     config = yaml.load(configfile, Loader=yaml.FullLoader)
     config = {key: value["value"] for key, value in config.items()}
     return config
-\
+
 config = open_config(run, "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN/saved-models")
 ntrain = config['train_size']
 
 # %% ---- Load model and samples ----
-modelpath = os.path.join(wd, 'results', 'mangroves', 'damagemodel.pkl')
-scalerpath = os.path.join('/Users', 'alison', 'Documents', 'DPhil', 'paper1.nosync', 'results', 'mangroves', 'scaler.pkl')
-with open(modelpath, 'rb') as f:
-    model = load(f)
-    print(model.metrics)
+# modelpath = os.path.join(wd, 'results', 'mangroves', 'damagemodel.pkl')
+# with open(modelpath, 'rb') as f:
+#     model = load(f)
+#     print(model.metrics)
 
 samplespath = os.path.join(wd, 'samples', f'{run}.nc')
 samples = xr.open_dataset(samplespath)
@@ -79,40 +78,9 @@ if DEV:
     train_month = train_month.isel(sample=slice(0, 10))
 
 # %% ---- Predict  ----
-def damage_ufunc(X):
-    X = X.reshape(1, -1)
-    return model.predict(X)
-
-def get_damages(
-    ds: xr.DataArray,
-    vars_: list,
-    first_dim='sample',
-    core_dim='channel',
-    ) -> xr.DataArray:
-    """
-    Calculate mangrove damages using a pretrained model.
-    
-    https://docs.xarray.dev/en/stable/examples/apply_ufunc_vectorize_1d.html
-    """
-    predictions = ds.copy()
-    ds = ds.copy().chunk({first_dim: "auto"})
-    for var in vars_:
-        predictions[f"{var}_damage"] = xr.apply_ufunc(
-            damage_ufunc,
-            ds[var],
-            input_core_dims=[[core_dim]],  # apply ufunc along
-            output_core_dims=[[]],         # dimensions results are in
-            exclude_dims=set((core_dim,)), # dimensions allowed to change size, must be set!
-            vectorize=True,                # loop over non-core dimensions
-            dask="parallelized",
-            output_dtypes=[float]
-        )
-    return predictions
-
-
-damages_sample = get_damages(samples_month, ['dependent', 'independent', 'hazGAN'])
-damages_train = get_damages(train_month, ['era5'])
-damages_test = get_damages(test_month, ['era5'])
+damages_sample = mangroves.get_damages(samples_month, ['dependent', 'independent', 'hazGAN'])
+damages_train = mangroves.get_damages(train_month, ['era5'])
+damages_test = mangroves.get_damages(test_month, ['era5'])
 
 # %% ---- Plot mangrove damage predictions for random storm ----
 if PLOT:
@@ -152,49 +120,15 @@ aoi = box(xmin, ymin, xmax, ymax)
 global_mangrove_watch = '/Users/alison/Documents/DPhil/data/gmw-v3-2020.nosync/gmw_v3_2020_vec.gpkg'
 mangroves = gpd.read_file(global_mangrove_watch, mask=aoi)
 mangroves = mangroves.set_crs(epsg=4326).drop(columns='PXLVAL')
-mangroves['area'] = mangroves.to_crs(bay_of_bengal_crs).area
+mangroves['area']  = mangroves.to_crs(bay_of_bengal_crs).area
 mangrove_centroids = mangroves.set_geometry(mangroves.centroid)
-mangrove_centrois = mangrove_centroids.sort_values(by='area', ascending=False)
+mangrove_centroids  = mangrove_centroids.sort_values(by='area', ascending=False)
 
 mangrovesout = os.path.join(wd, 'results', 'mangroves', 'mangroves.geojson')
 mangroves.to_file(mangrovesout, driver='GeoJSON')
 
 # %% ---- Convert mangroves to xarray.Dataset with values as areas ----
-def intersect_mangroves_with_damages(mangroves: gpd.GeoDataFrame,
-                                     damages: xr.Dataset,
-                                     plot=PLOT) -> xr.Dataset:
-    # calculate intersections
-    mangroves = mangroves.to_crs(4326)
-    weightmap = xa.pixel_overlaps(damages, mangroves)
-
-    # calculate overlaps, NOTE: using EPSG:4326 for now
-    mangroves_gridded = weightmap.agg
-    mangroves_gridded['npix'] = mangroves_gridded['pix_idxs'].apply(len)
-    mangroves_gridded['rel_area'] = mangroves_gridded['rel_area'].apply(lambda x: np.squeeze(x, axis=0))
-    mangroves_gridded = mangroves_gridded.explode(['rel_area', 'pix_idxs'])
-
-    # sum all relative mangrove areas in the same pixel
-    mangroves_gridded['area'] = mangroves_gridded['area'] * mangroves_gridded['rel_area']
-    mangroves_gridded = mangroves_gridded.groupby('pix_idxs').agg({'area': 'sum', 'coords': 'first'})
-
-    # convert pd.DataFrame to xarray.Dataset
-    lons = weightmap.source_grid['lon'].values
-    lats = weightmap.source_grid['lat'].values
-    mangroves_gridded = mangroves_gridded.reset_index()
-    mangroves_gridded['lon'] = mangroves_gridded['pix_idxs'].apply(lambda j: lons[j])
-    mangroves_gridded['lat'] = mangroves_gridded['pix_idxs'].apply(lambda i: lats[i])
-    mangroves_gridded['lon'] = mangroves_gridded['lon'].astype(float)
-    mangroves_gridded['lat'] = mangroves_gridded['lat'].astype(float)
-    mangroves_gridded['area'] = mangroves_gridded['area'].astype(float)
-    mangroves_gridded['area'] = mangroves_gridded['area'] * 1e-6 # convert to sqkm
-    mangroves_gridded = mangroves_gridded.set_index(['lat', 'lon'])[['area']]
-    mangroves_gridded = xr.Dataset.from_dataframe(mangroves_gridded)
-
-    if plot:
-        mangroves_gridded.area.plot(cmap="Greens", cbar_kwargs={'label': 'Mangrove damage [km²]'})
-    return mangroves_gridded
-
-mangroves_gridded = intersect_mangroves_with_damages(mangroves, damages_sample)
+mangroves_gridded = mangroves.intersect_with_damages(mangroves, damages_sample)
 mangroves_gridded.area.plot(cmap="Greens", cbar_kwargs={'label': 'Mangrove damage [km²]'})
 
 # %% ---- Calculate mangrove damage area and percentage ----

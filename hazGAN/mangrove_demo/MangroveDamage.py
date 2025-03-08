@@ -1,9 +1,7 @@
 # %%
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.ensemble import RandomForestRegressor
-from xgboost import XGBRegressor
+from sklearn.linear_model import LogisticRegression
 from sklearn.base import BaseEstimator
 
 
@@ -47,7 +45,6 @@ class MangroveDamageModel(BaseEstimator):
     def set_metrics(self, metrics:dict):
         self.metrics = metrics
 
-    
   
 class Transformer(object):
     """Make transformer an object to make it more flexible."""
