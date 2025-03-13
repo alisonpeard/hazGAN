@@ -7,15 +7,31 @@ import cartopy.geodesic as geodesic
 import matplotlib.pyplot as plt
 from matplotlib_scalebar.scalebar import ScaleBar
 
-plt.rcParams.update({
-    'font.family': 'Arial',  # or 'Helvetica'
-    'font.size': 12
-})
+# set up default aesthetics
+plt.rcParams['font.family'] = 'Helvetica'
+plt.rcParams['font.size'] = 12
+plt.rcParams['axes.spines.right'] = False
+plt.rcParams['axes.spines.top'] = False
+plt.rcParams['legend.frameon'] = False  # Frameless legend
+plt.rcParams['pdf.fonttype'] = 42
+plt.rcParams['ps.fonttype'] = 42
+
+FIGSIZE_ONECOL = (3.5, 2.16)
+FIGSIZE_ONECOL_LARGE = (3.5, 3.5)
+FIGSIZE_TWOCOL = (7.0, 4.33)
+FIGSIZE_TWOCOL_WIDE = (7.0, 3.0)
+
 
 CMAP   = "Spectral_r" # "Oranges", "YlGnBu", "YlOrBr"
 LABELS = ["wind speed [m]", "total precipitation [m]", "mslp [Pa]"]
 hist_kwargs = {"bins": 50, "color": "lightgrey", "edgecolor": "black", "alpha": 0.7}
 save_kwargs = {"dpi": 300, "bbox_inches": "tight", "pad_inches": 0.1}
+
+
+def linspace(start, stop, num=50, ndecimals=1):
+        """Return a linspace with up to ndecimals decimal places."""
+        factor = 10 ** ndecimals
+        return np.linspace(start * factor, stop * factor, num, dtype=int) / factor
 
 
 def heatmap(array, ax=None, extent=[80, 95, 10, 25], transform=ccrs.PlateCarree(),
@@ -36,8 +52,8 @@ def heatmap(array, ax=None, extent=[80, 95, 10, 25], transform=ccrs.PlateCarree(
 
 
 def contourmap(array, ax=None, extent=[80, 95, 10, 25], transform=ccrs.PlateCarree(),
-            cmap=CMAP, vmin=None, vmax=None, levels=15, extend="both", title=False,
-            linewidth=.5):
+            cmap=CMAP, vmin=None, vmax=None, levels=10, extend="both", title=False,
+            linewidth=.5, ndecimals=1):
     """Plot a heatmap with the coastline."""
     h, w = array.shape
     ax = ax or plt.axes(projection=transform)
@@ -45,7 +61,7 @@ def contourmap(array, ax=None, extent=[80, 95, 10, 25], transform=ccrs.PlateCarr
     vmin = vmin or array.min()
     vmax = vmax or array.max()
 
-    levels = np.linspace(vmin, vmax, levels)
+    levels = linspace(vmin, vmax, levels, ndecimals)
     im = ax.contourf(array, extent=extent, transform=transform, cmap=cmap, levels=levels,
                      extend=extend)
     ax.add_feature(cfeature.COASTLINE, edgecolor='k', linewidth=linewidth)

@@ -1,0 +1,36 @@
+# %%
+import numpy as np
+from shapely.geometry import box
+import geopandas as gpd
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+import matplotlib.pyplot as plt
+# %%
+# bbox = [80, 10, 95, 25]
+# region = box(*bbox)
+# region = gpd.GeoDataFrame(geometry=[region], crs='EPSG:4326')
+
+fig, ax = plt.subplots(subplot_kw={'projection': ccrs.PlateCarree()}, figsize=(1,1))
+# region.plot(ax=ax, facecolor='none', edgecolor='red', linewidth=2)
+ax.set_extent([80, 95, 10, 25])
+ax.add_feature(cfeature.LAND, color="#EFE6CC")
+ax.add_feature(cfeature.OCEAN, color="#B0E0D3")
+ax.add_feature(cfeature.COASTLINE, linewidth=0.1)
+plt.tight_layout()
+
+fig.savefig('/Users/alison/Desktop/roi.svg', transparent=True, bbox_inches='tight', pad_inches=0)
+# %%
+import xarray as xr
+datapath = "/Users/alison/Documents/DPhil/paper1.nosync/training/64x64/data.nc"
+ds = xr.open_dataset(datapath)
+
+# %%
+ds['maxwind'] = ds.isel(field=0).anomaly.max(dim=['lon', 'lat'])
+ds = ds.sortby('maxwind', ascending=False) 
+
+# %%
+time =ds.time[0].data
+# %%
+
+ds.isel(field=0, time=0).anomaly.plot(cmap="Spectral_r")
+# %%

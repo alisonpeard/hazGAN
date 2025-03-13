@@ -93,36 +93,71 @@ def main(datadir):
             p_cmap.set_under("crimson")
 
             ds[f"pk_{var}"].plot(ax=axs[0], cmap=p_cmap, vmin=p_crit)
-            ds[f"thresh_{var}"].plot(ax=axs[1], cmap=cmap)
-            ds[f"scale_{var}"].plot(ax=axs[2], cmap=cmap)
-            ds[f"shape_{var}"].plot(ax=axs[3], cmap=cmap) #, vmin=-0.81, vmax=0.28)
+            ds[f"thresh_{var}"].plot(ax=axs[1], cmap=cmap, cbar_kwargs={'label': None})
+            ds[f"scale_{var}"].plot(ax=axs[2], cmap=cmap, cbar_kwargs={'label': None})
+            ds[f"shape_{var}"].plot(ax=axs[3], cmap=cmap, cbar_kwargs={'label': None}) #, vmin=-0.81, vmax=0.28)
+
+            # plot the density for three sample grid points
+            # ax4 = fig.add_subplot(1, 5, 5, projection=None)
+            ax4 = fig.add_axes([0.825, 0.1, 0.15, 0.8])   # [left, bottom, width, height]
+            plt.tight_layout()
+            plt.subplots_adjust(right=0.8) 
+            import scipy.stats
+            if var == 'u10':
+                    dist = getattr(scipy.stats, 'weibull_min')
+            else:
+                dist = getattr(scipy.stats, 'genpareto')
+
+            # get index of biggest gdf[f'shape_{var}']
+            idmax = gdf[f'shape_{var}'].idxmax()
+            idmin = gdf[f'shape_{var}'].idxmin()
+            idmean = (df[f'shape_{var}'] - gdf[f'shape_{var}']).abs().idxmin()
+
+
+            for i, grid in enumerate(gdf['grid'].iloc[[idmax, idmin, idmean]]):
+                gridvars = gdf[gdf['grid'] == grid]
+                thresh = gridvars[f"thresh_{var}"].values[0]
+                scale = gridvars[f"scale_{var}"].values[0]
+                shape = gridvars[f"shape_{var}"].values[0]
+                u = np.linspace(0.01, 0.999, 100)
+                x = dist.ppf(u, shape)
+                y = dist.pdf(x, shape)
+                ax4.plot(x, y, label=f"ξ={shape:.2f}")
+                ax4.set_xlabel("")
+                ax4.set_ylabel("")
+                ax4.set_yticks([int(min(y)), int(max(y))])
+                ax4.set_xticks([int(min(x)), int(max(x))])
+
+            ax4.legend()
 
             if var == 'u10':
                 axs[0].set_title("H₀: X~Weibull(ξ,μ,σ)")
             else:
                 axs[0].set_title("H₀: X~GPD(ξ,μ,σ)")
+
             axs[1].set_title("μ")
             axs[2].set_title("σ")
             axs[3].set_title("ξ")
 
-            for ax in axs.ravel():
+            for ax in axs[:-1].ravel():
                 ax.add_feature(cartopy.feature.COASTLINE, linewidth=0.5)
                 ax.set_xlabel("Longitude")
                 ax.set_ylabel("Latitude")
 
-            fig.suptitle(f"Fit for ERA5 {var.upper()}, n = {gdf['storm'].nunique()}")
+            # fig.suptitle(f"Fit for ERA5 {var.upper()}, n = {gdf['storm'].nunique()}")
             print(gdf[gdf[f"pk_{var}"] < p_crit]["grid"].nunique(), "significant p-values")
 
-            fig, axs = plt.subplots(1, 4, figsize=(18, 3))
-            gdf['pk_u10'].hist(ax=axs[0], **hist_kws)
-            gdf[f"thresh_{var}"].hist(ax=axs[1], **hist_kws)
-            gdf[f"scale_{var}"].hist(ax=axs[2], **hist_kws)
-            gdf[f"shape_{var}"].hist(ax=axs[3], **hist_kws)
-            axs[0].set_title("H₀: X~GPD(ξ,μ,σ) (transformed)")
-            axs[1].set_title("μ")
-            axs[2].set_title("σ")
-            axs[3].set_title("ξ")
+            if False:
+                fig, axs = plt.subplots(1, 4, figsize=(18, 3))
+                gdf['pk_u10'].hist(ax=axs[0], **hist_kws)
+                gdf[f"thresh_{var}"].hist(ax=axs[1], **hist_kws)
+                gdf[f"scale_{var}"].hist(ax=axs[2], **hist_kws)
+                gdf[f"shape_{var}"].hist(ax=axs[3], **hist_kws)
+                axs[1].set_title("μ")
+                axs[2].set_title("σ")
+                axs[3].set_title("ξ")
 
+    # return gdf # TODO: remove this line later
     #  important: check ecdfs are in (0, 1)
     assert gdf[['ecdf_u10', 'ecdf_tp', 'ecdf_mslp']].max().max() <= 1, "ECDF values should be between 0 and 1"
     assert gdf[['ecdf_u10', 'ecdf_tp', 'ecdf_mslp']].min().min() >= 0, "ECDF values should be between 0 and 1"
@@ -222,7 +257,7 @@ def main(datadir):
     ds.to_netcdf(os.path.join(datadir, OUTFILES[0]))
     print("Saved to", os.path.join(datadir, OUTFILES[0]))
 
-    if VISUALISATIONS:
+    if False:
         # day of storm
         cmap = mpl.cm.YlOrRd
         t = np.random.uniform(0, T, 1).astype(int)[0]

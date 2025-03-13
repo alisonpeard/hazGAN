@@ -18,7 +18,8 @@ def anomaly(array, reference, params):
 
 
 def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, title="Untitled",
-         cbar_label='', cbar_width=0.2, linewidth=.1, alpha=1e-4, alpha_vlim=True, **transform_kws):
+        cbar_label='', cbar_width=0.2, linewidth=.1, alpha=1e-4, alpha_vlim=True, 
+        nrows=4, ncols=8, ndecimals=1, **transform_kws):
     """Plot training samples on top row and generated samples on bottom row."""
 
     transform = transform or identity
@@ -28,14 +29,6 @@ def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, 
     fake = fake[..., field].copy()
     train = train[..., field].copy()
 
-    def sort_by_wind(array):
-        maxima = np.max(array, axis=(1, 2))
-        sorting = np.argsort(maxima)[::-1]
-        return array[sorting]
-
-    # fake  = sort_by_wind(fake)
-    # train = sort_by_wind(train)
-
     if alpha_vlim:
         vmin = vmin or np.nanquantile(np.concatenate([fake, train]), alpha)
         vmax = vmax or np.nanquantile(np.concatenate([fake, train]), 1-alpha)
@@ -43,27 +36,38 @@ def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, 
         vmin = vmin or min(np.nanmin(fake), np.nanmin(train))
         vmax = vmax or max(np.nanmax(fake), np.nanmax(train))
 
-    fig, axs, cax = makegrid(8, 8, cbar_width=cbar_width, figsize=1.2)
+    nrows = 4
+    ncols = 8
+    total = nrows * ncols
+    midpoint = total // 2
+    midrow  = nrows // 2
+
+    fig, axs, cax = makegrid(nrows, ncols, cbar_width=cbar_width, figsize=1.)
     for i, ax in enumerate(axs.flat):
-        if i < 32:
-            contourmap(fake[i, ...], ax=ax, vmin=vmin, vmax=vmax, cmap=cmap, linewidth=linewidth)
-        if i >= 32:
+        if i < midpoint:
+            contourmap(fake[i, ...], ax=ax, vmin=vmin, vmax=vmax,
+                       cmap=cmap, linewidth=linewidth, ndecimals=ndecimals)
+        if i >= midpoint:
             pos = ax.get_position()
             ax.set_position([pos.x0, pos.y0 - 0.01, pos.width, pos.height])
-            j = i - 32
-            im = contourmap(train[j, ...], ax=ax, vmin=vmin, vmax=vmax, cmap=cmap, linewidth=linewidth)
+            j = i - midpoint
+            im = contourmap(train[j, ...], ax=ax, vmin=vmin, vmax=vmax,
+                            cmap=cmap, linewidth=linewidth, ndecimals=ndecimals)
 
-    # add A and B labels to top left of both blocks
-    axs[0, 0].text(.25, .6, "A", transform=axs[0, 0].transAxes, ha='center', va='bottom', fontsize=22, weight='bold')
-    axs[4, 0].text(.25, .6, "B", transform=axs[4, 0].transAxes, ha='center', va='bottom', fontsize=22, weight='bold')
+    # add (a) and (b) labels to top left of both blocks
+    axs[0, 0].text(.2, .725, "(a)", transform=axs[0, 0].transAxes, ha='center', va='bottom',
+                fontsize=20, 
+                bbox=dict(facecolor='white', alpha=.8, linewidth=0, edgecolor='white', boxstyle='round,pad=0.2'))
+    
+    axs[midrow, 0].text(.2, .725, "(b)", transform=axs[midrow, 0].transAxes, ha='center', va='bottom',
+                fontsize=20, 
+                bbox=dict(facecolor='white', alpha=.8, linewidth=0, edgecolor='white', boxstyle='round,pad=0.2'))
 
     # add a scale bar
     scalebar(axs[-1, -1])
-    scalebar(axs[3, -1])
+    scalebar(axs[midrow-1, -1])
 
     fig.colorbar(im, cax=cax, label=cbar_label)
-    fig.suptitle(title, y=1.02, fontsize=22)
-
     return fig
 
 
