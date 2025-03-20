@@ -16,7 +16,6 @@ def anomaly(array, reference, params):
     array = invPIT(array, reference, params)
     return array
 
-
 def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, title="Untitled",
         cbar_label='', cbar_width=0.2, linewidth=.1, alpha=1e-4, alpha_vlim=True, 
         nrows=4, ncols=8, ndecimals=1, **transform_kws):
@@ -54,15 +53,18 @@ def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, 
             im = contourmap(train[j, ...], ax=ax, vmin=vmin, vmax=vmax,
                             cmap=cmap, linewidth=linewidth, ndecimals=ndecimals)
 
-    # add (a) and (b) labels to top left of both blocks
-    axs[0, 0].text(.2, .725, "(a)", transform=axs[0, 0].transAxes, ha='center', va='bottom',
-                fontsize=20, 
-                bbox=dict(facecolor='white', alpha=.8, linewidth=0, edgecolor='white', boxstyle='round,pad=0.2'))
+    # # add (a) and (b) labels to top left of both blocks
+    # axs[0, 0].text(.3, .7, "HazGAN", transform=axs[0, 0].transAxes, ha='center', va='bottom',
+    #             fontsize=20, 
+    #             bbox=dict(facecolor='white', alpha=.8, linewidth=0, edgecolor='white', boxstyle='round,pad=0.2'))
     
-    axs[midrow, 0].text(.2, .725, "(b)", transform=axs[midrow, 0].transAxes, ha='center', va='bottom',
-                fontsize=20, 
-                bbox=dict(facecolor='white', alpha=.8, linewidth=0, edgecolor='white', boxstyle='round,pad=0.2'))
+    # axs[midrow, 0].text(.25, .7, "ERA5", transform=axs[midrow, 0].transAxes, ha='center', va='bottom',
+    #             fontsize=20, 
+    #             bbox=dict(facecolor='white', alpha=.8, linewidth=0, edgecolor='white', boxstyle='round,pad=0.2'))
 
+    axs[0, 0].set_ylabel("HazGAN", fontsize=18)
+    axs[midrow, 0].set_ylabel("ERA5", fontsize=18)
+    
     # add a scale bar
     scalebar(axs[-1, -1])
     scalebar(axs[midrow-1, -1])

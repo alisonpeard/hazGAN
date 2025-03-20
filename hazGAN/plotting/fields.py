@@ -38,8 +38,8 @@ def plot(fake, train, func, fields=[0, 1], figsize=1.,
     im = contourmap(train_res, ax=axs[0], vmin=vmin, vmax=vmax, cmap=cmap)
     _  = contourmap(fake_res, ax=axs[-1], vmin=vmin, vmax=vmax, cmap=cmap)
 
-    axs[0].set_title("Train", y=-0.1)
-    axs[-1].set_title("Model", y=-0.1)
+    axs[0].set_title("ERA5", y=-0.15)
+    axs[-1].set_title("HazGAN", y=-0.15)
 
     fig.colorbar(im, cax=cax, label=cbar_label)
     fig.suptitle(title, y=1.05)

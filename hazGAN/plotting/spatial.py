@@ -32,8 +32,12 @@ def plot(fake, train, func, field=0, figsize=1., cmap=CMAP, vmin=None, vmax=None
     im = axs[0].imshow(train_res, cmap=cmap)
     _  = axs[-1].imshow(fake_res, cmap=cmap)
 
-    axs[0].set_title("Train", y=-0.1)
-    axs[-1].set_title("Model", y=-0.1)
+    for ax in axs:
+        ax.spines['top'].set_visible(True)
+        ax.spines['right'].set_visible(True)
+
+    axs[0].set_title("ERA5", y=-0.15)
+    axs[-1].set_title("HazGAN", y=-0.15)
     fig.suptitle(title, y=1.05)
 
     fig.colorbar(im, cax=cax, label=cbar_label)

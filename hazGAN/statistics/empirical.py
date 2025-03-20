@@ -181,7 +181,7 @@ class SemiParametric(Empirical):
                 assert not np.isnan(x).any(), "NaN values in quantile function."
 
             except AssertionError as e:
-                print(e)
+                # debugging statements
                 print("u: ", min(u), max(u))
                 print("x: ", min(x), max(x))
                 print("loc: ", self.loc)

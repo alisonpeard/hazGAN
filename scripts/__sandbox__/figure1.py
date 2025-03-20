@@ -10,15 +10,16 @@ import matplotlib.pyplot as plt
 # region = box(*bbox)
 # region = gpd.GeoDataFrame(geometry=[region], crs='EPSG:4326')
 
-fig, ax = plt.subplots(subplot_kw={'projection': ccrs.PlateCarree()}, figsize=(1,1))
+fig, ax = plt.subplots(subplot_kw={'projection': ccrs.PlateCarree()}, figsize=(2,2))
 # region.plot(ax=ax, facecolor='none', edgecolor='red', linewidth=2)
 ax.set_extent([80, 95, 10, 25])
-ax.add_feature(cfeature.LAND, color="#EFE6CC")
-ax.add_feature(cfeature.OCEAN, color="#B0E0D3")
-ax.add_feature(cfeature.COASTLINE, linewidth=0.1)
+ax.add_feature(cfeature.LAND.with_scale('110m'), color="#F5F5F5")
+ax.add_feature(cfeature.OCEAN.with_scale('110m'), color="#DAE8FC")
+ax.add_feature(cfeature.COASTLINE.with_scale('110m'), linewidth=0.1, edgecolor='#666666')
+plt.axis('off')
 plt.tight_layout()
 
-fig.savefig('/Users/alison/Desktop/roi.svg', transparent=True, bbox_inches='tight', pad_inches=0)
+fig.savefig('/Users/alison/Desktop/roi.png', dpi=300, transparent=True, bbox_inches='tight', pad_inches=0)
 # %%
 import xarray as xr
 datapath = "/Users/alison/Documents/DPhil/paper1.nosync/training/64x64/data.nc"

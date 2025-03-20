@@ -27,11 +27,11 @@ LABELS = ["wind speed [m]", "total precipitation [m]", "mslp [Pa]"]
 hist_kwargs = {"bins": 50, "color": "lightgrey", "edgecolor": "black", "alpha": 0.7}
 save_kwargs = {"dpi": 300, "bbox_inches": "tight", "pad_inches": 0.1}
 
-
 def linspace(start, stop, num=50, ndecimals=1):
         """Return a linspace with up to ndecimals decimal places."""
         factor = 10 ** ndecimals
-        return np.linspace(start * factor, stop * factor, num, dtype=int) / factor
+        levels = np.linspace(start * factor, stop * factor, num, dtype=int) / factor
+        return sorted(set(levels))
 
 
 def heatmap(array, ax=None, extent=[80, 95, 10, 25], transform=ccrs.PlateCarree(),

@@ -39,51 +39,51 @@ def invPITmaxima(fake_u, train_u, fake, train):
             
 def windvsreturnperiod(x:np.ndarray, _lambda:float, ax=None, windchannel=0,
                 transpose=False, **kwargs):
-            """Plot wind speed against return period."""
-            plt.style.use('seaborn-v0_8-whitegrid')
-            rp = returnperiod(x, _lambda, windchannel=windchannel)
-            maxima = np.max(x[..., windchannel], axis=(1, 2)).squeeze()
+    """Plot wind speed against return period."""
+    plt.style.use('seaborn-v0_8-whitegrid')
+    rp = returnperiod(x, _lambda, windchannel=windchannel)
+    maxima = np.max(x[..., windchannel], axis=(1, 2)).squeeze()
 
-            sorting = np.argsort(maxima)
-            rp      = rp[sorting]
-            maxima  = maxima[sorting]
+    sorting = np.argsort(maxima)
+    rp      = rp[sorting]
+    maxima  = maxima[sorting]
 
-            ax = ax or plt.gca()
-            if transpose:
-                ax.plot(maxima, rp, **kwargs)
-                ax.set_xlabel("Wind Speed [m/s]", fontsize=14, fontweight='bold')
-                ax.set_ylabel("Return Period [years]", fontsize=14, fontweight='bold')
-            else:
-                ax.plot(rp, maxima, **kwargs)
-                ax.set_xlabel("Return Period [years]", fontsize=14, fontweight='bold')
-                ax.set_ylabel("Wind Speed [m/s]", fontsize=14, fontweight='bold')
+    ax = ax or plt.gca()
+    if transpose:
+        ax.plot(maxima, rp, **kwargs)
+        ax.set_xlabel("Wind Speed [m/s]", fontsize=14, fontweight='bold')
+        ax.set_ylabel("Return Period [years]", fontsize=14, fontweight='bold')
+    else:
+        ax.plot(rp, maxima, **kwargs)
+        ax.set_xlabel("Return Period [years]", fontsize=14, fontweight='bold')
+        ax.set_ylabel("Wind Speed [m/s]", fontsize=14, fontweight='bold')
 
-            # axes
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.spines['left'].set_linewidth(1.5)
-            ax.spines['bottom'].set_linewidth(1.5)
-            ax.tick_params(axis='both', which='major', labelsize=12, width=1.5, length=5)
-            ax.tick_params(axis='both', which='minor', width=1, length=3)
-            ax.grid(True, linestyle='--', linewidth=0.7, alpha=0.7)
-            ax.set_xscale('log')
-            
-            # legend
-            legend = ax.legend(loc='lower right', 
-                  frameon=True, 
-                  framealpha=0.9,
-                  edgecolor='gray',
-                  fontsize=12)
-            legend.get_frame().set_linewidth(0)
+    # axes
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_linewidth(1.5)
+    ax.spines['bottom'].set_linewidth(1.5)
+    ax.tick_params(axis='both', which='major', labelsize=12, width=1.5, length=5)
+    ax.tick_params(axis='both', which='minor', width=1, length=3)
+    ax.grid(True, linestyle='--', linewidth=0.7, alpha=0.7)
+    ax.set_xscale('log')
+    
+    # legend
+    legend = ax.legend(loc='lower right', 
+            frameon=True, 
+            framealpha=0.9,
+            edgecolor='gray',
+            fontsize=12)
+    legend.get_frame().set_linewidth(0)
 
-            # background
-            ax.set_facecolor('#F8F9FA')     
+    # background
+    ax.set_facecolor('#F8F9FA')     
 
-            return ax
+    return ax
 
 
-def saffirsimpson_barchart(fake, train, title='Saffir-Simpson Scale',
-                            xlabel="Category", yscale='linear', bar_width=0.35):
+def saffirsimpson_barchart(fake, train, title='',
+                            xlabel="", yscale='linear', bar_width=0.35):
     """Plot bar charts comparing fake and train data across hurricane categories."""
     fake = maxwinds(fake)
     train = maxwinds(train)
@@ -124,31 +124,37 @@ def saffirsimpson_barchart(fake, train, title='Saffir-Simpson Scale',
     
     # Make sure all categories are represented (fill with zeros if missing)
     all_categories = np.arange(-1, 6)
-    fake_density = pd.Series([fake_density.get(cat, 0) for cat in all_categories], index=all_categories)
-    train_density = pd.Series([train_density.get(cat, 0) for cat in all_categories], index=all_categories)
+    fake_density = pd.Series([fake_density.get(cat, 0) for cat in all_categories],
+                            index=all_categories)
+    train_density = pd.Series([train_density.get(cat, 0) for cat in all_categories],
+                            index=all_categories)
     
     # Create figure and axis
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(12, 5))
 
     # Set positions of bars on x-axis
     r1 = np.arange(len(all_categories))
-    r2 = [x + bar_width for x in r1]
-    
+    r2 = [x + bar_width + 0.01 for x in r1]
     
     # Create bars
-    ax.bar(r1, fake_density, width=bar_width, color=yellows[1], label='HazGAN', edgecolor='black', linewidth=0.5)
-    ax.bar(r2, train_density, width=bar_width, color=yellows[2], label='ERA5', edgecolor='black', linewidth=0.5)
+    ax.bar(r1, fake_density, width=bar_width, color="#DAE8FC", label='HazGAN',
+        edgecolor='#6C8EBF', linewidth=0.5)
+    ax.bar(r2, train_density, width=bar_width, color="#BAC8D3", label='ERA5',
+        edgecolor='#23445D', linewidth=0.5)
     
     # Add extra details
-    ax.grid(True, linestyle='--', alpha=0.7)
-    ax.set_xlabel(xlabel, fontsize=12)
-    ax.set_ylabel("Probability density", fontsize=12)
-    ax.set_title(title, fontsize=16)
+    # ax.grid(True, linestyle='--', alpha=0.7)
+    ax.set_xlabel(xlabel, fontsize=18)
+    ax.set_ylabel("Probability density", fontsize=18)
+    ax.set_title(title, fontsize=24)
     ax.set_xticks([r + bar_width/2 for r in range(len(all_categories))])
-    ax.set_xticklabels(['Tropical\nDepression', 'Tropical\nStorm', 'Cat. 1',
-                        'Cat. 2', 'Cat. 3', 'Cat. 4', 'Cat. 5'])
+    ax.set_xticklabels(['Tropical\nDepression', 'Tropical\nStorm', 'Category\n1',
+                        'Category\n2', 'Category\n3', 'Category\n4', 'Category\n5'],
+                        fontsize=18)
     ax.set_yscale(yscale)
-    ax.legend()
+    ax.legend(
+        fontsize=18,
+    )
     fig.tight_layout()
     
     return fig, ax

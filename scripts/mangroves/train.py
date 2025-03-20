@@ -34,7 +34,7 @@ from tqdm import tqdm
 from joblib import dump # for pickling
 import matplotlib.pyplot as plt
 import seaborn as sns
-from MangroveDamage import MangroveDamageModel
+from hazGAN.mangrove_demo.MangroveDamage import MangroveDamageModel
 
 SCALING = True
 VISUALS = False
@@ -233,6 +233,17 @@ coefs
 # %% ----Make a 2D versio of this plot----
 from matplotlib.ticker import PercentFormatter
 
+# set font to Helvetica
+plt.rcParams['font.family'] = 'sans-serif'
+plt.rcParams['font.sans-serif'] = 'Helvetica'
+
+# set frame on for top and right axes
+plt.rcParams['axes.spines.top'] = True
+plt.rcParams['axes.spines.right'] = True
+
+# set fontsize to 18
+plt.rcParams['font.size'] = 14
+
 windmax, precipmax = np.max(X, axis=0)
 windmin, precipmin = np.min(X, axis=0)
 windregular = np.linspace(windmin, windmax, 100)
@@ -245,15 +256,17 @@ winds = windregular.reshape((100, 100))
 precips = precipregular.reshape((100, 100))
 
 LEVELS = 20
-plt.figure(figsize=(5, 4))
+fig = plt.figure(figsize=(4, 3))
 im = plt.contourf(winds, precips, preds, levels=LEVELS, cmap='viridis', origin='lower')
-plt.contour(winds, precips, preds, levels=LEVELS, colors='k', origin='lower', linewidths=0.2)
-plt.ylabel('Wind speed (m/s)')
+plt.contour(winds, precips, preds, levels=LEVELS, colors='k', origin='lower',
+            linewidths=0.05)
+plt.ylabel(r'Wind speed (ms$^{-1}$)')
 plt.xlabel('Precipitation (m)')
 # add colorbar with percent formatting
-plt.colorbar(im, label='Probability of >20% damage', format=PercentFormatter(1, 0))
-plt.title('Mangrove damage probability surface\nfrom logistic regression')
-
+plt.colorbar(im, label='Damage probability', format=PercentFormatter(1, 0))
+# plt.title('Mangrove damage probability surface\nfrom logistic regression')
+plt.tight_layout()
+fig.savefig("/Users/alison/Documents/DPhil/paper1.nosync/figures/draft2/fig5/fig5b.pdf", transparent=True, dpi=300)
 # %%
 y_binary = np.where(observations > .5, 1, 0)
 predictions_binary = np.where(predictions > .5, 1, 0)
