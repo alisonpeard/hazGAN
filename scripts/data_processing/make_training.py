@@ -41,6 +41,7 @@ hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k', 'density': True}
 
 FIELDS = ["u10", "tp", 'mslp']
 VISUALISATIONS = True
+SAVE_DATA = False
 THRESHOLD = 0.75 # (for outliers, not using)
 PROCESS_OUTLIERS = False
 RES = (64, 64)
@@ -94,7 +95,7 @@ def main(datadir):
             plt.tight_layout()
             plt.subplots_adjust(right=0.8) 
 
-            cmap = "viridis" # "PuBu_r"
+            cmap = "PuBu_r" # "viridis" # "PuBu_r"
             p_cmap = plt.get_cmap(cmap)
             p_cmap.set_under("crimson")
 
@@ -181,6 +182,8 @@ def main(datadir):
                 axs[1].set_title("μ")
                 axs[2].set_title("σ")
                 axs[3].set_title("ξ")
+                
+            fig.savefig(f"/Users/alison/Desktop/f01_{var}.png", dpi=300)
 
     # return gdf # TODO: remove this line later
     #  important: check ecdfs are in (0, 1)
@@ -278,9 +281,10 @@ def main(datadir):
         # ds = process_outliers(ds, THRESHOLD, datadir=datadir, visuals=VISUALISATIONS)
 
     # save
-    print("Finished! Saving to netcdf...")
-    # ds.to_netcdf(os.path.join(datadir, OUTFILES[0]))
-    print("Saved to", os.path.join(datadir, OUTFILES[0]))
+    if SAVE_DATA:
+        print("Finished! Saving to netcdf...")
+        # ds.to_netcdf(os.path.join(datadir, OUTFILES[0]))
+        print("Saved to", os.path.join(datadir, OUTFILES[0]))
 
     if False:
         # day of storm

@@ -1,4 +1,6 @@
 """
+Train and plot 2-d logistic regression model for mangrove damage.
+
 To load model elsewhere, you can use the following snippet:
 >>> from joblib import load
 >>> modelpath = '/Users/alison/Documents/DPhil/paper1.nosync/results/mangroves/model.pkl'
@@ -267,6 +269,7 @@ plt.colorbar(im, label='Damage probability', format=PercentFormatter(1, 0))
 # plt.title('Mangrove damage probability surface\nfrom logistic regression')
 plt.tight_layout()
 fig.savefig("/Users/alison/Documents/DPhil/paper1.nosync/figures/draft2/fig5/fig5b.pdf", transparent=True, dpi=300)
+fig.savefig("/Users/alison/Desktop/f04.pdf", transparent=True, dpi=300)
 # %%
 y_binary = np.where(observations > .5, 1, 0)
 predictions_binary = np.where(predictions > .5, 1, 0)

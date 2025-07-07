@@ -3,18 +3,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# my envirnoment files
-.env
-
-# wandb files
-scripts/training/wandb/
-
-# weird files popping up in linux
-._*
-
-# C extensions
-*.so
-
 # Distribution / packaging
 .Python
 build/
@@ -168,9 +156,10 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# MacOS
+# My additions
 .DS_Store
-
-
-# R
 .Rhistory
+.env
+scripts/training/wandb/
+._*
+*.so

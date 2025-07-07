@@ -2,7 +2,7 @@
 """
 Load ERA5 data from hourly netcdf files, resample to daily aggregates, and save to a single netcdf file in the target directory.
 """
-#%%
+
 import os
 import sys
 from environs import Env

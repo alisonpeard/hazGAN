@@ -4,13 +4,11 @@ library(eva)
 library(extRemes)
 library(dplyr)
 library(lubridate)
-library(parallel)
 library(future)
 library(furrr)
 library(data.table)
 library(progress)  # Add this
 library(magrittr)  # Optional but recommended for pipe operator
-library(stats)
 library(goftest)
 
 ########### HELPER FUNCTIONS ###################################################

@@ -13,7 +13,7 @@
 # 2. Metal compatibility: https://pypi.org/project/tensorflow-metal/
 # 3. https://developer.apple.com/metal/tensorflow-plugin/
 
-name: hazGAN
+name: hazGANv0
 channels:
   #- apple
     - conda-forge

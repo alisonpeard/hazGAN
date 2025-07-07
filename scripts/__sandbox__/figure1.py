@@ -5,7 +5,9 @@ import geopandas as gpd
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
-# %%
+
+# %%
+
 # bbox = [80, 10, 95, 25]
 # region = box(*bbox)
 # region = gpd.GeoDataFrame(geometry=[region], crs='EPSG:4326')
@@ -15,7 +17,7 @@ fig, ax = plt.subplots(subplot_kw={'projection': ccrs.PlateCarree()}, figsize=(2
 ax.set_extent([80, 95, 10, 25])
 ax.add_feature(cfeature.LAND.with_scale('110m'), color="#F5F5F5")
 ax.add_feature(cfeature.OCEAN.with_scale('110m'), color="#DAE8FC")
-ax.add_feature(cfeature.COASTLINE.with_scale('110m'), linewidth=0.1, edgecolor='#666666')
+ax.add_feature(cfeature.COASTLINE.with_scale('110m'), linewidth=.8, edgecolor='#666666')
 plt.axis('off')
 plt.tight_layout()
 
