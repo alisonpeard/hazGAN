@@ -110,9 +110,6 @@ class SemiParametric(Empirical):
         self.loc = loc
         self.scale = scale
         self.shape = shape
-
-        if distn == "weibull":
-            warn("Weibull inverse transform hasn't been checked yet.")
         self.distn = globals().get(distn)
 
         self.ecdf = super()._ecdf()

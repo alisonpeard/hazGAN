@@ -1,24 +1,9 @@
-# ---------Install----------
-# mamba create -f apple-silicon.yaml
-# cd hazGAN
-# mamba activate hazGAN;python -c "import hazGAN as haz;print(haz.__version__)"
-# python helloworld_tensorflow.py --device GPU
-
-# ---------Uninstall----------
-# conda env remove -n hazGAN
-# conda info --envs
-
-# ---------References----------
-# 1. Source: https://github.com/tcapelle/apple_m1_pro_python/tree/main
-# 2. Metal compatibility: https://pypi.org/project/tensorflow-metal/
-# 3. https://developer.apple.com/metal/tensorflow-plugin/
-
-name: hazGAN
+name: hazGANv0
 channels:
-    - apple
     - conda-forge
+    - pytorch-nightly
 dependencies:
-    - python=3.9 # 3.8<=python<3.11
+    - python
     - pip
     - dask
     - tqdm
@@ -26,32 +11,33 @@ dependencies:
     - notebook
     - pyyaml
     - h5py
-    # - tensorflow-deps
     - pandas
     - geopandas
     - fiona
     - xarray
-    - xagg
+    - xagg>=0.3.0 # 0.2.5
+    - xesmf
     - rioxarray
-    - gdal==3.6.3
     - hdf5
     - netcdf4
     - shapely>=2.0
     - scipy
     - scikit-learn
     - matplotlib
-    - cartopy # for basemaps
+    - cartopy
     - seaborn
+    - libpng
+    - jpeg
+    - xgboost
     - pyarrow>=10.0.1
+    - pytorch-nightly::pytorch
+    - pytorch-nightly::torchaudio
+    - pytorch-nightly::torchvision
     - pip:
-        # - rpy2 # optional
-        - matplotlib_scalebar
-        - tensorflow==2.16.1 # -macos
-        - tensorflow-metal
-        - keras==3.0.5 # try next 02-12-2024
         - environs
         - bottleneck
+        - keras>=3.0.0
         - wandb==0.16.6 # stable May 2024
         - pytest
+        - matplotlib-scalebar
         - -e ..
-        # - -e /Users/alison/Documents/DPhil/utilities # needs update
