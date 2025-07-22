@@ -1,0 +1,43 @@
+name: hazGANv0
+channels:
+    - conda-forge
+    - pytorch-nightly
+dependencies:
+    - python
+    - pip
+    - dask
+    - tqdm
+    - ipykernel
+    - notebook
+    - pyyaml
+    - h5py
+    - pandas
+    - geopandas
+    - fiona
+    - xarray
+    - xagg>=0.3.0 # 0.2.5
+    - xesmf
+    - rioxarray
+    - hdf5
+    - netcdf4
+    - shapely>=2.0
+    - scipy
+    - scikit-learn
+    - matplotlib
+    - cartopy
+    - seaborn
+    - libpng
+    - jpeg
+    - xgboost
+    - pyarrow>=10.0.1
+    - pytorch-nightly::pytorch
+    - pytorch-nightly::torchaudio
+    - pytorch-nightly::torchvision
+    - pip:
+        - environs
+        - bottleneck
+        - keras>=3.0.0
+        - wandb==0.16.6 # stable May 2024
+        - pytest
+        - matplotlib-scalebar
+        - -e ..
