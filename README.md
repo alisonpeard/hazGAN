@@ -1,7 +1,8 @@
 # Hazard GAN
 Wasserstein GAN to generate multivariate windstorm footprints over the Bay of Bengal.
 ![fig2](figures/training_footprints.png)
-*In development*
+
+*This branch is for developing custom torch models to use as an alternative to StyleGAN.*
 
 ## Installation
 ```bash
