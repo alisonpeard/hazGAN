@@ -37,7 +37,7 @@ def yflip(array: np.ndarray, ax=1) -> np.ndarray:
         return np.flip(array, axis=ax)
 
 
-def load_samples(samples_dir, training_dir, model, threshold:float=15, ny:int=500, sampletype:str='samples'):
+def load_samples(samples_dir, data_dir, training_dir, model, threshold=None, ny=500, sampletype='samples'):
     """Load and process samples and training data for visualisation"""
     # load samples - - - - - - - - --- - - - -- - -- - - -- -- - - -- - - - -
     samples_path = os.path.join(samples_dir, model, "results", sampletype)
@@ -54,40 +54,47 @@ def load_samples(samples_dir, training_dir, model, threshold:float=15, ny:int=50
     print(f"Loaded {samples.shape} samples")
 
     # load gumbel scaling statistics
-    stats_file   = os.path.join(training_dir, "image_stats.npz")
-    stats        = np.load(stats_file)
+    stats_file = os.path.join(training_dir, "image_stats.npz")
+    stats = np.load(stats_file)
     image_minima = stats['min']
     image_maxima = stats['max']
     n            = stats['n']
     image_range  = image_maxima - image_minima
+
     print(f"Loaded image statistics with shape {image_minima.shape}")
 
     # rescale images 
+    Warning("Using new rescaling from Wed 22 January 2025")
     samples = (samples * (n + 1) - 1) / (n - 1) * image_range + image_minima
 
     # order samples
     sample_maxima = samples[..., 0].max(axis=(1,2))
-    sample_order  = np.argsort(sample_maxima)
-    samples       = samples[sample_order]
+    sample_order  = np.argsort(sample_maxima)#[::-1]
+    samples        = samples[sample_order]
+    # samples        = truncate(samples)
 
     # check sample distribution (Gumbel)
     _, ax = plt.subplots(figsize=(6, 3))
     ax.hist(samples.ravel(), bins=50, color='lightgrey', edgecolor='k', density=True);
     ax.set_xlabel("Pixel value");
     ax.set_ylabel("Density");
-    ax.set_title("Histogram of all Gumbel(0, 1) samples")
+    ax.set_title("Histogram of all Gumbel(0, 1) samples") # this should be uniform
 
-    # load training data
+    # load training data - - - - - - - - --- - - - -- - -- - - -- -- - - -- - - - -
     data   = xr.open_dataset(os.path.join(training_dir, "data.nc"))
-    # nobs   = data.sizes['time']
-    nyears = len(np.unique(data['time.year'].values))
+    nobs   = data.sizes['time']
+    nyears = len(np.unique(data['time.year'].values));Warning("Need more robust year counting")
     data['maxwind'] = data.sel(field='u10')['anomaly'].max(dim=['lat', 'lon'])
+    trainmask = data.where(data['time.year'] != 2021, drop=True).time
+    validmask = data.where(data['time.year'] == 2021, drop=True).time
+    valid = data.sel(time=validmask)
+    data  = data.sel(time=trainmask)
 
-    if threshold is not None:
+    if threshold:
         # this affects ECDF calculations so be careful
         print(f"Applying threshold of {threshold} mps")
         ref    = data.copy()
-        tmask  = data.where(data['maxwind'] >= threshold, drop=True).time
+        tmask  = data.where(data['maxwind'] >= 15., drop=True).time
         data   = data.sel(time=tmask)
     else:
         ref    = data.copy()
@@ -98,6 +105,14 @@ def load_samples(samples_dir, training_dir, model, threshold:float=15, ny:int=50
     u      = data.uniform.values
     params = data.params.values
     print(f"Loaded {params.shape} parameters")
+
+    if threshold is not None:
+        tmask = valid.where(valid['maxwind'] >= 15., drop=True).time
+        valid = valid.sel(time=tmask)
+    
+    valid = valid.sortby('maxwind', ascending=False)
+    x_valid = valid.anomaly.values
+    u_valid = valid.uniform.values
 
     # order training samples by x
     x_maxima       = x[..., 0].max(axis=(1, 2))
@@ -112,19 +127,27 @@ def load_samples(samples_dir, training_dir, model, threshold:float=15, ny:int=50
     else:
         invalid_umask = None
 
+    if (u_valid >= 1.).sum() > 0:
+        print("Some valid data.nc is greater than 1")
+        invalid_valid_umask = (u_valid >= 1).astype(bool)
+        u_valid *= (1-EPS)
+    else:
+        invalid_valid_umask = None
+
     # transformations
     x_gumbel        = gumbel(u)
+    valid_gumbel    = gumbel(u_valid)
     samples_uniform = np.exp(-np.exp(-samples))
 
-    # calcualte how many of each set we need to generate ny years of data
+    # decide how many of each set we need to generate ny years of data
     nstorms   = len(x_ref)
-    nextreme  = len(x)
+    nextreme  = len(x) + len(x_valid)
     λ_storms  = λ(nstorms, nyears)
     λ_extreme = λ(nextreme, nyears)
     nstorms   = int(ny * λ_storms)
     nextremes = int(ny * λ_extreme)
     nhazmaps  = 10
-    print(f"Generating {nstorms} (non-extreme) samples for {ny} years of data at rate {λ_storms:,.4f} storms/year")
+    print(f"Generating {nstorms} (non-extreme) benchmark samples for {ny} years of data at rate {λ_storms:,.4f} storms/year")
 
     # make comparison samples for total dependence/independence assumptions
     n, h, w, c = samples_uniform.shape
@@ -174,8 +197,11 @@ def load_samples(samples_dir, training_dir, model, threshold:float=15, ny:int=50
     # negate MSLP
     samples_x[..., 2] *= -1
     x[..., 2]         *= -1
+    x_valid[..., 2]   *= -1
     independent_uniform[..., 2] *= -1
 
+    # these will be upside-down in heatmaps and correctly orientated
+    # in contour plots because y goes from 80 -> 95
     return {
         'samples': {
             'uniform': yflip(samples_uniform),
@@ -184,10 +210,16 @@ def load_samples(samples_dir, training_dir, model, threshold:float=15, ny:int=50
             'mask':    yflip(invalid_mask)
         },
         'training': {
-            'uniform': u,
-            'gumbel':  x_gumbel,
-            'data':    x,
-            'mask':    invalid_umask
+            'uniform': u, # yflip(u),
+            'gumbel':  x_gumbel, # yflip(x_gumbel),
+            'data':    x, # yflip(x),
+            'mask':    invalid_umask #yflip(invalid_umask, 0)
+        },
+        'valid': {
+            'uniform': u_valid, # yflip(u_valid),
+            'gumbel':  valid_gumbel, # yflip(valid_gumbel),
+            'data':    x_valid, # yflip(x_valid),
+            'mask':    invalid_valid_umask # yflip(invalid_valid_umask, 0)
         },
         'assumptions': {
             'independent': independent_x,

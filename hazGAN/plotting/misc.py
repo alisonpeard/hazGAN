@@ -82,19 +82,6 @@ def windvsreturnperiod(x:np.ndarray, _lambda:float, ax=None, windchannel=0,
     return ax
 
 
-def saffirsimpson_barchart(fake, train, title='',
-                            xlabel="", yscale='linear', bar_width=0.35):
-    """Plot bar charts comparing fake and train data across hurricane categories."""
-    fake = maxwinds(fake)
-    train = maxwinds(train)
-    
-    import pandas as pd
-    import numpy as np
-    import matplotlib.pyplot as plt
-    
-    fake = pd.Series(fake.flatten())
-    train = pd.Series(train.flatten())
-    
     def category(x):
         if x < 17:
             return -1
@@ -110,6 +97,61 @@ def saffirsimpson_barchart(fake, train, title='',
             return 4
         else:
             return 5
+        
+def saffirsimpson_barchart(fake, train, title='',
+                            xlabel="", yscale='linear',
+                            bar_width=0.25, grid=True,
+                            scale="saffirsimpson"):
+    """Plot bar charts comparing fake and train data across hurricane categories."""
+    fake = maxwinds(fake)
+    train = maxwinds(train)
+    
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    
+    fake = pd.Series(fake.flatten())
+    train = pd.Series(train.flatten())
+    
+    if scale == "saffirsimpson":
+        def category(x):
+            if x < 17:
+                return -1
+            elif x < 33:
+                return 0
+            elif x < 43:
+                return 1
+            elif x < 49:
+                return 2
+            elif x < 58:
+                return 3
+            elif x < 70:
+                return 4
+            else:
+                return 5
+    elif scale == "fives":
+        def category(x):
+            if x < 15:
+                return -1
+            elif x < 20:
+                return 0
+            elif x < 25:
+                return 1
+            elif x < 30:
+                return 2
+            elif x < 35:
+                return 3
+            elif x < 40:
+                return 4
+            elif x < 45:
+                return 5
+            elif x < 50:
+                return 6
+            elif x < 55:
+                return 7
+            else:
+                return 8
+
     
     fake = fake.apply(category).astype(int)
     train = train.apply(category).astype(int)
@@ -123,7 +165,9 @@ def saffirsimpson_barchart(fake, train, title='',
     train_density = train_counts / len(train)
     
     # Make sure all categories are represented (fill with zeros if missing)
-    all_categories = np.arange(-1, 6)
+    max_cat = max(fake_density.index.max(), train_density.index.max())
+    print(f"Max category: {max_cat}")
+    all_categories = np.arange(-1, max_cat + 1)
     fake_density = pd.Series([fake_density.get(cat, 0) for cat in all_categories],
                             index=all_categories)
     train_density = pd.Series([train_density.get(cat, 0) for cat in all_categories],
@@ -143,19 +187,30 @@ def saffirsimpson_barchart(fake, train, title='',
         edgecolor='#23445D', linewidth=0.5)
     
     # Add extra details
-    # ax.grid(True, linestyle='--', alpha=0.7)
+    if grid:
+        ax.grid(True, linestyle='-', alpha=0.3)
     ax.set_xlabel(xlabel, fontsize=18)
     ax.set_ylabel("Probability density", fontsize=18)
     ax.set_title(title, fontsize=24)
     ax.set_xticks([r + bar_width/2 for r in range(len(all_categories))])
-    ax.set_xticklabels(['Tropical\nDepression', 'Tropical\nStorm', 'Category\n1',
-                        'Category\n2', 'Category\n3', 'Category\n4', 'Category\n5'],
-                        fontsize=18)
+
+    if scale == "saffirsimpson":
+        ax.set_xticklabels(['Tropical\nDepression', 'Tropical\nStorm', 'Category\n1',
+                            'Category\n2', 'Category\n3', 'Category\n4', 'Category\n5'],
+                            fontsize=18)
+    elif scale == "fives":
+        xticklabels = ['< 15 m/s', '15-20 m/s', '20-25 m/s', '25-30 m/s',
+                            '30-35 m/s', '35-40 m/s', '40-45 m/s', '45-50 m/s',
+                            '50-55 m/s', '> 55 m/s']
+        ax.set_xticklabels(xticklabels[:len(all_categories)], fontsize=18)
     ax.set_yscale(yscale)
     ax.legend(
         fontsize=18,
     )
     fig.tight_layout()
+
+    for cat, fake, train in zip(all_categories, fake_density, train_density):
+        print(f"Cat {cat}: Fake: {fake:.2%}, Train: {train:.2%}, Difference: {abs(fake - train):.2%}, %Difference: {(abs(fake - train) / (train + 1e-6) * 100):.2f}%")
     
     return fig, ax
 

@@ -1,18 +1,3 @@
-# Step 1: Mangrove damage probability fields
-# convert samples to netcdf and add dependence assumption fields
-# load samples as netcdf (including dependentce assumptions)
-# add monthly medians
-# load traning data -> 
-# get yearly rate
-# define damage ufunc and apply it to each netcdf samples, train, test
-# NEW: save damages
-
-# Step 2: Intersect damage fields with mangrove fields
-# load mangroves
-# intersect mangroves with damage fields
-# get mangrove damages
-# Calculate damagearea
-
 # %%
 import numpy as np
 import os
@@ -29,15 +14,21 @@ env.read_env()
 # %% load generated data
 THRESHOLD = 15. # None for all storms
 TYPE = "trunc-1_0"
-MODEL     = 24
+MODEL     = 30 
 MODEL     = str(MODEL).zfill(5) if isinstance(MODEL, int) else MODEL
 MONTH     = 9 #"September"
+NYEARS    = 500
 
 samples_dir = env.str("SAMPLES_DIR")
 data_dir    = env.str("DATADIR")
 train_dir   = env.str("TRAINDIR")
 
-samples = load_samples(samples_dir, train_dir, MODEL, threshold=THRESHOLD, sampletype=TYPE)
+samples_dir = os.path.expanduser(samples_dir)
+data_dir    = os.path.expanduser(data_dir)
+train_dir   = os.path.expanduser(train_dir)
+
+# samples = load_samples(samples_dir, data_dir, train_dir, MODEL, threshold=THRESHOLD, sampletype=TYPE)
+samples = load_samples(samples_dir, data_dir, train_dir, MODEL, threshold=THRESHOLD, sampletype=TYPE, ny=NYEARS)
 data    = xr.open_dataset(os.path.join(train_dir, "data.nc"))
 nobs    = data.sizes['time']
 nyears = len(np.unique(data['time.year']))
@@ -105,15 +96,16 @@ model = mangroveDamageModel()
 
 # %%
 if True:
-    fake_damages = model.predict(fake, ["fake"])
-    fake_damages = fake_damages.rename({"fake_damage": "damage_prob"})
-    fake_damages.to_netcdf(os.path.join(data_dir, "mangroves", "fake_damages.nc"))
 
     train_damages = model.predict(train, ["train"])
     train_damages = train_damages.rename({"train_damage": "damage_prob"})
     train_damages.to_netcdf(os.path.join(data_dir, "mangroves", "train_damages.nc"))
+if False: # to avoid repeating unnecessary calculations
+    fake_damages = model.predict(fake, ["fake"])
+    fake_damages = fake_damages.rename({"fake_damage": "damage_prob"})
+    fake_damages.to_netcdf(os.path.join(data_dir, "mangroves", "fake_damages.nc"))
+    
 
-if False: # to avoid unnecessary calculations
     # predict dependent and independent damages
     dependent_damages = model.predict(dependent, ["dependent"])
     dependent_damages = dependent_damages.rename({"dependent_damage": "damage_prob"})

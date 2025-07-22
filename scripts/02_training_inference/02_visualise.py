@@ -1,11 +1,14 @@
-"""Load the generated samples and training data and plot metrics."""
+"""Load the generated samples and training data and plot metrics.
+
+00030: new data for 300 epochs
+"""
 # %%
 import os
 from environs import Env
 import numpy as np
-import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
+from importlib import reload
 
 from utils.metrics_vis import analyze_stylegan_training
 from utils.analysis import load_samples
@@ -23,11 +26,12 @@ plt.rcParams['font.sans-serif'] = 'Helvetica'
 
 
 FIELD     = 0
-MODEL     = 24
+MODEL     = 30 # 24 used for Zenodo / NHESS submission, 2 looks okay (5000 samples)
 MODEL     = str(MODEL).zfill(5) if isinstance(MODEL, int) else MODEL
 THRESHOLD = 15. # None to model all storms
-TYPE      = "trunc-1_0"
+TYPE      = ["results", "trunc-1_0"][1]
 MONTH     = 9 #"September"
+NYEARS    = 500
 
 #  begin script
 if __name__ == "__main__":
@@ -40,6 +44,9 @@ if __name__ == "__main__":
     br_dir      = env.str("BROWNRESNICK_DIR")
     train_dir    = env.str("TRAINDIR")
 
+    # set seed for np.random
+    np.random.seed(42)
+
     #  - - - - - - load training logs - - - - - - - - - - - - - - - - - - - - -
     try:
         metrics_path = os.path.join(samples_dir, MODEL, 'stats.jsonl')
@@ -49,7 +56,12 @@ if __name__ == "__main__":
         print(e)
 
     # create data
-    data = load_samples(samples_dir, data_dir, train_dir, MODEL, threshold=THRESHOLD, sampletype=TYPE)
+    samples_dir = os.path.expanduser(samples_dir)
+    data_dir    = os.path.expanduser(data_dir)
+    train_dir   = os.path.expanduser(train_dir)
+    br_dir      = os.path.expanduser(br_dir)
+
+    data = load_samples(samples_dir, data_dir, train_dir, MODEL, threshold=THRESHOLD, sampletype=TYPE, ny=NYEARS)
     u               = data['training']['uniform']
     gumbel          = data['training']['gumbel']
     x               = data['training']['data']
@@ -78,29 +90,15 @@ if __name__ == "__main__":
 
     # %% histograms
     if True:
-        # set font to Helvetica
+        reload(misc)
+
         plt.rcParams['font.family'] = 'sans-serif'
         plt.rcParams['font.sans-serif'] = 'Helvetica'
 
-        misc.invPITmaxima(samples_u, u, samples_gumbel, gumbel)
-
-        # Plots of all pixel values, wind maxima and return periods
         FAKE, REAL = samples_x, x
-
-        # misc.histogram(FAKE, REAL, misc.ravel, title="Histogram of all pixel values", xlabel="Pixel value [mps]")
-        bar_width = 0.25
-        fig, ax = misc.saffirsimpson_barchart(FAKE, REAL, bar_width=bar_width, title="")
-        
-
+        fig, ax = misc.saffirsimpson_barchart(FAKE, REAL, title="", scale="fives")
         fig.tight_layout()
-        fig.savefig(os.path.join(data_dir, "figures", "storm_distn.pdf"), dpi=300)
-
-        # %%
-        if True:
-            misc.histogram(FAKE, REAL, misc.maxwinds, title="Distribution of footprint wind maxima (log-density)", xlabel="Maxima [mps]", yscale='log')
-            misc.histogram(FAKE, REAL, misc.returnperiod, title="Storm return periods", xlabel="Return period [years]", _lambda=_lambda, yscale='log');
-            print("Real maxima", np.max(REAL[..., 0]))
-            print("Fake maxima", np.max(FAKE[..., 0]))
+        fig.savefig(os.path.join("..", "..", "..", "figures", "saffir-simpson.pdf"), dpi=300)
 
 
     # %% wind maxima vs return period plot
@@ -122,16 +120,43 @@ if __name__ == "__main__":
     if True:
         from hazGAN.constants import OBSERVATION_POINTS
         from hazGAN import op2idx
-        import pandas as pd
+        reload(scatter)
 
+        op_names = [
+            ["chittagong", "dhaka"],
+            ["buoy_23007", "buoy_23008"]
+            ][1]
         ops = op2idx(OBSERVATION_POINTS, x[0, ..., 0], extent=[80, 95, 10, 25])
         
-        pixels = [ops['chittagong'], ops['dhaka']]
+        op_a, op_b = op_names
+        pixels = [ops[op_a], ops[op_b]] # correlated
+        # pixels = [op_names[0]], ops["buoy_23008"]] # correlated
 
-        scatter.plot(samples_x, x, field=FIELD, pixels=pixels, s=10,
-                     cmap='viridis', xlabel="Chittagong", ylabel="Dhaka")
+        for i in range(3):
+            field, label = [(0, "c"), (1, "b"), (2, "a")][i]
+
+            fig = scatter.plot(samples_x, x, field=field, pixels=pixels, s=10,
+                        cmap='viridis', xlabel=op_a.replace('_', ' ').title(),
+                        ylabel=op_b.replace('_', ' ').title())
+            
+            fig.savefig(os.path.join("..", "..", "..", "figures", f"fig13{label}__{op_a}-{op_b}.png"), dpi=300, bbox_inches='tight')
         
-        fig.savefig(os.path.join(data_dir, "figures", "scatters.png"), dpi=300)
+        def get_ext_coeff(uniform_array, pixels:list):
+            from hazGAN.statistics import inverted_frechet
+            n, h, w, k = uniform_array.shape
+            uniform_array = uniform_array.reshape(n, h * w, k)
+            uniform_array = np.take(uniform_array, pixels, axis=1)
+            frechet = inverted_frechet(uniform_array)
+            minima = np.sum(np.min(frechet, axis=1), axis=0).astype(float)
+            ecs = np.divide(n, minima, out=np.zeros_like(minima), where=minima != 0, dtype=float)
+            return ecs
+
+        ecs_era5 = get_ext_coeff(u, pixels)
+        ecs_gan = get_ext_coeff(samples_u, pixels)
+
+        print(f"Fields: 0: wind speed, 1: precipitation, 2: pressure")
+        print("extremal coeffs ERA5:", ecs_era5)
+        print("extremal coeffs samples:", ecs_gan)
 
     # %% Make 64x64 plots of data
     if True:
@@ -160,37 +185,63 @@ if __name__ == "__main__":
         figc = samples.plot(samples_x[id0], x[id1], field=FIELD, title="", cbar_label=METRIC, cmap=CMAP, alpha=1e-6);
     
         # - - - - - - - Save figures to Desktop - - - - - - - - - - - - - - - -
-        figa.savefig(os.path.join(data_dir, "figures", f"samples_{FIELD}_gumbel.png"), dpi=300)
-        figb.savefig(os.path.join(data_dir, "figures", f"samples_{FIELD}_uniform.png"), dpi=300)
-        figc.savefig(os.path.join(data_dir, "figures", f"samples_{FIELD}.png"), dpi=300)
+        figa.savefig(os.path.join("..", "..", "..", "figures", f"samples_{FIELD}_gumbel.png"), dpi=300)
+        figb.savefig(os.path.join("..", "..", "..", "figures", f"samples_{FIELD}_uniform.png"), dpi=300)
+        figc.savefig(os.path.join("..", "..", "..", "figures", f"samples_{FIELD}.png"), dpi=300)
     
     # %% - - - - - Plot inter-field correlations - - - - - - - - - - - - - - -
     if True:
-        # in probability space
+        reload(fields)
+
         FIELDS = [0, 1]
+        FIELD_LABELS = ["wind speed", "precipitation", "sea-level pressure"]
 
-        figa = fields.plot(samples_u, u, fields.smith1990, fields=FIELDS, figsize=.6,
-                    title="", cbar_label=r"$\hat\theta$",
-                    cmap="Spectral", vmin=1, vmax=4)
+        print(f"\nTail dependence coefficient:")
+        figa, metrics_a = fields.plot(samples_u, u, fields.tail_dependence, fields=FIELDS, figsize=.6,
+                    title="", cbar_label=r"$\hat\lambda$",
+                    cmap="Spectral", vmin=0, vmax=1)
 
-        figb = fields.plot(samples_u, u, fields.pearson, fields=FIELDS, figsize=.6,
-                    title="", cbar_label=r"$r$", vmin=-1, vmax=1, cmap="Spectral_r")
+        print(f"\nPearson:")
+        figb, metrics_b = fields.plot(samples_u, u, fields.pearson, fields=FIELDS, figsize=.6,
+                    title="", cbar_label=r"$r$", cmap="Spectral_r", vmin=-1, vmax=1)
 
-        figa.savefig(os.path.join(data_dir, "figures", f"corr_smith_{FIELDS[0]}-{FIELDS[1]}.png"), dpi=300)
-        figb.savefig(os.path.join(data_dir, "figures", f"corr_pearson_{FIELDS[0]}-{FIELDS[1]}.png"), dpi=300)
+        figa.savefig(os.path.join("..", "..", "..", "figures", "fig12a.png"), dpi=300, bbox_inches='tight')
+        figb.savefig(os.path.join("..", "..", "..", "figures", "fig12b.png"), dpi=300, bbox_inches='tight')
+
+        text = f"The spatial correlation between the ERA5 and GAN-generated correlation fields " \
+        f"for {FIELD_LABELS[FIELDS[0]]} and {FIELD_LABELS[FIELDS[1]]} is {metrics_b['pearson']:.3f} " \
+        f"(MAE = {metrics_b['mae']:.3f}). "
+
+        text += f"For the extremes, spatial correlation between the ERA5 and GAN-generated fields of tail dependence coefficients " \
+                f"for {FIELD_LABELS[FIELDS[0]]} and {FIELD_LABELS[FIELDS[1]]} is {metrics_a['pearson']:.3f} " \
+                f"(MAE = {metrics_a['mae']:.3f})."
+
+        print(text)
     # %% - - - - - Plot spatial correlations - - - - - - - - - - - - - - - - -
     if True:
-        FIELD = 0
-        figa = spatial.plot(samples_u, u, spatial.pearson, field=FIELD, figsize=.6,
-        title="", cbar_label=r"$r$", cmap="Spectral_r", vmin=-1, vmax=1)
+        reload(spatial)
 
-        figa.savefig(os.path.join(data_dir, "figures", f"corr_pearson_{FIELD}.png"), dpi=300)
+        for FIELD in [2, 1, 0]:
+            figa, metrics_a = spatial.plot(samples_u, u, spatial.pearson, field=FIELD, figsize=.6,
+            title="", cbar_label=r"$r$", cmap="Spectral_r", vmin=-1, vmax=1)
 
-        # extremal coefficients (take a minute)
-        figb = spatial.plot(samples_u, u, spatial.smith1990, field=FIELD, figsize=.6,
-        title="", cbar_label=r"$\hat\theta$", cmap="Spectral", vmin=1, vmax=4)
+            figa.savefig(os.path.join("..", "..", "..", "figures", "fig11a.png"), dpi=300, bbox_inches='tight')
 
-        figb.savefig(os.path.join(data_dir, "figures", f"corr_smiths_{FIELD}.png"), dpi=300)
+            # extremal coefficients (take a hot minute)
+            figb, metrics_b = spatial.plot(samples_u, u, spatial.tail_dependence, field=FIELD, figsize=.6,
+            title="", cbar_label=r"$\hat\lambda$", cmap="Spectral", vmin=0, vmax=1)
+
+            figb.savefig(os.path.join("..", "..", "..", "figures", "fig11b.png"), dpi=300, bbox_inches='tight')
+
+            text = f"The spatial correlation between the ERA5 and GAN-generated fields " \
+                f"for {FIELD_LABELS[FIELD]} is {metrics_a['pearson']:.3f} " \
+                f"(MAE = {metrics_a['mae']:.3f})."
+            
+            text += f"For the extremes, spatial correlation between the ERA5 and GAN-generated fields of tail dependence coefficients " \
+                    f"for {FIELD_LABELS[FIELD]} is {metrics_b['pearson']:.3f} " \
+                    f"(MAE = {metrics_b['mae']:.3f})."
+            
+            print(text)
 
     # %% 
  

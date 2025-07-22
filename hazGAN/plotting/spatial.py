@@ -1,5 +1,6 @@
 # %%
 import numpy as np
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from ..statistics import pairwise_extremal_coeffs
@@ -29,8 +30,8 @@ def plot(fake, train, func, field=0, figsize=1., cmap=CMAP, vmin=None, vmax=None
 
     fig, axs, cax = makegrid(1, 2, figsize=figsize, projection=None)
 
-    im = axs[0].imshow(train_res, cmap=cmap)
-    _  = axs[-1].imshow(fake_res, cmap=cmap)
+    im = axs[0].imshow(train_res, cmap=cmap, vmin=vmin, vmax=vmax)
+    _  = axs[-1].imshow(fake_res, cmap=cmap, vmin=vmin, vmax=vmax)
 
     for ax in axs:
         ax.spines['top'].set_visible(True)
@@ -42,7 +43,13 @@ def plot(fake, train, func, field=0, figsize=1., cmap=CMAP, vmin=None, vmax=None
 
     fig.colorbar(im, cax=cax, label=cbar_label)
 
-    return fig
+    corr = np.corrcoef(train_res.flatten(), fake_res.flatten())[0, 1]
+    print(f"Pearson correlation: {corr:.4f}")
+
+    mae = np.mean(np.abs(train_res - fake_res))
+    print(f"Mean Absolute Error: {mae:.4f}")
+
+    return fig, {"mae": mae, "pearson": corr}
 
 
 def smith1990(array):
@@ -58,34 +65,46 @@ def pearson(array):
     return corrs
 
 
-def taildependence(array, thresh=.9, metric='chi'):
-    from hazGAN.R import R
-
-    def f(a, b, thresh=thresh):
-        return R.taildependence(a, b, thresh)[metric]
+def tail_dependence(array):
 
     n, h, w = array.shape
     array = array.reshape(n, h * w)
 
     chi_values = np.empty((h * w, h * w))
-    for i in range(h * w):
+    for i in tqdm(range(h * w), desc="Calculating tail dependence coefficients"):
         for j in range(i):
-            print(i, j)
-            chi = f(array[:, i], array[:, j])
+            chi = _tail_dependence_coeff(array[:, i], array[:, j])
             chi_values[i, j] = chi
             chi_values[j, i] = chi
 
     return chi_values
 
 
-if __name__ == "__main__":
-    import xarray as xr
+def _tail_dependence_coeff(u, v):
+    """
+    Classical tail dependence coefficient λ for upper tail dependence.
 
-    data_path = "/Users/alison/Documents/DPhil/paper1.nosync/training/64x64/data.nc"
-    data = xr.open_dataset(data_path)
-    uniform = data['uniform'].values
+    Args:
+        u, v: 1D arrays of uniform marginals
+        tail: 'upper' or 'lower'
+    Returns:
+        λ: tail dependence coefficient
 
-    plot(uniform, uniform, smith1990, title="Extremal correlation", cbar_label="Χ") # too big 4096 * 4096
-    plot(uniform, uniform, pearson, title="Pearson correlation", cbar_label="r")
-    plot(uniform, uniform, taildependence, title="Tail dependence", cbar_label="χ")
+    Refs:
+        Joe, H. (1997). Multivariate Models and Dependence Concepts. Chapman & Hall.
+        Nelsen, R. B. (2006). An Introduction to Copulas. Springer.
+    """
+    thresholds = np.arange(0.8, 0.99, 0.01)  # Multiple thresholds
+    lambdas = []
+    
+    for t in thresholds:
+        u_exceed = u > t
+        both_exceed = (u > t) & (v > t)
+        
+        if np.sum(u_exceed) > 0:
+            lambda_t = np.sum(both_exceed) / np.sum(u_exceed)
+            lambdas.append(lambda_t)
+
+    return np.mean(lambdas) if lambdas else 0
+
 # %%

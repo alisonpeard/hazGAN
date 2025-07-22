@@ -41,9 +41,9 @@ hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k', 'density': True}
 
 FIELDS = ["u10", "tp", 'mslp']
 VISUALISATIONS = True
+PROCESS_OUTLIERS = False
 SAVE_DATA = False
 THRESHOLD = 0.75 # (for outliers, not using)
-PROCESS_OUTLIERS = False
 RES = (64, 64)
 
 # for snakemake in future
@@ -81,6 +81,7 @@ def main(datadir):
     
     # Check fit quality and that it looks right
     if VISUALISATIONS:
+        import scipy.stats
         for var in  FIELDS:
             p_crit = 0.05
             # s0 = gdf["storm"].min()
@@ -95,7 +96,7 @@ def main(datadir):
             plt.tight_layout()
             plt.subplots_adjust(right=0.8) 
 
-            cmap = "PuBu_r" # "viridis" # "PuBu_r"
+            cmap = "PuBu_r"
             p_cmap = plt.get_cmap(cmap)
             p_cmap.set_under("crimson")
 
@@ -105,7 +106,6 @@ def main(datadir):
             ds[f"shape_{var}"].plot(ax=axs[3], cmap=cmap, add_colorbar=False) #, vmin=-0.81, vmax=0.28)
 
             # plot the density for three sample grid points
-            import scipy.stats
             if var == 'u10':
                 dist = getattr(scipy.stats, 'weibull_min')
             else:
@@ -183,7 +183,7 @@ def main(datadir):
                 axs[2].set_title("σ")
                 axs[3].set_title("ξ")
                 
-            fig.savefig(f"/Users/alison/Desktop/f01_{var}.png", dpi=300)
+            # fig.savefig(f"/Users/alison/Desktop/f01_{var}.png", dpi=300)
 
     # return gdf # TODO: remove this line later
     #  important: check ecdfs are in (0, 1)
@@ -271,8 +271,8 @@ def main(datadir):
     # extra information about the dataset
     ds.attrs['created'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     ds.attrs['script'] = f"scripts/make_training.py"
-    ds.attrs['last git commit'] = subprocess.check_output(["git", "describe", "--always"], cwd=os.path.dirname(os.path.abspath(__file__))).strip().decode('UTF-8')
-    ds.attrs['git branch'] = subprocess.Popen(["git", "branch", "--show-current"], stdout=subprocess.PIPE).communicate()[0].decode('UTF-8')
+    # ds.attrs['last git commit'] = subprocess.check_output(["git", "describe", "--always"], cwd=os.path.dirname(os.path.abspath(__file__))).strip().decode('UTF-8')
+    # ds.attrs['git branch'] = subprocess.Popen(["git", "branch", "--show-current"], stdout=subprocess.PIPE).communicate()[0].decode('UTF-8')
     ds.attrs['project'] = 'hazGAN'
     ds.attrs['note'] = "Fixed interpolation: [0, 1] --> (0, 1)."
 

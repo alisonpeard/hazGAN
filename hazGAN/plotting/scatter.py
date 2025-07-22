@@ -6,12 +6,12 @@ import matplotlib.pyplot as plt
 
 from .base import CMAP
 from ..constants import channel_labels
+from ..statistics import get_extremal_coeffs_nd
 
 
 def plot(fake, real, field=0, pixels=None, cmap=CMAP, s=10,
          xlabel=None, ylabel=None, figsize=(6, 3)):
-        # find corresponding to OPs like before
-        n, h, w, c = real.shape
+        _, h, w, c = real.shape
         if pixels is None:
             i, j = random.sample(range(h * w), 2)
         else:
@@ -36,15 +36,14 @@ def plot(fake, real, field=0, pixels=None, cmap=CMAP, s=10,
             else:
                 ax.set_xlabel(f"pixel index {j}", fontsize=14, fontweight='bold')
 
-            ax.set_facecolor('#f3f3f3ff')
+            # ax.set_facecolor('#f3f3f3ff')
             ax.label_outer()
         
         plt.tight_layout()
 
         fig.suptitle(channel_labels[field].capitalize(), y=1.05, fontsize=14, fontweight='bold')
 
-
-
+        return fig
 
 
 def single_scatter(data, ax=None, sample_pixels=None, cmap=CMAP, s=10):
@@ -84,46 +83,3 @@ def scatter_density(x, y, ax, title='', cmap=CMAP, s=10):
     ax.scatter(x, y, c=z, s=s, cmap=cmap)
     ax.set_title(title)
     return ax
-
-
-# def scatter_density2(x, y, ax, title='', cmap='cividis'):
-#     """Sometimes first doesn't work -- need to resolve why later."""
-#     xy = np.vstack([x,y])
-#     z = gaussian_kde(xy)(xy)
-#     idx = z.argsort()
-#     x, y, z = x[idx], y[idx], z[idx]
-#     ax.scatter(x, y, c=z, s=10, cmap=cmap)
-#     ax.set_title(title)
-#     return ax
-
-
-# def compare_channels_plot(train_images, test_images, fake_data, cmap='cividis'):
-#     fig, axs = plt.subplots(3, 3, figsize=(15, 3))
-
-#     for i, j in enumerate([300, 201, 102]):
-
-#         n, h, w, c = train_images.shape
-#         data_ravel = np.reshape(train_images, [n, h * w, c])
-#         data_sample = np.take(data_ravel, j, axis=1).numpy()
-#         x = np.array([data_sample[:, 0]]).transpose()
-#         y = np.array([data_sample[:, 1]]).transpose()
-#         scatter_density(x, y, ax=axs[i, 0], cmap=cmap)
-
-#         n, h, w, c = test_images.shape
-#         data_ravel = np.reshape(test_images, [n, h * w, c])
-#         data_sample = np.take(data_ravel, j, axis=1).numpy()
-#         x = np.array([data_sample[:, 0]]).transpose()
-#         y = np.array([data_sample[:, 1]]).transpose()
-#         scatter_density(x, y, ax=axs[i, 1], cmap=cmap)
-
-#         n, h, w, c = fake_data.shape
-#         data_ravel = np.reshape(fake_data, [n, h * w, c])
-#         data_sample = np.take(data_ravel, j, axis=1).numpy()
-#         x = np.array([data_sample[:, 0]]).transpose()
-#         y = np.array([data_sample[:, 1]]).transpose()
-#         scatter_density(x, y, ax=axs[i, 2], cmap=cmap)
-
-#         for ax in axs.ravel():
-#             ax.set_xlabel('u10')
-#             ax.set_ylabel('v10')
-#     return fig
