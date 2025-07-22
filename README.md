@@ -1,6 +1,6 @@
 # Hazard GAN
 
-This repo contains all code to reproduce the figures in the paper "Simulating mulitvariate hazards with generative deep learning". Note that due to stochasticity in the StyleGAN training, some results may vary slightly.
+This repo contains all code to reproduce the figures in the preprint "Simulating mulitvariate hazards with generative deep learning". Note that due to stochasticity in the StyleGAN training, some results may vary slightly.
 
 
 ## Installation
