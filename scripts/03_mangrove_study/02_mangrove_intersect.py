@@ -46,7 +46,7 @@ if True:
     fake_damages = fake_damages.isel(sample=fake_mask)
 
 # %%
-mangrove_grid_path = os.path.join(data_dir, "mangroves", "mangrove_grid.nc")
+mangrove_grid_path = os.path.join(mangroves_dir, "mangrove_grid.nc")
 
 if not os.path.exists(mangrove_grid_path):
     from shapely.geometry import box
@@ -141,7 +141,7 @@ plt.rcParams['font.sans-serif'] = 'Helvetica'
 
 scatter_kwargs = {'linestyle': 'none', 'marker': 'o', 'mfc': 'k',
                   'mec': 'k', 'mew': 0.25, 'alpha': 0.8, 'ms': 4}
-line_kwargs = {'linewidth': 2, 'alpha': 0.8, 'marker': 'o', 'mfc': 'none', 'ms': 4}
+line_kwargs = {'linewidth': 2, 'alpha': 0.8, 'marker': 'o', 'ms': 3} #, 'mfc': 'none'
 
 fig, ax = plt.subplots(figsize=(7.0, 4.33))
 
@@ -149,6 +149,18 @@ riskprofileplot(tree, 'ERA5', ax, color='k', **scatter_kwargs)
 riskprofileplot(tree, 'HazGAN', ax, color="#4682B4", **line_kwargs)
 riskprofileplot(tree, 'Independent', ax, color=blues[3], zorder=0, **line_kwargs)
 riskprofileplot(tree, 'Dependent', ax, color=blues[2], **line_kwargs)
+
+def rp_damages(tree:xr.DataTree, label:str, rp:float) -> xr.Dataset:
+    ds = tree[label].to_dataset()
+    ds = ds.swap_dims({'sample': 'return_period'})
+    damages = ds.sel(return_period=rp, method='nearest')["expected_damage"]
+    return damages.values.item()
+
+ax.vlines(100, ax.get_ylim()[0], rp_damages(tree, 'Dependent', 100), color='#333333', linestyle="--", alpha=0.4, linewidth=1, zorder=1)
+ax.hlines(rp_damages(tree, 'ERA5', 100), 0, 100, color='#333333', linestyle="--", alpha=0.4, linewidth=1)
+ax.hlines(rp_damages(tree, 'HazGAN', 100),0, 100, color='#4682B4', linestyle="--", alpha=0.4, linewidth=1)
+ax.hlines(rp_damages(tree, 'Independent', 100),0, 100, color=blues[3], linestyle="--", alpha=0.4, linewidth=1)
+ax.hlines(rp_damages(tree, 'Dependent', 100),0, 100, color=blues[2], linestyle="--", alpha=0.4, linewidth=1)
 
 # legend options
 ax.legend(
@@ -189,10 +201,6 @@ ax.tick_params(axis='y', which='minor', length=4)
 ax.xaxis.set_minor_formatter(plt.NullFormatter())
 ax.xaxis.set_minor_locator(plt.NullLocator())
 
-# # mark the 1-year return period
-# ax.fill_betweenx([ymin, ymax], 0, 1, color="#F1F3F5", alpha=0.8, zorder=0) #'#F4F1EA'
-# ax.axvline(x=1, ymax=0.95, color='#333333', linestyle='dashed', linewidth=1, zorder=1)
-
 ax.set_xlabel("Return period (years)", fontsize=13, fontweight='bold')
 ax.set_ylabel("Expected\ndamage\narea\n(km$^2$)", 
               fontsize=12, 
@@ -202,11 +210,13 @@ ax.set_ylabel("Expected\ndamage\narea\n(km$^2$)",
               va='center',
               ha='right')
 
+# mark the 100-year return period
+# ax.fill_betweenx([ymin, ymax], 0, 100, color="#F1F3F5", alpha=0.8, zorder=0) #'#F4F1EA'
+# ax.axvline(x=100, ymax=0.95, color='#333333', linestyle='dashed', linewidth=1, zorder=1)
+
+
 plt.subplots_adjust(left=0.2) 
-plt.tight_layout()
-
 plt.tight_layout()  
-
 plt.savefig(os.path.join(data_dir, "..", "figures", 'risk_profile.pdf'), dpi=300, bbox_inches='tight')
 
 

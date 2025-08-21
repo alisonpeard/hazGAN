@@ -37,7 +37,7 @@ def yflip(array: np.ndarray, ax=1) -> np.ndarray:
         return np.flip(array, axis=ax)
 
 
-def load_samples(samples_dir, data_dir, training_dir, model, threshold=None, ny=500, sampletype='samples'):
+def load_samples(samples_dir, training_dir, model, threshold=None, ny=500, sampletype='samples'):
     """Load and process samples and training data for visualisation"""
     # load samples - - - - - - - - --- - - - -- - -- - - -- -- - - -- - - - -
     samples_path = os.path.join(samples_dir, model, "results", sampletype)

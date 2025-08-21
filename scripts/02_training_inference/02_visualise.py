@@ -40,8 +40,6 @@ if __name__ == "__main__":
     env.read_env()
 
     samples_dir = env.str("SAMPLES_DIR")
-    data_dir    = env.str("DATADIR")
-    br_dir      = env.str("BROWNRESNICK_DIR")
     train_dir    = env.str("TRAINDIR")
 
     # set seed for np.random
@@ -57,11 +55,11 @@ if __name__ == "__main__":
 
     # create data
     samples_dir = os.path.expanduser(samples_dir)
-    data_dir    = os.path.expanduser(data_dir)
     train_dir   = os.path.expanduser(train_dir)
-    br_dir      = os.path.expanduser(br_dir)
 
-    data = load_samples(samples_dir, data_dir, train_dir, MODEL, threshold=THRESHOLD, sampletype=TYPE, ny=NYEARS)
+    data = load_samples(samples_dir, train_dir, MODEL, threshold=THRESHOLD, sampletype=TYPE, ny=NYEARS)
+    
+    # %% loading takes a while, checkpoint here
     u               = data['training']['uniform']
     gumbel          = data['training']['gumbel']
     x               = data['training']['data']
@@ -77,16 +75,29 @@ if __name__ == "__main__":
     samples_x       = data['samples']['data']
     samples_mask    = data['samples']['mask']
 
-    # %% add monthly medians to x data
+    #  add monthly medians to x data
     medians = xr.open_dataset(os.path.join(train_dir, "data.nc"))["medians"]
     medians["month"] = medians["time.month"]
     month_time_mask = medians["month"] == MONTH
     medians = medians.isel(time=month_time_mask)
     medians = medians.mean(dim='time').values
 
+    print(f"Median pressure {np.quantile(medians[..., 2], 0.5):.2f} Pa")
+    print(f"Median wind speed {np.quantile(medians[..., 0], 0.5):.2f} m/s")
+    print(f"Median precipitation {np.quantile(medians[..., 1], 0.5):.2f} m")
+
+    print(f"Median pressure anomaly {np.quantile(x[..., 2], 0.5):.2f} Pa")
+    print(f"Median wind speed anomaly {np.quantile(x[..., 0], 0.5):.2f} m/s")
+    print(f"Median precipitation anomaly {np.quantile(x[..., 1], 0.5):.2f} m")
+
+    # %%
     x += medians
     valid_x += medians
     samples_x += medians
+
+    x[..., 2] *= -1
+    valid_x[..., 2] *= -1
+    samples_x[..., 2] *= -1
 
     # %% histograms
     if True:
@@ -160,34 +171,42 @@ if __name__ == "__main__":
 
     # %% Make 64x64 plots of data
     if True:
+        import cmocean.cm as cmo
+        reload(samples)
+
         FIELD = 0
         if FIELD == 0:
             METRIC = r'ms$^{-1}$'
-            CMAP   = "viridis" # Spectral_r
+            CMAP   = "viridis" # Spectral_r,  # "viridis", cmo.speed
         elif FIELD == 1:
             METRIC = 'm'
-            CMAP   = "PuBu"
+            CMAP   = cmo.rain
         elif FIELD == 2:
             METRIC = "Pa"
-            CMAP   = "YlOrBr"
+            CMAP   = cmo.diff
 
-        if False:
+        if True:
             # shuffle both in case they were sorted earlier
-            id0 = np.random.permutation(samples_u.shape[0])
-            id1 = np.random.permutation(u.shape[0])
+            if False:
+                id0 = np.random.permutation(samples_u.shape[0])
+                id1 = np.random.permutation(u.shape[0])
         else:
             # or don't
             id0 = np.arange(samples_u.shape[0])
             id1 = np.arange(u.shape[0])
         
+        if False:
+            samples_x = np.clip(samples_x, 0, None)
+            x = np.clip(x, 0, None)
+
         figa = samples.plot(samples_gumbel[id0], gumbel[id1], field=FIELD, title="", cmap=CMAP, ndecimals=0)
         figb = samples.plot(samples_u[id0], u[id1], field=FIELD, title="", cbar_label="", cmap=CMAP, ndecimals=1)
-        figc = samples.plot(samples_x[id0], x[id1], field=FIELD, title="", cbar_label=METRIC, cmap=CMAP, alpha=1e-6);
+        figc = samples.plot(samples_x[id0], x[id1], field=FIELD, title="", cbar_label=METRIC, cmap=CMAP, vmin=0)
     
-        # - - - - - - - Save figures to Desktop - - - - - - - - - - - - - - - -
+        # - - - - - - - Save figures - - - - - - - - - - - - - - - -
         figa.savefig(os.path.join("..", "..", "..", "figures", f"samples_{FIELD}_gumbel.png"), dpi=300)
         figb.savefig(os.path.join("..", "..", "..", "figures", f"samples_{FIELD}_uniform.png"), dpi=300)
-        figc.savefig(os.path.join("..", "..", "..", "figures", f"samples_{FIELD}.png"), dpi=300)
+        figc.savefig(os.path.join("..", "..", "..", "figures", f"samples_{FIELD}.png"), dpi=300, transparent=True, bbox_inches='tight')
     
     # %% - - - - - Plot inter-field correlations - - - - - - - - - - - - - - -
     if True:

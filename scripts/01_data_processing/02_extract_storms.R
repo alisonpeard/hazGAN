@@ -34,7 +34,7 @@ try(setwd(dirname(rstudioapi::getActiveDocumentContext()$path)))
 
 readRenviron("../../.env")
 
-WD         <- Sys.getenv("ERA5DIR")
+WD <- Sys.getenv("ERA5DIR")
 
 #%%######### LOAD AND STANDARDISE DATA #########################################
 print("Loading and standardising data...")
