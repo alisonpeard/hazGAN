@@ -16,7 +16,6 @@ Output files:
 import os
 os.environ["USE_PYGEOS"] = "0"
 from environs import Env
-import subprocess
 import warnings
 
 import numpy as np
@@ -29,12 +28,9 @@ from calendar import month_name as month
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import cartopy
-from cartopy import crs as ccrs
 
-from hazGAN.utils import res2str
-from hazGAN.plotting import palettes
-
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 
 plt.rcParams['font.family'] = 'serif'
 hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k', 'density': True}
@@ -91,7 +87,6 @@ def main(datadir):
             fig, axs = plt.subplots(1, 4, figsize=(16, 3), sharex=True, sharey=True,
             subplot_kw={'projection': ccrs.PlateCarree()})
 
-            # ax4 = fig.add_subplot(1, 5, 5, projection=None)
             ax4 = fig.add_axes([0.825, 0.1, 0.15, 0.8])   # [left, bottom, width, height]
             plt.tight_layout()
             plt.subplots_adjust(right=0.8) 
@@ -138,23 +133,15 @@ def main(datadir):
                 ax4.yaxis.set_major_formatter(percentage_formatter)
                 ax4.tick_params(direction='in')
                 ax4.yaxis.set_label_position("right")
-                # ax4.tick_params(axis='y', pad=-40)
 
             # add colorbar for shape
             sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
             sm.set_array([])
             cbar = fig.colorbar(sm, ax=ax4)
-            # set label to none
             cbar.set_label(None)
             cbar.set_label("ξ")
-            # put cbar label on LEFT of it
             cbar.ax.yaxis.set_label_position('left')
-            # rotate the cbar label to be UPRIGHT
             cbar.ax.set_ylabel('ξ', rotation=0, labelpad=15)
-            # cbar.set_ticks(shapes)
-            # cbar.set_ticklabels([f"{s:.2f}" for s in shapes])
-
-            # ax4.legend()
 
             if var == 'u10':
                 axs[0].set_title("H₀: X~Weibull(ξ,μ,σ)")
@@ -166,24 +153,11 @@ def main(datadir):
             axs[3].set_title("ξ")
 
             for ax in axs[:-1].ravel():
-                ax.add_feature(cartopy.feature.COASTLINE, linewidth=0.5)
+                ax.add_feature(cfeature.COASTLINE, linewidth=0.5)
                 ax.set_xlabel("Longitude")
                 ax.set_ylabel("Latitude")
 
-            # fig.suptitle(f"Fit for ERA5 {var.upper()}, n = {gdf['storm'].nunique()}")
             print(gdf[gdf[f"pk_{var}"] < p_crit]["grid"].nunique(), "significant p-values")
-
-            if False:
-                fig, axs = plt.subplots(1, 4, figsize=(18, 3))
-                gdf['pk_u10'].hist(ax=axs[0], **hist_kws)
-                gdf[f"thresh_{var}"].hist(ax=axs[1], **hist_kws)
-                gdf[f"scale_{var}"].hist(ax=axs[2], **hist_kws)
-                gdf[f"shape_{var}"].hist(ax=axs[3], **hist_kws)
-                axs[1].set_title("μ")
-                axs[2].set_title("σ")
-                axs[3].set_title("ξ")
-                
-            # fig.savefig(f"/Users/alison/Desktop/f01_{var}.png", dpi=300)
 
     # return gdf # TODO: remove this line later
     #  important: check ecdfs are in (0, 1)
@@ -271,78 +245,13 @@ def main(datadir):
     # extra information about the dataset
     ds.attrs['created'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     ds.attrs['script'] = f"scripts/make_training.py"
-    # ds.attrs['last git commit'] = subprocess.check_output(["git", "describe", "--always"], cwd=os.path.dirname(os.path.abspath(__file__))).strip().decode('UTF-8')
-    # ds.attrs['git branch'] = subprocess.Popen(["git", "branch", "--show-current"], stdout=subprocess.PIPE).communicate()[0].decode('UTF-8')
     ds.attrs['project'] = 'hazGAN'
     ds.attrs['note'] = "Fixed interpolation: [0, 1] --> (0, 1)."
-
-    # remove outliers
-    # if PROCESS_OUTLIERS:
-        # ds = process_outliers(ds, THRESHOLD, datadir=datadir, visuals=VISUALISATIONS)
 
     # save
     if SAVE_DATA:
         print("Finished! Saving to netcdf...")
-        # ds.to_netcdf(os.path.join(datadir, OUTFILES[0]))
         print("Saved to", os.path.join(datadir, OUTFILES[0]))
-
-    if False:
-        # day of storm
-        cmap = mpl.cm.YlOrRd
-        t = np.random.uniform(0, T, 1).astype(int)[0]
-
-        fig, axs = plt.subplots(1, 2, figsize=(8, 3))
-        ax = axs[0]
-        ds_t = ds.isel(time=t, field=0).uniform #+ ds.isel(time=t).medians
-        ds_t.plot(ax=ax)
-        ax.set_title(f"Storm {t}")
-
-        ax = axs[1]
-        ds_t = ds.isel(time=t).day_of_storm.astype(int)
-        vmin = ds_t.min().values
-        vmax = ds_t.max().values
-
-        bounds = np.arange(0.5, 11.5, 1).tolist()
-        ticks = np.arange(0, 12, 1).tolist()
-        norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
-        ds_t.plot(cmap=cmap, norm=norm, ax=ax, cbar_kwargs={'ticks': ticks})
-        ax.set_title(f"Day of storm {t}")
-
-        # view netcdf file
-        warnings.warn("Change ds_t to (-ds_t) if looking at MSLP")
-        t = np.random.uniform(0, T, 1).astype(int)[0]
-        ds_t = ds.isel(time=t)
-        fig, axs = plt.subplots(1, 2, figsize=(10, 3))
-        ds_t.isel(field=0).anomaly.plot.contourf(cmap='Spectral_r', ax=axs[0], levels=20)
-        ds_t.isel(field=1).anomaly.plot.contourf(cmap='PuBu', ax=axs[1], levels=15)
-        fig.suptitle("Anomaly")
-
-        fig, axs = plt.subplots(1, 2, figsize=(10, 3))
-        ds_t.isel(field=0).medians.plot.contourf(cmap='Spectral_r', ax=axs[0], levels=20)
-        ds_t.isel(field=1).medians.plot.contourf(cmap='PuBu', ax=axs[1], levels=15)
-        fig.suptitle(f"Median")
-
-        fig, axs = plt.subplots(1, 2, figsize=(10, 3))
-        (ds_t.isel(field=0).anomaly + ds_t.isel(field=0).medians).plot.contourf(cmap='Spectral_r', ax=axs[0], levels=20)
-        (ds_t.isel(field=1).anomaly - ds_t.isel(field=1).medians).plot.contourf(cmap='PuBu', ax=axs[1], levels=15)
-        fig.suptitle('Anomaly + Median')
-
-        # check the highest wind speed is also the highest return period
-        highest_wind = ds.anomaly.isel(field=0).max(dim=['lat', 'lon']).values.max()
-        highest_rp_wind = ds.anomaly.isel(field=0, time=ds.storm_rp.argmax()).max(dim=['lat', 'lon']).values
-        assert highest_wind == highest_rp_wind, "Highest wind speed doesn't correspond to highest return period"
-
-        # have a look at the highest return period event
-        ds_outlier = ds.isel(time=ds.storm_rp.argmax())
-        fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-        wind_footprint = ds_outlier.anomaly.isel(field=0) + ds_outlier.medians.isel(field=0)
-        precip_footprint = (ds_outlier.anomaly.isel(field=1) + ds_outlier.medians.isel(field=1))
-        wind_footprint.plot(cmap='Spectral_r', ax=axs[0])
-        precip_footprint.plot(cmap='PuBu', ax=axs[1])
-
-        fig, axs = plt.subplots(1, 2, figsize=(16, 4))
-        for i, ax in enumerate(axs):
-            ax.hist(ds.isel(field=i).anomaly.values.ravel(), **hist_kws);
         
     ds.close()
     return gdf
