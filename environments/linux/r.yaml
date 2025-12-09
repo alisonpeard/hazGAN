@@ -1,0 +1,28 @@
+# when installing on Apple Silicon run snakemake
+# with CONDA_SUBDIR=osx-65 snakemake ...
+name: R
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - r-base
+  - r-essentials
+  - r-zoo
+  - r-eva
+  - r-extRemes
+  - r-dplyr
+  - r-lubridate
+  - r-future
+  - r-furrr
+  - r-data.table
+  - r-progress
+  - r-magrittr
+  - r-goftest
+  - r-arrow
+  - r-ggplot2
+  - r-tidync
+  - r-logger
+  - r-evd # POT::fitgpd -> evd::fpot, POT::pgpd -> evd::pgpd
+  # the following packages are incompatible:
+  - r-CFtime # r-base >= 4.0
+  # - r::r-pot # r-base <= 3.6
