@@ -58,7 +58,25 @@ if __name__ == "__main__":
     train_dir   = os.path.expanduser(train_dir)
 
     data = load_samples(samples_dir, train_dir, MODEL, threshold=THRESHOLD, sampletype=TYPE, ny=NYEARS)
-    
+
+    # %% NEW: September 2025 save netCDF
+    if True:
+        lats = np.linspace(10, 25, 64)
+        lons = np.linspace(80, 95, 64)
+        samples_idx = np.arange(data['samples']['data'].shape[0])
+        ds = xr.Dataset(
+            {
+                "data": (("sample", "lat", "lon", "field"), data['samples']['data']),
+                "uniform": (("sample", "lat", "lon", "field"), data['samples']['uniform']),
+            },
+            coords={
+                "lon": (("lon",), lons),
+                "lat": (("lat",), lats),
+                "field": (("field",), ["u10", "tp", "mslp"]),
+                "sample": (("sample",), samples_idx),
+            })
+        ds.to_netcdf(os.path.join(samples_dir, MODEL, f"samples_{TYPE}_thresh{THRESHOLD}_n{NYEARS}.nc"))
+        
     # %% loading takes a while, checkpoint here
     u               = data['training']['uniform']
     gumbel          = data['training']['gumbel']
@@ -100,7 +118,7 @@ if __name__ == "__main__":
     samples_x[..., 2] *= -1
 
     # %% histograms
-    if True:
+    if False:
         reload(misc)
 
         plt.rcParams['font.family'] = 'sans-serif'
@@ -113,7 +131,7 @@ if __name__ == "__main__":
 
 
     # %% wind maxima vs return period plot
-    if True:
+    if False:
         _lambda = len(x) / 81
         fig, ax = plt.subplots(figsize=(6, 6), dpi=300)
         transpose = False
@@ -128,7 +146,7 @@ if __name__ == "__main__":
         
     
     # %% Brown-Resnick style scatterplots
-    if True:
+    if False:
         from hazGAN.constants import OBSERVATION_POINTS
         from hazGAN import op2idx
         reload(scatter)
@@ -170,7 +188,7 @@ if __name__ == "__main__":
         print("extremal coeffs samples:", ecs_gan)
 
     # %% Make 64x64 plots of data
-    if True:
+    if False:
         import cmocean.cm as cmo
         reload(samples)
 
@@ -227,17 +245,17 @@ if __name__ == "__main__":
         figa.savefig(os.path.join("..", "..", "..", "figures", "fig12a.png"), dpi=300, bbox_inches='tight')
         figb.savefig(os.path.join("..", "..", "..", "figures", "fig12b.png"), dpi=300, bbox_inches='tight')
 
-        text = f"The spatial correlation between the ERA5 and GAN-generated correlation fields " \
-        f"for {FIELD_LABELS[FIELDS[0]]} and {FIELD_LABELS[FIELDS[1]]} is {metrics_b['pearson']:.3f} " \
-        f"(MAE = {metrics_b['mae']:.3f}). "
+        text = f"The correlation between the ERA5 and GAN-generated correlation fields " \
+        f"\nfor {FIELD_LABELS[FIELDS[0]]} and {FIELD_LABELS[FIELDS[1]]} is {metrics_b['pearson']:.3f} " \
+        f"\n(MAE = {metrics_b['mae']:.3f}). "
 
-        text += f"For the extremes, spatial correlation between the ERA5 and GAN-generated fields of tail dependence coefficients " \
-                f"for {FIELD_LABELS[FIELDS[0]]} and {FIELD_LABELS[FIELDS[1]]} is {metrics_a['pearson']:.3f} " \
-                f"(MAE = {metrics_a['mae']:.3f})."
+        text += f"\nFor the extremes, inter-variable correlation between the ERA5 and GAN-generated fields of tail dependence coefficients " \
+                f"\nfor {FIELD_LABELS[FIELDS[0]]} and {FIELD_LABELS[FIELDS[1]]} is {metrics_a['pearson']:.3f} " \
+                f"\n(MAE = {metrics_a['mae']:.3f})."
 
         print(text)
     # %% - - - - - Plot spatial correlations - - - - - - - - - - - - - - - - -
-    if True:
+    if False:
         reload(spatial)
 
         for FIELD in [2, 1, 0]:
