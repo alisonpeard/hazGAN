@@ -104,7 +104,7 @@ def _tail_dependence_coeff(u, v):
         λ: tail dependence coefficient
 
     Refs:
-        Joe, H. (1997). Multivariate Models and Dependence Concepts. Chapman & Hall.
+        https://doi.org/10.1201/9780367803896
         Nelsen, R. B. (2006). An Introduction to Copulas. Springer.
     """
     thresholds = np.arange(0.8, 0.99, 0.01)  # Multiple thresholds
@@ -120,4 +120,32 @@ def _tail_dependence_coeff(u, v):
 
     return np.mean(lambdas) if lambdas else 0
 
+
+def _tail_dependence_coeff(u, v):
+    """
+    Classical tail dependence coefficient λ for upper tail dependence.
+    Uses the Reiss & Thomas (2007) estimator.
+
+    Args:
+        u, v: 1D arrays of uniform marginals
+    Returns:
+        λ: tail dependence coefficient
+
+    Refs:
+        Reiss, R.-D. and Thomas, M. (2007) Statistical Analysis of Extreme Values,
+        Birkhäuser, 3rd edition, Eq (2.62)
+        https://rdrr.io/cran/extRemes/man/taildep.html
+    """
+    n = len(u)
+    thresholds = np.arange(0.8, 0.99, 0.01)  # Multiple thresholds
+    lambdas = []
+    
+    for t in thresholds:
+        both_exceed = (u > t) & (v > t)
+        
+        # Reiss & Thomas (2007) formula: chi_hat = joint_exceedances / (n * (1-t))
+        chi_t = np.sum(both_exceed) / (n * (1 - t))
+        lambdas.append(chi_t)
+
+    return np.mean(lambdas) if lambdas else 0
 # %%

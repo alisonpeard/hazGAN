@@ -39,3 +39,22 @@ def gumbel(uniform):
 def inv_gumbel(x):
     """Gumbel(0, 1) -> uniform"""
     return np.exp(-np.exp(-x))
+
+
+def uniform(u):
+    """Identity function for uniform marginals."""
+    return u
+
+def inv_uniform(x):
+    """Identity function for uniform marginals."""
+    return x
+
+def gaussian(u):
+    """uniform -> standard Gaussian"""
+    from scipy.stats import norm
+    return norm.ppf(u)
+
+def inv_gaussian(x):
+    """standard Gaussian -> uniform"""
+    from scipy.stats import norm
+    return norm.cdf(x)

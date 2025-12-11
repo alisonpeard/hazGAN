@@ -10,9 +10,9 @@ import numpy as np
 import glob
 
 from hazGAN.utils import res2str
-# %%
-WINDTHRESHOLD = 15  #15 for storms, -float('inf') for all
-DOMAIN        = "gumbel" # ["uniform", "gumbel"]
+
+WINDTHRESHOLD = [15, -float("inf")][0]
+DOMAIN        = ["uniform", "gumbel", "gaussian"][2]
 EPS           = 1e-6
 
 def apply_colormap(grayscale_array, colormap_name='Spectral_r'):
@@ -54,7 +54,7 @@ CMAP = "Spectral_r"
 env = Env()
 env.read_env(recurse=True)
 traindir = env.str("TRAINDIR")
-traindir = os.path.join(traindir, res2str(RES))
+# traindir = os.path.join(traindir, res2str(RES))
 os.listdir(traindir)
 # %%
 ds = xr.open_dataset(os.path.join(traindir, 'data.nc'))
@@ -88,14 +88,31 @@ assert array.shape[1:] == (64, 64, 3), f"Unexpected shape: {array.shape}"
 if DOMAIN == "gumbel":
     array = np.clip(array, EPS, 1-EPS) # Avoid log(0)
     array = -np.log(-np.log(array))
+
+    # scale to (0, 1)
     array_min = np.min(array, axis=(0, 1, 2), keepdims=True)
     array_max = np.max(array, axis=(0, 1, 2), keepdims=True)
     n = len(array)
-
-    # scale to (0, 1)
     array = (array - array_min) / (array_max - array_min)
     array = (array * (n - 1) + 1) / (n + 1)
-    # original = ((scaled * (n+1) - 1) / (n-1)) * (max - min) + min
+
+    print("Range:", array.min(), array.max())
+    print("Shape:", array_min.shape, array_max.shape)
+
+    stats_path = os.path.join(winddir, "..", "image_stats.npz")
+    np.savez(stats_path, min=array_min, max=array_max, n=n)
+
+elif DOMAIN == "gaussian":
+    array = np.clip(array, EPS, 1-EPS) # Avoid inv erf issues
+    from scipy.special import erfinv
+    array = np.sqrt(2) * erfinv(2 * array - 1)
+
+    # scale to (0, 1)
+    array_min = np.min(array, axis=(0, 1, 2), keepdims=True)
+    array_max = np.max(array, axis=(0, 1, 2), keepdims=True)
+    n = len(array)
+    array = (array - array_min) / (array_max - array_min)
+    array = (array * (n - 1) + 1) / (n + 1)
 
     print("Range:", array.min(), array.max())
     print("Shape:", array_min.shape, array_max.shape)
@@ -129,7 +146,7 @@ create_image_grid(wind_paths, (8, 8), os.path.join(winddir, "..", "percentiles_w
 
 # %% Quantiles
 # winddir = os.path.join(traindir, 'images', "anomaly", "wind")
-stormdir = os.path.join(traindir, 'rgb')
+stormdir = os.path.join(traindir, "rgb")
 os.makedirs(winddir, exist_ok=True)
 os.makedirs(stormdir, exist_ok=True)
 

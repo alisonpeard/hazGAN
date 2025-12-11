@@ -1,0 +1,30 @@
+name: hazGAN
+channels:
+    - conda-forge
+dependencies:
+    - python
+    - pip
+    - dask
+    - tqdm
+    - ipykernel
+    - h5py
+    - pandas
+    - geopandas
+    - fiona
+    - xarray
+    - xagg
+    - rioxarray
+    - hdf5
+    - netcdf4
+    - shapely>=2.0
+    - scipy
+    - scikit-learn
+    - matplotlib
+    - cartopy
+    - seaborn
+    - gdal
+    - libgdal
+    - pip:
+        - cmocean
+        - matplotlib-scalebar
+        - environs
