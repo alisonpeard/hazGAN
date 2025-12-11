@@ -1,19 +1,26 @@
 #!/bin/bash
-#SBATCH --job-name=inference
-#SBATCH --output=inference.out
-#SBATCH --error=inference.err
+#SBATCH --job-name=gen
+#SBATCH --output=./gen.out
+#SBATCH --error=./gen.err
 #SBATCH --partition="short,medium,interactive"
-#SBATCH --time=05:00:00
-#SBATCH --dependency=afterok:116190
+#SBATCH --gres=gpu:v100:1
+#SBATCH --time=01:00:00
+#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-user=spet5107@ox.ac.uk
+#SBATCH --mem=24G
+#SBATCH --cpus-per-task=4
 
-MODEL="00024"
-STEP=300
-DATADIR=../../../hazGAN-data/stylegan_output/${MODEL}
+OUTDIR="/data/ouce-opsis/spet5107/data/gaussian/gen"
+NETWORK="/data/ouce-opsis/spet5107/data/00000-gaussian-low_shot-kimg300-color-translation-cutout/network-snapshot-000300.pkl"
+SCRIPT="/data/ouce-opsis/spet5107/hazGAN/styleGAN-DA/src/train.py"
 
-source /lustre/soge1/users/spet5107/micromamba/etc/profile.d/micromamba.sh
+module load Anaconda3
+conda activate /data/ouce-opsis/spet5107/hazGAN2/.snakemake/conda/55ad1cb60ae140a2919a9f3f8906a963_ # styleGAN snakemake env
 
-micromamba activate styleGAN
-python ../../src/generate.py --outdir=${DATADIR}/results/trunc-1_0 --seeds=1-5000 --trunc=1.0 --network=${DATADIR}/network-snapshot-$(printf "%06d" $STEP).pkl
+mkdir -p $OUTDIR
 
-micromamba activate hazGANv0
-python inference.py --model=${MODEL} --step=${STEP} 
+python ${SCRIPT} \
+  --outdir=${OUTDIR} \
+  --seeds=1-914 \
+  --trunc=1.0 \
+  --network=${NETWORK}
