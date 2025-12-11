@@ -20,7 +20,7 @@ source /data/ouce-opsis/spet5107/hazGAN2/workflow/scripts/cuda_env.sh
 
 mkdir -p $OUTDIR
 
-python /data/ouce-opsis/spet5107/hazGAN2/workflow/src/stylegan/train.py \
+python /data/ouce-opsis/spet5107/hazGAN/styleGAN-DA/src/train.py \
     --outdir=$OUTDIR \
     --data=$DATA \
     --gpus=1 \
