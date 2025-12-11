@@ -4,11 +4,11 @@ import xarray as xr
 from functools import partial
 
 if __name__ == "__main__":
-    from base import *
+    import base
     from empirical import quantile
     from empirical import semiparametric_quantile as semiparametric_quantile0
 else:
-    from .base import *
+    from . import base
     from .empirical import quantile
     from .empirical import semiparametric_quantile as semiparametric_quantile0
 
@@ -18,7 +18,7 @@ def invPIT(
         u:np.ndarray,
         x:np.ndarray,
         theta:np.ndarray=None,
-        gumbel_margins:bool=False,
+        margins:str="gumbel",
         distribution:str="genpareto"
     ) -> np.ndarray:
     """
@@ -32,15 +32,16 @@ def invPIT(
         Original data for quantile calculation
     theta : np.ndarray, optional (default = None)
         Parameters of fitted Generalized Pareto Distribution (GPD)
-    gumbel_margins : bool, optional (default = False)
-        Whether to apply inverse Gumbel transform
+    margins : str, optional (default = False)
+        Whether to apply inverse transform for reduced variate margins
     
     Returns
     -------
     np.ndarray
         Transformed marginals with same shape as input u
     """
-    u = inv_gumbel(u).numpy() if gumbel_margins else u
+    cdf = getattr(base, "inv_" + margins)
+    u = cdf(u).numpy()
 
     # assert x.shape[1:] == u.shape[1:], (
     #     f"Marginal dimensions mismatch: {u.shape[1:]} != {x.shape[1:]}"

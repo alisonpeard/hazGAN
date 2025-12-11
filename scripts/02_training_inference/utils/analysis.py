@@ -7,13 +7,14 @@ from glob import glob
 import numpy as np
 import pandas as pd
 import xarray as xr
-from hazGAN.statistics import invPIT, gumbel
 
+from hazGAN import statistics
 
 __all__ = ['plot', 'load_samples', 'yflip']
 
 
 CMAP  = "Spectral_r"
+DOMAIN = ["gumbel", "gaussian", "uniform"][1]
 EPS   = 1e-6
 
 
@@ -39,7 +40,7 @@ def yflip(array: np.ndarray, ax=1) -> np.ndarray:
 
 def load_samples(samples_dir, training_dir, model, threshold=None, ny=500, sampletype='samples'):
     """Load and process samples and training data for visualisation"""
-    # load samples - - - - - - - - --- - - - -- - -- - - -- -- - - -- - - - -
+    # load samples
     samples_path = os.path.join(samples_dir, model, "results", sampletype)
     samples_list = glob(os.path.join(samples_path, "seed*.png"))
     samples_list = sorted(samples_list)
@@ -70,19 +71,18 @@ def load_samples(samples_dir, training_dir, model, threshold=None, ny=500, sampl
     # order samples
     sample_maxima = samples[..., 0].max(axis=(1,2))
     sample_order  = np.argsort(sample_maxima)#[::-1]
-    samples        = samples[sample_order]
-    # samples        = truncate(samples)
+    samples       = samples[sample_order]
+    # samples       = truncate(samples)
 
-    # check sample distribution (Gumbel)
+    # inspect sample distribution
     _, ax = plt.subplots(figsize=(6, 3))
     ax.hist(samples.ravel(), bins=50, color='lightgrey', edgecolor='k', density=True);
     ax.set_xlabel("Pixel value");
     ax.set_ylabel("Density");
-    ax.set_title("Histogram of all Gumbel(0, 1) samples") # this should be uniform
+    ax.set_title("Histogram of all reduced variate samples") # this should be uniform
 
-    # load training data - - - - - - - - --- - - - -- - -- - - -- -- - - -- - - - -
+    # load training data for reference
     data   = xr.open_dataset(os.path.join(training_dir, "data.nc"))
-    nobs   = data.sizes['time']
     nyears = len(np.unique(data['time.year'].values));Warning("Need more robust year counting")
     data['maxwind'] = data.sel(field='u10')['anomaly'].max(dim=['lat', 'lon'])
     trainmask = data.where(data['time.year'] != 2021, drop=True).time
@@ -93,11 +93,11 @@ def load_samples(samples_dir, training_dir, model, threshold=None, ny=500, sampl
     if threshold:
         # this affects ECDF calculations so be careful
         print(f"Applying threshold of {threshold} mps")
-        ref    = data.copy()
-        tmask  = data.where(data['maxwind'] >= 15., drop=True).time
-        data   = data.sel(time=tmask)
+        ref   = data.copy()
+        tmask = data.where(data['maxwind'] >= 15., drop=True).time
+        data  = data.sel(time=tmask)
     else:
-        ref    = data.copy()
+        ref = data.copy()
     
     data   = data.sortby('maxwind', ascending=False)
     x      = data.anomaly.values
@@ -114,11 +114,11 @@ def load_samples(samples_dir, training_dir, model, threshold=None, ny=500, sampl
     x_valid = valid.anomaly.values
     u_valid = valid.uniform.values
 
-    # order training samples by x
-    x_maxima       = x[..., 0].max(axis=(1, 2))
-    x_order        = np.argsort(x_maxima)[::-1]
-    u              = u[x_order]
-    x              = x[x_order]
+    # order training samples by x value
+    x_maxima = x[..., 0].max(axis=(1, 2))
+    x_order  = np.argsort(x_maxima)[::-1]
+    u        = u[x_order]
+    x        = x[x_order]
 
     if (u >= 1).sum() > 0:
         print("Some data.nc is greater than 1")
@@ -135,11 +135,13 @@ def load_samples(samples_dir, training_dir, model, threshold=None, ny=500, sampl
         invalid_valid_umask = None
 
     # transformations
-    x_gumbel        = gumbel(u)
-    valid_gumbel    = gumbel(u_valid)
-    samples_uniform = np.exp(-np.exp(-samples))
+    ppf = getattr(statistics, DOMAIN)
+    cdf = getattr(statistics, "inv_" + DOMAIN)
+    x_gumbel        = ppf(u)
+    valid_gumbel    = ppf(u_valid)
+    samples_uniform = cdf(samples)
 
-    # decide how many of each set we need to generate ny years of data
+    # calculate how many of each set we need to generate n_y years of data
     nstorms   = len(x_ref)
     nextreme  = len(x) + len(x_valid)
     λ_storms  = λ(nstorms, nyears)
@@ -179,12 +181,12 @@ def load_samples(samples_dir, training_dir, model, threshold=None, ny=500, sampl
 
     # get samples into data space
     samples_temp  = np.flip(samples_uniform, axis=1)
-    samples_x     = invPIT(samples_temp, x_ref, params)
+    samples_x     = statistics.invPIT(samples_temp, x_ref, params, margins=DOMAIN)
     samples_x     = np.flip(samples_x, axis=1)
 
     Warning("Check whether assumption arrays need to be flipped.")
-    independent_x = invPIT(independent_uniform, x_ref, params)
-    dependent_x   = invPIT(dependent_uniform, x_ref, params)
+    independent_x = statistics.invPIT(independent_uniform, x_ref, params, margins=DOMAIN)
+    dependent_x   = statistics.invPIT(dependent_uniform, x_ref, params, margins=DOMAIN)
     del samples_temp
 
     # reorder samples in x space

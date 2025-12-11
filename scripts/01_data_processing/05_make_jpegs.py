@@ -10,9 +10,9 @@ import numpy as np
 import glob
 
 from hazGAN.utils import res2str
-# %%
+
 WINDTHRESHOLD = [15, -float("inf")][0]
-DOMAIN        = ["uniform", "gumbel", "gaussian"][1]
+DOMAIN        = ["uniform", "gumbel", "gaussian"][2]
 EPS           = 1e-6
 
 def apply_colormap(grayscale_array, colormap_name='Spectral_r'):
@@ -54,7 +54,7 @@ CMAP = "Spectral_r"
 env = Env()
 env.read_env(recurse=True)
 traindir = env.str("TRAINDIR")
-traindir = os.path.join(traindir, res2str(RES))
+# traindir = os.path.join(traindir, res2str(RES))
 os.listdir(traindir)
 # %%
 ds = xr.open_dataset(os.path.join(traindir, 'data.nc'))
@@ -146,7 +146,7 @@ create_image_grid(wind_paths, (8, 8), os.path.join(winddir, "..", "percentiles_w
 
 # %% Quantiles
 # winddir = os.path.join(traindir, 'images', "anomaly", "wind")
-stormdir = os.path.join(traindir, 'rgb')
+stormdir = os.path.join(traindir, "rgb")
 os.makedirs(winddir, exist_ok=True)
 os.makedirs(stormdir, exist_ok=True)
 
