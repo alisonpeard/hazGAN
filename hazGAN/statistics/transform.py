@@ -18,7 +18,7 @@ def invPIT(
         u:np.ndarray,
         x:np.ndarray,
         theta:np.ndarray=None,
-        margins:str="gumbel",
+        margins:str="uniform",
         distribution:str="genpareto"
     ) -> np.ndarray:
     """
@@ -41,12 +41,11 @@ def invPIT(
         Transformed marginals with same shape as input u
     """
     cdf = getattr(base, "inv_" + margins)
-    u = cdf(u).numpy()
+    u = cdf(u)
 
-    # assert x.shape[1:] == u.shape[1:], (
-    #     f"Marginal dimensions mismatch: {u.shape[1:]} != {x.shape[1:]}"
-    # )
-    semiparametric_quantile = partial(semiparametric_quantile0, distribution=distribution)
+    semiparametric_quantile = partial(
+        semiparametric_quantile0, distribution=distribution
+    )
 
     # flatten along spatial dimensions
     original_shape = u.shape
