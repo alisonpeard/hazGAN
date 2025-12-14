@@ -22,7 +22,7 @@ FIELD     = 0
 THRESHOLD = [None, 15.][1]
 MONTH     = 9
 NYEARS    = 500
-DOMAIN    = ["uniform", "gaussian", "gumbel"][2]
+DOMAIN    = ["uniform", "gaussian", "gumbel", "rescaled"][0]
 SAMPLES   = f"/soge-home/projects/mistral/alison/hazGAN-data/stylegan_output/{DOMAIN}/gen"
 
 

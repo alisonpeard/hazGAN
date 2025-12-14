@@ -1,43 +1,16 @@
-
-"""Module for loading, transforming, and plotting samples from the hazGAN model."""
-import os
-from PIL import Image
-import matplotlib.pyplot as plt
 from glob import glob
+import os
 import numpy as np
-import pandas as pd
+from PIL import Image
 import xarray as xr
-
 from hazGAN import statistics
 
-from . import rescaled
-
-__all__ = ['plot', 'load_samples', 'yflip']
-
-
-CMAP  = "Spectral_r"
-# DOMAIN = ["gumbel", "gaussian", "uniform"][1]
 EPS   = 1e-6
 
 
 def λ(number_extremes:int, total_years:int, unit:int=1) -> float:
     """Calculate the extreme event rate for a given return period."""
     return number_extremes / (total_years / unit)
-
-
-def get_monthly_medians(traindir, month=None):
-    medians = pd.read_csv(os.path.join(traindir, "medians.csv"))
-    if month is None:
-        medians = medians[['grid', 'u10', 'tp', 'mslp']].groupby('grid').mean().values
-    else:
-        medians = medians[medians['month'] == month][['grid', 'u10', 'tp', 'mslp']].groupby('grid').mean().values
-    medians = medians.reshape(1, 64, 64, 3) # for broadcasting
-    return yflip(medians)
-
-
-def yflip(array: np.ndarray, ax=1) -> np.ndarray:
-    if array is not None:
-        return np.flip(array, axis=ax)
 
 
 def rescale(samples:np.array, stats_file:str) -> np.array:
@@ -56,6 +29,11 @@ def rescale(samples:np.array, stats_file:str) -> np.array:
     return samples
 
 
+def yflip(array: np.ndarray, ax=1) -> np.ndarray:
+    if array is not None:
+        return np.flip(array, axis=ax)
+
+
 def sample_dep(n, h, w, c, freq):
     rp_dep = np.logspace(0, 3, num=n, base=10)
     sf_dep = 1 / (freq * rp_dep)
@@ -67,11 +45,9 @@ def sample_dep(n, h, w, c, freq):
     return u_dep, rp_dep
 
 
-def load_samples(png_dir, training_dir, threshold=15., ny=500, domain="uniform"):
+def load_samples(png_dir, training_dir, threshold=15., ny=500):
     """Load and process samples and training data for visualisation"""
-    if domain == "rescaled":
-        return rescaled.load_samples(png_dir, training_dir, threshold, ny)
-    print(f"\nLoading samples from {png_dir} with {domain=}")
+    print(f"\nLoading samples from {png_dir} with domain=rescaled")
     # load all the png files
     png_list = glob(os.path.join(png_dir, "seed*.png"))
     png_list = sorted(png_list)
@@ -87,7 +63,7 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500, domain="uniform")
     print(f"Loaded {samples.shape} samples")
 
     # filepath changed Dec 2025
-    stats_file = os.path.join(training_dir, "images", domain, "image_stats.npz")
+    stats_file = os.path.join(training_dir, "images", "rescaled", "image_stats.npz")
     y_gen = rescale(samples, stats_file)
 
     # order samples
@@ -151,12 +127,10 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500, domain="uniform")
     else:
         u_val_mask = None
 
-    # transformations
-    ppf = getattr(statistics, domain)
-    cdf = getattr(statistics, "inv_" + domain)
-    y_trn = ppf(u_trn)
-    y_val = ppf(u_val)
-    u_gen = cdf(y_gen)
+    # transformations (just ECDF here)
+    y_trn = x_trn
+    y_val = x_val
+    u_gen = statistics.ecdf(y_gen)
 
     # calculate how many of each set we need to generate n_y years of data
     nevents   = len(x_ref); print(f"{nevents=}")
@@ -192,17 +166,14 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500, domain="uniform")
         print("WARNING: Some uniform samples == 0")
         u_gen = np.clip(u_gen, EPS, float('inf'))
 
-    # get samples into data space
-    u_tmp = np.flip(u_gen, axis=1)
-    x_gen = statistics.invPIT(u_tmp, x_ref, params)
-    x_gen = np.flip(x_gen, axis=1)
-    del u_tmp
+    # get samples into data space (just y space here)
+    x_gen = y_gen
 
     print("WARNING: ind/dep arrays may also need to flip lats.")
     x_ind = statistics.invPIT(u_ind, x_ref, params)
     x_dep = statistics.invPIT(u_dep, x_ref, params)
 
-    # reorder samples in x space
+    # reorder samples from largest to smallest max value
     gen_max = x_gen[..., 0].max(axis=(1,2))
     gen_ord = np.argsort(gen_max)[::-1]
     x_gen = x_gen[gen_ord]
@@ -236,56 +207,3 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500, domain="uniform")
             'x': x_dep
         }     
     }
-
-
-def plot(array, field, yflip=False, contours=False, mask=None, title='',
-         exclude_mask=False, print_stats=True,
-         standardise_colours=True,
-         vmin=None, vmax=None,
-         cmap=CMAP, levels=13):
-    """
-
-    """
-    array = array.copy()
-    if yflip:
-        array = np.flip(array, axis=1)
-
-    if exclude_mask and mask is not None:
-        array[mask] = np.nan
-
-    if standardise_colours:
-        vmin = vmin or np.nanmin(array[..., field])
-        vmax = vmax or np.nanmax(array[..., field])
-
-    fig, axs = plt.subplots(8, 8, figsize=(16, 13),
-                            sharex=True, sharey=True,
-                            gridspec_kw={'hspace': 0., 'wspace': 0.})
-    for i, ax in enumerate(axs.flat):
-        if contours:
-            levels = np.linspace(vmin, vmax, levels)
-            im = ax.contourf(array[i, ..., field],
-            cmap=cmap,
-            levels=levels
-            )
-        else:
-            im = ax.imshow(array[i, ..., field],
-                           cmap=cmap,
-                           vmin=vmin, vmax=vmax
-                           )
-        if mask is not None:
-            ax.contour(mask[i, ..., field],
-                       colors='k',
-                       linewidths=1
-                       )
-        ax.label_outer()
-    
-    if standardise_colours:
-        fig.colorbar(im, ax=list(axs.flat))
-    fig.suptitle(title, y=.9)
-
-    if print_stats:
-        print(f"\nStatistics for {title}:\n----------------------")
-        print(f"Min: {np.nanmin(array[..., field]):.4f}")
-        print(f"Max: {np.nanmax(array[..., field]):.4f}")
-        print(f"Mean: {np.nanmean(array[..., field]):.4f}")
-        print(f"Std: {np.nanstd(array[..., field]):.4f}")
