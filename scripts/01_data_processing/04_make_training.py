@@ -53,7 +53,7 @@ def main(datadir):
     coords = coords['grid'].to_dataframe().reset_index()
     coords = gpd.GeoDataFrame(
         coords, geometry=gpd.points_from_xy(coords['lon'], coords['lat'])
-        ).set_crs("EPSG:4326")
+    ).set_crs("EPSG:4326")
 
     # load GPD-fitted data                                                                                                        
     df = pd.read_parquet(os.path.join(datadir, INFILES[1]))

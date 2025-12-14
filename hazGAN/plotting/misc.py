@@ -4,8 +4,10 @@ import matplotlib.pyplot as plt
 
 from hazGAN.statistics import ecdf
 
+
 yellows = ['#fff2ccff', '#f1c232ff', '#e69138ff', '#cc4125ff']
 blues = ['#fff2ccff', '#a2c4c9ff', '#0097a7ff', '#0b5394ff']
+
 
 def invPITmaxima(fake_u, train_u, fake, train):
     fake_u  = fake_u[..., 0].reshape(-1, 4096)
@@ -202,7 +204,7 @@ def saffirsimpson_barchart(fake, train, title='',
         xticklabels = ['< 15 m/s', '15-20 m/s', '20-25 m/s', '25-30 m/s',
                             '30-35 m/s', '35-40 m/s', '40-45 m/s', '45-50 m/s',
                             '50-55 m/s', '> 55 m/s']
-        ax.set_xticklabels(xticklabels[:len(all_categories)], fontsize=18)
+        ax.set_xticklabels(xticklabels[:len(all_categories)], fontsize=18, rotation=30)
     ax.set_yscale(yscale)
     ax.legend(
         fontsize=18,

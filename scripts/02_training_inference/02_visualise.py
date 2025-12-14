@@ -10,7 +10,6 @@ import xarray as xr
 import matplotlib.pyplot as plt
 from importlib import reload
 
-from utils.metrics_vis import analyze_stylegan_training
 from utils.analysis import load_samples
 
 from hazGAN.plotting import fields
@@ -19,134 +18,149 @@ from hazGAN.plotting import samples
 from hazGAN.plotting import misc
 from hazGAN.plotting import scatter
 
-
-# make sure font is Helvetica
-plt.rcParams['font.family'] = 'sans-serif'
-plt.rcParams['font.sans-serif'] = 'Helvetica'
-
-
 FIELD     = 0
-MODEL     = 30 # 24 used for Zenodo / NHESS submission, 2 looks okay (5000 samples)
-MODEL     = str(MODEL).zfill(5) if isinstance(MODEL, int) else MODEL
-THRESHOLD = 15. # None to model all storms
-TYPE      = ["results", "trunc-1_0"][1]
-MONTH     = 9 #"September"
+THRESHOLD = [None, 15.][1]
+MONTH     = 9
 NYEARS    = 500
+DOMAIN    = ["uniform", "gaussian", "gumbel"][2]
+SAMPLES   = f"/soge-home/projects/mistral/alison/hazGAN-data/stylegan_output/{DOMAIN}/gen"
 
-#  begin script
+
+savefigs = True
+figdir = SAMPLES.replace("stylegan_output", "figures").replace("/gen", "")
+os.makedirs(figdir, exist_ok=True)
+savefig_kws = dict(dpi=300, bbox_inches='tight', transparent=True)
+
+
+def savefig(fig, outpath:str, savefigs:bool, savefig_kws:dict):
+    """simple wrapper."""
+    if savefigs:
+        fig.savefig(outpath, **savefig_kws)
+        print(f"Saved figure to {outpath}")
+    else:
+        print("Not saving figure. (savefigs is False)")
+
+
+def export_nc(data, lats, lons, ny, nx, domain):
+    print("\nWARNING: export netCDF is hardcoded for BoB study.")
+    lats = np.linspace(lats[0], lats[1], ny)
+    lons = np.linspace(lons[0], lons[1], nx)
+    samples_idx = np.arange(data['samples']['x'].shape[0])
+    ds = xr.Dataset(
+        {
+            "data": (("sample", "lat", "lon", "field"), data['samples']['x']),
+            "uniform": (("sample", "lat", "lon", "field"), data['samples']['u']),
+        },
+        coords={
+            "lon": (("lon",), lons),
+            "lat": (("lat",), lats),
+            "field": (("field",), ["u10", "tp", "mslp"]),
+            "sample": (("sample",), samples_idx),
+        })
+    ds.to_netcdf(f'/soge-home/projects/mistral/alison/hazGAN-data/{domain}.nc')
+        
+
 if __name__ == "__main__":
-    # set up environment
+
     env = Env()
     env.read_env()
 
-    samples_dir = env.str("SAMPLES_DIR")
-    train_dir    = env.str("TRAINDIR")
+    train_dir   = env.str("TRAINDIR")
+    samples_dir = SAMPLES
 
-    # set seed for np.random
     np.random.seed(42)
-
-    #  - - - - - - load training logs - - - - - - - - - - - - - - - - - - - - -
-    try:
-        metrics_path = os.path.join(samples_dir, MODEL, 'stats.jsonl')
-        metrics, fig = analyze_stylegan_training(metrics_path)
-    
-    except Exception as e:
-        print(e)
 
     # create data
     samples_dir = os.path.expanduser(samples_dir)
     train_dir   = os.path.expanduser(train_dir)
 
-    data = load_samples(samples_dir, train_dir, MODEL, threshold=THRESHOLD, sampletype=TYPE, ny=NYEARS)
 
-    # %% NEW: September 2025 save netCDF
-    if True:
-        lats = np.linspace(10, 25, 64)
-        lons = np.linspace(80, 95, 64)
-        samples_idx = np.arange(data['samples']['data'].shape[0])
-        ds = xr.Dataset(
-            {
-                "data": (("sample", "lat", "lon", "field"), data['samples']['data']),
-                "uniform": (("sample", "lat", "lon", "field"), data['samples']['uniform']),
-            },
-            coords={
-                "lon": (("lon",), lons),
-                "lat": (("lat",), lats),
-                "field": (("field",), ["u10", "tp", "mslp"]),
-                "sample": (("sample",), samples_idx),
-            })
-        ds.to_netcdf(os.path.join(samples_dir, MODEL, f"samples_{TYPE}_thresh{THRESHOLD}_n{NYEARS}.nc"))
-        
-    # %% loading takes a while, checkpoint here
-    u               = data['training']['uniform']
-    gumbel          = data['training']['gumbel']
-    x               = data['training']['data']
-    mask            = data['training']['mask']
+    # loading takes a while
+    data = load_samples(
+        samples_dir, train_dir,
+        threshold=THRESHOLD, ny=NYEARS, domain=DOMAIN
+    )
+    
+    u_trn = data['training']['u']
+    y_trn = data['training']['y']
+    x_trn = data['training']['x']
+    mask_trn = data['training']['mask']
 
-    valid_u         = data['valid']['uniform']
-    valid_gumbel    = data['valid']['gumbel']
-    valid_x         = data['valid']['data']
-    valid_mask      = data['valid']['mask']
-
-    samples_u       = data['samples']['uniform']
-    samples_gumbel  = data['samples']['gumbel']
-    samples_x       = data['samples']['data']
-    samples_mask    = data['samples']['mask']
+    u_gen = data['samples']['u']
+    y_gen = data['samples']['y']
+    x_gen = data['samples']['x']
+    mask_gen = data['samples']['mask']
 
     #  add monthly medians to x data
-    medians = xr.open_dataset(os.path.join(train_dir, "data.nc"))["medians"]
+    medians_path = os.path.join(train_dir, "data.nc")
+    medians = xr.open_dataset(medians_path)["medians"]
     medians["month"] = medians["time.month"]
-    month_time_mask = medians["month"] == MONTH
-    medians = medians.isel(time=month_time_mask)
+    month_mask = medians["month"] == MONTH
+    medians = medians.isel(time=month_mask)
     medians = medians.mean(dim='time').values
 
-    print(f"Median pressure {np.quantile(medians[..., 2], 0.5):.2f} Pa")
-    print(f"Median wind speed {np.quantile(medians[..., 0], 0.5):.2f} m/s")
-    print(f"Median precipitation {np.quantile(medians[..., 1], 0.5):.2f} m")
+    print("\nClimatology")
+    print(f"wind speed:     {np.quantile(medians[..., 0], 0.5):.2f} m/s")
+    print(f"precipitation:  {np.quantile(medians[..., 1], 0.5):.2f} m")
+    print(f"pressure:      {np.quantile(medians[..., 2], 0.5):.2f} Pa")
 
-    print(f"Median pressure anomaly {np.quantile(x[..., 2], 0.5):.2f} Pa")
-    print(f"Median wind speed anomaly {np.quantile(x[..., 0], 0.5):.2f} m/s")
-    print(f"Median precipitation anomaly {np.quantile(x[..., 1], 0.5):.2f} m")
+    print("\nMedian training anomalies:")
+    print(f"wind speed:     {np.quantile(x_trn[..., 0], 0.5):.2f} m/s")
+    print(f"precipitation:  {np.quantile(x_trn[..., 1], 0.5):.2f} m")
+    print(f"pressure:       {np.quantile(x_trn[..., 2], 0.5):.2f} Pa")
 
-    # %%
-    x += medians
-    valid_x += medians
-    samples_x += medians
+    x_trn += medians
+    x_gen += medians
 
-    x[..., 2] *= -1
-    valid_x[..., 2] *= -1
-    samples_x[..., 2] *= -1
+    # for pressure, invert sign
+    x_trn[..., 2] *= -1
+    x_gen[..., 2] *= -1
 
-    # %% histograms
-    if False:
+    print(f"\nTraining medians with climatology:")
+    print(f"wind speed:     {np.quantile(x_trn[..., 0], 0.5):.2f} m/s")
+    print(f"precipitation:  {np.quantile(x_trn[..., 1], 0.5):.2f} m")
+    print(f"pressure:       {np.quantile(x_trn[..., 2], 0.5):0.2f} Pa")
+
+    # quick histogram of field maxima
+    FIELD = 0
+    ymax_trn = np.max(y_trn[..., FIELD], axis=(1, 2))
+    ymax_gen = np.max(y_gen[..., FIELD], axis=(1, 2))
+
+    plt.figure(figsize=(6, 4), dpi=300)
+    plt.hist(ymax_gen, bins=25, density=True, alpha=0.5, label='Generated')
+    plt.hist(ymax_trn, bins=25, density=True, alpha=0.5, label='ERA5')
+    plt.xlabel(f"maxima, field: {FIELD}")
+    plt.ylabel("Density");
+
+    # %% barchart
+    if True:
         reload(misc)
-
-        plt.rcParams['font.family'] = 'sans-serif'
-        plt.rcParams['font.sans-serif'] = 'Helvetica'
-
-        FAKE, REAL = samples_x, x
-        fig, ax = misc.saffirsimpson_barchart(FAKE, REAL, title="", scale="fives")
+        fig, ax = misc.saffirsimpson_barchart(x_gen, x_trn, title="", scale="fives")
         fig.tight_layout()
-        fig.savefig(os.path.join("..", "..", "..", "figures", "saffir-simpson.pdf"), dpi=300)
-
-
+        outpath = os.path.join(figdir, "saffir-simpson.png")
+        savefig(fig, outpath, savefigs, savefig_kws)
+    
     # %% wind maxima vs return period plot
-    if False:
-        _lambda = len(x) / 81
-        fig, ax = plt.subplots(figsize=(6, 6), dpi=300)
+    if True:
+        _lambda = len(x_trn) / 81
+        fig, ax = plt.subplots(figsize=(4, 4))
         transpose = False
 
-        misc.windvsreturnperiod(FAKE, _lambda, ax=ax, windchannel=0, transpose=transpose,
+        profile_kws = dict(ax=ax, windchannel=0, transpose=transpose)
+
+        misc.windvsreturnperiod(x_gen, _lambda,
                                 label="Generated", linewidth=3, color=misc.yellows[2],
-                                linestyle='-')
-        misc.windvsreturnperiod(REAL, _lambda, ax=ax, windchannel=0, transpose=transpose,
+                                linestyle='-', **profile_kws)
+        misc.windvsreturnperiod(x_trn, _lambda,
                                 label="Training", color='k', marker='o', linestyle='',
                                 markeredgecolor='white', markeredgewidth=0.25, alpha=.7,
-                                markersize=5, linewidth=0.5)
-        
+                                markersize=5, linewidth=0.5, **profile_kws)   
+
+        outpath = os.path.join(figdir, "wind_return_period.png")
+        savefig(fig, outpath, savefigs, savefig_kws)
     
     # %% Brown-Resnick style scatterplots
-    if False:
+    if True:
         from hazGAN.constants import OBSERVATION_POINTS
         from hazGAN import op2idx
         reload(scatter)
@@ -155,20 +169,20 @@ if __name__ == "__main__":
             ["chittagong", "dhaka"],
             ["buoy_23007", "buoy_23008"]
             ][1]
-        ops = op2idx(OBSERVATION_POINTS, x[0, ..., 0], extent=[80, 95, 10, 25])
+        ops = op2idx(OBSERVATION_POINTS, x_trn[0, ..., 0], extent=[80, 95, 10, 25])
         
         op_a, op_b = op_names
         pixels = [ops[op_a], ops[op_b]] # correlated
-        # pixels = [op_names[0]], ops["buoy_23008"]] # correlated
 
         for i in range(3):
             field, label = [(0, "c"), (1, "b"), (2, "a")][i]
 
-            fig = scatter.plot(samples_x, x, field=field, pixels=pixels, s=10,
+            fig = scatter.plot(x_gen, x_trn, field=field, pixels=pixels, s=10,
                         cmap='viridis', xlabel=op_a.replace('_', ' ').title(),
                         ylabel=op_b.replace('_', ' ').title())
             
-            fig.savefig(os.path.join("..", "..", "..", "figures", f"fig13{label}__{op_a}-{op_b}.png"), dpi=300, bbox_inches='tight')
+            outpath = os.path.join(figdir, f"fig13{label}__{op_a}-{op_b}.png")
+            savefig(fig, outpath, savefigs, savefig_kws)
         
         def get_ext_coeff(uniform_array, pixels:list):
             from hazGAN.statistics import inverted_frechet
@@ -180,15 +194,16 @@ if __name__ == "__main__":
             ecs = np.divide(n, minima, out=np.zeros_like(minima), where=minima != 0, dtype=float)
             return ecs
 
-        ecs_era5 = get_ext_coeff(u, pixels)
-        ecs_gan = get_ext_coeff(samples_u, pixels)
+        ecs_trn = get_ext_coeff(u_trn, pixels)
+        ecs_gen = get_ext_coeff(u_gen, pixels)
 
+        print("\nExtremal dependence coefficients at observation points:")
         print(f"Fields: 0: wind speed, 1: precipitation, 2: pressure")
-        print("extremal coeffs ERA5:", ecs_era5)
-        print("extremal coeffs samples:", ecs_gan)
+        print("training:", ecs_trn)
+        print("generated:", ecs_gen)
 
     # %% Make 64x64 plots of data
-    if False:
+    if True:
         import cmocean.cm as cmo
         reload(samples)
 
@@ -201,80 +216,83 @@ if __name__ == "__main__":
             CMAP   = cmo.rain
         elif FIELD == 2:
             METRIC = "Pa"
-            CMAP   = cmo.diff
+            CMAP   = cmo.diff_r
 
-        if True:
+        if False:
             # shuffle both in case they were sorted earlier
-            if False:
-                id0 = np.random.permutation(samples_u.shape[0])
-                id1 = np.random.permutation(u.shape[0])
+            id_gen = np.random.permutation(u_gen.shape[0])
+            id_trn = np.random.permutation(u_trn.shape[0])
         else:
             # or don't
-            id0 = np.arange(samples_u.shape[0])
-            id1 = np.arange(u.shape[0])
+            id_gen = np.arange(u_gen.shape[0])
+            id_trn = np.arange(u_trn.shape[0])
         
-        if False:
-            samples_x = np.clip(samples_x, 0, None)
-            x = np.clip(x, 0, None)
+        figa = samples.plot(y_gen[id_gen], y_trn[id_trn], field=FIELD, title="", cmap=CMAP, ndecimals=0)
+        figb = samples.plot(u_gen[id_gen], u_trn[id_trn], field=FIELD, title="", cbar_label="", cmap=CMAP, ndecimals=1)
+        figc = samples.plot(x_gen[id_gen], x_trn[id_trn], field=FIELD, title="", cbar_label=METRIC, cmap=CMAP, vmin=0)
+    
+        outpath = os.path.join(figdir, f"samples_{FIELD}_gumbel.png")
+        savefig(figa, outpath, savefigs, savefig_kws)
+        outpath = os.path.join(figdir, f"samples_{FIELD}_uniform.png")
+        savefig(figb, outpath, savefigs, savefig_kws)
+        outpath = os.path.join(figdir, f"samples_{FIELD}.png")
+        savefig(figc, outpath, savefigs, savefig_kws)
 
-        figa = samples.plot(samples_gumbel[id0], gumbel[id1], field=FIELD, title="", cmap=CMAP, ndecimals=0)
-        figb = samples.plot(samples_u[id0], u[id1], field=FIELD, title="", cbar_label="", cmap=CMAP, ndecimals=1)
-        figc = samples.plot(samples_x[id0], x[id1], field=FIELD, title="", cbar_label=METRIC, cmap=CMAP, vmin=0)
-    
-        # - - - - - - - Save figures - - - - - - - - - - - - - - - -
-        figa.savefig(os.path.join("..", "..", "..", "figures", f"samples_{FIELD}_gumbel.png"), dpi=300)
-        figb.savefig(os.path.join("..", "..", "..", "figures", f"samples_{FIELD}_uniform.png"), dpi=300)
-        figc.savefig(os.path.join("..", "..", "..", "figures", f"samples_{FIELD}.png"), dpi=300, transparent=True, bbox_inches='tight')
-    
     # %% - - - - - Plot inter-field correlations - - - - - - - - - - - - - - -
+    FIELD_LABELS = ["wind speed", "precipitation", "sea-level pressure"]
+
     if True:
         reload(fields)
 
         FIELDS = [0, 1]
-        FIELD_LABELS = ["wind speed", "precipitation", "sea-level pressure"]
 
         print(f"\nTail dependence coefficient:")
-        figa, metrics_a = fields.plot(samples_u, u, fields.tail_dependence, fields=FIELDS, figsize=.6,
+        figa, metrics_a = fields.plot(u_gen, u_trn, fields.tail_dependence, fields=FIELDS, figsize=.6,
                     title="", cbar_label=r"$\hat\lambda$",
                     cmap="Spectral", vmin=0, vmax=1)
 
         print(f"\nPearson:")
-        figb, metrics_b = fields.plot(samples_u, u, fields.pearson, fields=FIELDS, figsize=.6,
+        figb, metrics_b = fields.plot(u_gen, u_trn, fields.pearson, fields=FIELDS, figsize=.6,
                     title="", cbar_label=r"$r$", cmap="Spectral_r", vmin=-1, vmax=1)
 
-        figa.savefig(os.path.join("..", "..", "..", "figures", "fig12a.png"), dpi=300, bbox_inches='tight')
-        figb.savefig(os.path.join("..", "..", "..", "figures", "fig12b.png"), dpi=300, bbox_inches='tight')
+        outpath = os.path.join(figdir, "fig12a.png")
+        savefig(figa, outpath, savefigs, savefig_kws)
+        outpath = os.path.join(figdir, "fig12b.png")
+        savefig(figb, outpath, savefigs, savefig_kws)
 
-        text = f"The correlation between the ERA5 and GAN-generated correlation fields " \
-        f"\nfor {FIELD_LABELS[FIELDS[0]]} and {FIELD_LABELS[FIELDS[1]]} is {metrics_b['pearson']:.3f} " \
-        f"\n(MAE = {metrics_b['mae']:.3f}). "
+        # print text summary for report
+        text = f"\nThe correlation between the ERA5 and GAN-generated correlation fields " \
+        f"for {FIELD_LABELS[FIELDS[0]]} and {FIELD_LABELS[FIELDS[1]]} is {metrics_b['pearson']:.3f} " \
+        f"(MAE = {metrics_b['mae']:.3f}). "
 
         text += f"\nFor the extremes, inter-variable correlation between the ERA5 and GAN-generated fields of tail dependence coefficients " \
-                f"\nfor {FIELD_LABELS[FIELDS[0]]} and {FIELD_LABELS[FIELDS[1]]} is {metrics_a['pearson']:.3f} " \
-                f"\n(MAE = {metrics_a['mae']:.3f})."
+                f"for {FIELD_LABELS[FIELDS[0]]} and {FIELD_LABELS[FIELDS[1]]} is {metrics_a['pearson']:.3f} " \
+                f"(MAE = {metrics_a['mae']:.3f})."
 
         print(text)
     # %% - - - - - Plot spatial correlations - - - - - - - - - - - - - - - - -
-    if False:
+    if True:
         reload(spatial)
 
-        for FIELD in [2, 1, 0]:
-            figa, metrics_a = spatial.plot(samples_u, u, spatial.pearson, field=FIELD, figsize=.6,
+        for FIELD in [0]: #, 1, 2]:
+            figa, metrics_a = spatial.plot(u_gen , u_trn, spatial.pearson, field=FIELD, figsize=.6,
             title="", cbar_label=r"$r$", cmap="Spectral_r", vmin=-1, vmax=1)
 
-            figa.savefig(os.path.join("..", "..", "..", "figures", "fig11a.png"), dpi=300, bbox_inches='tight')
+            outpath = os.path.join(figdir, f"fig11a_{FIELD}.png")
+            savefig(figa, outpath, savefigs, savefig_kws)
 
-            # extremal coefficients (take a hot minute)
-            figb, metrics_b = spatial.plot(samples_u, u, spatial.tail_dependence, field=FIELD, figsize=.6,
+            # %%  extremal coefficients (takes a minute)
+            figb, metrics_b = spatial.plot(u_gen, u_trn, spatial.tail_dependence, field=FIELD, figsize=.6,
             title="", cbar_label=r"$\hat\lambda$", cmap="Spectral", vmin=0, vmax=1)
 
-            figb.savefig(os.path.join("..", "..", "..", "figures", "fig11b.png"), dpi=300, bbox_inches='tight')
+            outpath = os.path.join(figdir, f"fig11b_{FIELD}.png")
+            savefig(figb, outpath, savefigs, savefig_kws)
 
-            text = f"The spatial correlation between the ERA5 and GAN-generated fields " \
+            text = f"\nThe spatial correlation between the ERA5 and GAN-generated fields " \
                 f"for {FIELD_LABELS[FIELD]} is {metrics_a['pearson']:.3f} " \
                 f"(MAE = {metrics_a['mae']:.3f})."
             
-            text += f"For the extremes, spatial correlation between the ERA5 and GAN-generated fields of tail dependence coefficients " \
+            text += f"\nFor the extremes, spatial correlation between the ERA5 and GAN-generated fields of tail dependence coefficients " \
                     f"for {FIELD_LABELS[FIELD]} is {metrics_b['pearson']:.3f} " \
                     f"(MAE = {metrics_b['mae']:.3f})."
             
