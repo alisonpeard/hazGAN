@@ -22,9 +22,10 @@ FIELD     = 0
 THRESHOLD = [None, 15.][1]
 MONTH     = 9
 NYEARS    = 500
-DOMAIN    = ["uniform", "gaussian", "gumbel", "rescaled"][0]
-SAMPLES   = f"/soge-home/projects/mistral/alison/hazGAN-data/stylegan_output/{DOMAIN}/gen"
-
+DOMAIN    = ["uniform", "gaussian", "gumbel", "rescaled"][1]
+VERSION    = ["", "-04", "-05"][1] # for different experiments with same domain
+SAMPLES   = f"/soge-home/projects/mistral/alison/hazGAN-data/stylegan_output/{DOMAIN}{VERSION}/gen"
+# %%
 
 savefigs = True
 figdir = SAMPLES.replace("stylegan_output", "figures").replace("/gen", "")
@@ -244,7 +245,7 @@ if __name__ == "__main__":
     if True:
         reload(fields)
 
-        FIELDS = [0, 1]
+        FIELDS = [0, 2]
 
         print(f"\nTail dependence coefficient:")
         figa, metrics_a = fields.plot(u_gen, u_trn, fields.tail_dependence, fields=FIELDS, figsize=.6,

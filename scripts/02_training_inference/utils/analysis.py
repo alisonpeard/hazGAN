@@ -42,6 +42,9 @@ def yflip(array: np.ndarray, ax=1) -> np.ndarray:
 
 def rescale(samples:np.array, stats_file:str) -> np.array:
     """Rescale samples from [0, 1] to data space using stored image statistics."""
+    if not os.path.exists(stats_file):
+        print(f"WARNING: Statistics file not found: {stats_file}")
+        return samples
     stats = np.load(stats_file)
     image_minima = stats['min']
     image_maxima = stats['max']
