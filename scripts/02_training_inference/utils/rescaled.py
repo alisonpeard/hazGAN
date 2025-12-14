@@ -3,6 +3,9 @@ import os
 import numpy as np
 from PIL import Image
 import xarray as xr
+from tqdm import tqdm
+import gc
+
 from hazGAN import statistics
 
 EPS   = 1e-6
@@ -45,7 +48,7 @@ def sample_dep(n, h, w, c, freq):
     return u_dep, rp_dep
 
 
-def load_samples(png_dir, training_dir, threshold=15., ny=500):
+def load_samples(png_dir, training_dir, threshold=15., ny=500, benchmarks=False) -> dict:
     """Load and process samples and training data for visualisation"""
     print(f"\nLoading samples from {png_dir} with domain=rescaled")
     # load all the png files
@@ -55,9 +58,10 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500):
     print("WARNING: future work will use .npy to avoid quantisation issues.")
 
     samples = []
-    for png in png_list:
-        img = Image.open(png)
-        samples.append(np.array(img))
+    for png in (pbar := tqdm(png_list, desc="Loading PNG files")):
+        pbar.set_description(f"Loading {os.path.basename(png)}")
+        with Image.open(png) as img:
+            samples.append(np.array(img))
     samples = np.array(samples).astype(float)
     samples /= 255.
     print(f"Loaded {samples.shape} samples")
@@ -99,7 +103,11 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500):
 
     train  = train.sortby('maxwind', ascending=False)
     x_trn  = train.anomaly.values
-    u_trn  = train.uniform.values
+
+    print("Calculating training ECDF")
+    u_trn  = statistics.PIT(x_trn, x_ref)
+    # u_trn = train.uniform.values
+
     params = train.params.values
     print(f"Loaded {params.shape} parameters")
     
@@ -130,7 +138,24 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500):
     # transformations (just ECDF here)
     y_trn = x_trn
     y_val = x_val
-    u_gen = statistics.ecdf(y_gen)
+    print("Calculating generated ECDF")
+    for c in range(3):
+        print(f"\n Channel {c}")
+        print(f"x_trn range: {x_trn[...,c].min()} to {x_trn[...,c].max()}")
+        print(f"x_ref range: {x_ref[...,c].min()} to {x_ref[...,c].max()}")
+        print(f"y_gen range: {y_gen[...,c].min()} to {y_gen[...,c].max()}")
+        print(f"params: {params[...,c]}")
+
+    # u_gen = np.flip(statistics.PIT(np.flip(y_gen, axis=1), x_ref, params), axis=1)
+    # u_gen = statistics.PIT(y_gen, x_ref, params)
+    u_gen = np.flip(
+        statistics.PIT(
+            np.flip(y_gen, axis=1), 
+            np.flip(x_ref, axis=1)
+            # np.flip(params, axis=1)  # Flip params along spatial dimension too!
+        ), 
+        axis=1
+    )
 
     # calculate how many of each set we need to generate n_y years of data
     nevents   = len(x_ref); print(f"{nevents=}")

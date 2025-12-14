@@ -5,13 +5,14 @@ from functools import partial
 
 if __name__ == "__main__":
     import base
-    from empirical import quantile
+    from empirical import quantile, ecdf
     from empirical import semiparametric_quantile as semiparametric_quantile0
+    from empirical import semiparametric_cdf as semiparametric_cdf0
 else:
     from . import base
-    from .empirical import quantile
+    from .empirical import quantile, ecdf
     from .empirical import semiparametric_quantile as semiparametric_quantile0
-
+    from .empirical import semiparametric_cdf as semiparametric_cdf0
 
 
 def invPIT(
@@ -88,49 +89,77 @@ def invPIT(
     return quantiles
 
 
-def invPITDataset(ds:xr.Dataset, theta_var:str="params",
-                  u_var:str="uniform", x_var:str="anomaly",
-                  gumbel_margins:bool=False) -> xr.DataArray:
+def PIT(
+        x:np.ndarray,
+        xref:np.ndarray,
+        theta:np.ndarray=None,
+        margins:str=None,
+        distribution:str="genpareto"
+    ) -> np.ndarray:
     """
-    Wrapper of invPIT for xarray.Dataset.
-    """
-    u = ds[u_var].values
-    x = ds[x_var].values
-    theta = ds[theta_var].values if theta_var in ds else None
-
-    x_inv = invPIT(u, x, theta, gumbel_margins)
-    x_inv = xr.DataArray(x_inv, dims=ds[x_var].dims, coords=ds[x_var].coords)
-
-    return x_inv
-
-
-# %% Developing tests
-if __name__ == "__main__":
-    import os
-    import pandas as pd
-    import xarray as xr
-    from environs import Env
-    import matplotlib.pyplot as plt
-    from hazGAN.utils import TEST_YEAR
-    from hazGAN.xarray import make_grid
-
-    env = Env()
-    env.read_env(recurse=True)
-    datadir = env.str("TRAINDIR")
-
+    Transform original distribution to uniform marginals via interpolation of empirical CDF.
     
-    storms = pd.read_parquet(os.path.join(datadir, "storms.parquet"))
-    storms['time.u10'] = pd.to_datetime(storms['time.u10'])
-    storms['time.tp'] = pd.to_datetime(storms['time.tp'])
-    storms['time.mslp'] = pd.to_datetime(storms['time.mslp'])
-    storms = storms[storms['time.u10'].dt.year != TEST_YEAR]
-    storms_test = storms[storms['time.u10'].dt.year == TEST_YEAR]
+    Parameters
+    ----------
+    x : np.ndarray
+        Original data for quantile calculation
+    theta : np.ndarray, optional (default = None)
+        Parameters of fitted Generalized Pareto Distribution (GPD)
+    margins : str, optional (default = False)
+        Whether to apply inverse transform for reduced variate margins
+    
+    Returns
+    -------
+    np.ndarray
+        Transformed marginals with same shape as input u
+    """
 
-    data = xr.open_dataset(os.path.join(datadir, "data.nc"))
-    mask = data['time.year'] != TEST_YEAR
-    test_mask = data['time.year'] == TEST_YEAR
+    semiparametric_cdf = partial(
+        semiparametric_cdf0, distribution=distribution
+    )
 
-    data_test = data.sel(time=test_mask)
-    data = data.sel(time=mask)
+    # flatten along spatial dimensions
+    original_shape = x.shape
+    if x.ndim == 4:
+        n, h, w, c = x.shape
+        hw = h * w
+        x = x.reshape(n, hw, c)
+        xref = xref.reshape(len(xref), hw, c)
+        if theta is not None:
+            theta = theta.reshape(hw, 3, c)
+            theta = theta.transpose(1, 0, 2)
+    elif x.ndim == 3:
+        n, hw, c = x.shape
+    else:
+        raise ValueError(
+            "Data must have dimensions [n, h, w, c] or [n, h * w, c]."
+            )    
 
-    # %% test alignment with cellwise
+    # vectorised numpy transform
+    distns = ["weibull", "genpareto", "genpareto"]
+    def transform(x, xref, theta, i, c):
+        x_i = x[:, i, c]
+        x_r = xref[:, i, c]
+        theta_i = theta[:, i, c] if theta is not None else None
+        distn = distns[c]
+        return (
+            semiparametric_cdf(x_r, theta_i, distn)(x_i)
+            if theta is not None
+            else ecdf(x_r)(x_i)
+        )
+
+    probs = np.array([
+        transform(x, xref, theta, i, channel)
+        for i in range(hw) for channel in range(c) 
+    ])
+
+    probs = probs.T
+    probs = probs.reshape(*original_shape)
+
+    if margins:
+        ppf = getattr(base, margins)
+        y = ppf(probs)
+    else:
+        y = probs
+    return y
+

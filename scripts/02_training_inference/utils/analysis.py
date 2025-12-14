@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from tqdm import tqdm
+
 from hazGAN import statistics
 
 from . import rescaled
@@ -70,7 +72,7 @@ def sample_dep(n, h, w, c, freq):
     return u_dep, rp_dep
 
 
-def load_samples(png_dir, training_dir, threshold=15., ny=500, domain="uniform"):
+def load_samples(png_dir, training_dir, threshold=15., ny=500, domain="uniform", suffix=""):
     """Load and process samples and training data for visualisation"""
     if domain == "rescaled":
         return rescaled.load_samples(png_dir, training_dir, threshold, ny)
@@ -82,9 +84,10 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500, domain="uniform")
     print("WARNING: future work will use .npy to avoid quantisation issues.")
 
     samples = []
-    for png in png_list:
-        img = Image.open(png)
-        samples.append(np.array(img))
+    for png in (pbar := tqdm(png_list, desc="Loading PNG files")):
+        pbar.set_description(f"Loading {os.path.basename(png)}")
+        with Image.open(png) as img:
+            samples.append(np.array(img))
     samples = np.array(samples).astype(float)
     samples /= 255.
     print(f"Loaded {samples.shape} samples")
