@@ -31,6 +31,33 @@ def load_pngs(png_dir):
 
 FIELD = 0
 # %%
+# %%
+thresh = 0.8
+for DOMAIN in ["gaussian"]:
+    TRAIN     = f"/soge-home/projects/mistral/alison/hazGAN-data/training/images/{DOMAIN}/storm"
+    SAMPLES   = f"/soge-home/projects/mistral/alison/hazGAN-data/stylegan_output/{DOMAIN}{VERSION}/gen"
+    train = load_pngs(TRAIN)
+    # gen   = load_pngs(SAMPLES)
+    # headroom = gen.max() - train.max()
+    # print(f"Headroom between training and generated samples for {DOMAIN}: {headroom}")
+    
+    train = train[..., FIELD].ravel()
+    train = train[train > thresh]
+
+    # gen = gen[..., FIELD].ravel()
+    # gen = gen[gen > thresh]
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    hist_kws = dict(density=True, bins=50, alpha=0.5, edgecolor='k', linewidth=0.1)
+    ax.hist(train, label="Training data", **hist_kws);
+    # ax.hist(gen, label="Generated samples", **hist_kws);
+    ax.legend(loc="upper right")
+    fig.suptitle(f"Field {FIELD} using {DOMAIN}")
+    ax.set_xlim([thresh, 1.0])
+    plt.show()
+    # print(sum(gen == 1.) / len(gen) * 100., "% of generated samples at one")
+
+# %%
 thresh = 0.8
 for DOMAIN in DOMAINS:
     TRAIN     = f"/soge-home/projects/mistral/alison/hazGAN-data/training/images/{DOMAIN}/storm"
@@ -39,24 +66,21 @@ for DOMAIN in DOMAINS:
     gen   = load_pngs(SAMPLES)
     headroom = gen.max() - train.max()
     print(f"Headroom between training and generated samples for {DOMAIN}: {headroom}")
-    # %%
+    
     train = train[..., FIELD].ravel()
     train = train[train > thresh]
 
     gen = gen[..., FIELD].ravel()
     gen = gen[gen > thresh]
 
-    # %%
     fig, ax = plt.subplots(figsize=(6, 4))
-    hist_kws = dict(density=True, bins=50, alpha=0.5)
+    hist_kws = dict(density=True, bins=50, alpha=0.5, edgecolor='k', linewidth=0.1)
     ax.hist(train, label="Training data", **hist_kws);
     ax.hist(gen, label="Generated samples", **hist_kws);
-    ax.set_xlim(0.8, 1.05)
-    ax.set_ylim(0, 0.05)
     ax.legend(loc="upper right")
     fig.suptitle(f"Field {FIELD} using {DOMAIN}")
     plt.show()
-# %%
+    print(sum(gen == 1.) / len(gen) * 100., "% of generated samples at one")
 
 
 # %%

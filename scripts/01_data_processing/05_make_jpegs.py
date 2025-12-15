@@ -86,7 +86,9 @@ if not ((array.max() <= 1.) and (array.min() >= 0.)):
 assert array.shape[1:] == (64, 64, 3), f"Unexpected shape: {array.shape}"
 
 if DOMAIN == "gumbel":
-    array = np.clip(array, EPS, 1-EPS) # Avoid log(0)
+    # array = np.clip(array, EPS, 1-EPS) # Avoid log(0)
+    # only clip lower
+    array = np.clip(array, EPS, None)
     array = -np.log(-np.log(array))
 
     # scale to (0, 1)
@@ -94,8 +96,8 @@ if DOMAIN == "gumbel":
     array_max = np.max(array, axis=(0, 1, 2), keepdims=True)
     n = len(array)
     array = (array - array_min) / (array_max - array_min)
-    array = (array * (n - 1) + 1) / (n + 1)
-    # array  = array * 0.9
+    # array = (array * (n - 1) + 1) / (n + 1)
+    array  = array * 0.9
 
     print("Range:", array.min(), array.max())
     print("Shape:", array_min.shape, array_max.shape)
@@ -104,7 +106,8 @@ if DOMAIN == "gumbel":
     np.savez(stats_path, min=array_min, max=array_max, n=n)
 
 elif DOMAIN == "gaussian":
-    array = np.clip(array, EPS, 1-EPS) # Avoid inv erf issues
+    # array = np.clip(array, EPS, 1-EPS) # Avoid inv erf issues
+    array = np.clip(array, EPS, None)
     from scipy.special import erfinv
     array = np.sqrt(2) * erfinv(2 * array - 1)
 
@@ -113,13 +116,17 @@ elif DOMAIN == "gaussian":
     array_max = np.max(array, axis=(0, 1, 2), keepdims=True)
     n = len(array)
     array = (array - array_min) / (array_max - array_min)
-    array = (array * (n - 1) + 1) / (n + 1)
+    # array = (array * (n - 1) + 1) / (n + 1)
+    array  = array * 0.9
 
     print("Range:", array.min(), array.max())
     print("Shape:", array_min.shape, array_max.shape)
 
     stats_path = os.path.join(winddir, "..", "image_stats.npz")
     np.savez(stats_path, min=array_min, max=array_max, n=n)
+
+elif DOMAIN == "uniform":
+    array = array * 0.9
 
 for i in range(nimgs):
     arr = array[i]
