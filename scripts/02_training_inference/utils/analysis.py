@@ -72,7 +72,10 @@ def sample_dep(n, h, w, c, freq):
     return u_dep, rp_dep
 
 
-def load_samples(png_dir, training_dir, threshold=15., ny=500, domain="uniform", suffix=""):
+def load_samples(
+        png_dir, training_dir, threshold=15., ny=500, domain="uniform",
+        make_benchmarks=False
+    ) -> dict:
     """Load and process samples and training data for visualisation"""
     if domain == "rescaled":
         return rescaled.load_samples(png_dir, training_dir, threshold, ny)
@@ -171,14 +174,7 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500, domain="uniform",
     λ_extreme = λ(nextreme, nyears)
     nevents   = int(ny * λ_storms)
     nextremes = int(ny * λ_extreme)
-    nhazmaps  = 10
-    print(f"Generating {nevents} (non-extreme) benchmark samples "\
-          f"for {ny} years of data at rate {λ_storms:,.4f} storms/year")
-
-    # make comparison samples for total dependence/independence assumptions
     n, h, w, c = u_gen.shape
-    u_ind = np.random.uniform(1e-6, 1-1e-6, size=(nevents, h, w, c))
-    u_dep, rp_dep = sample_dep(nhazmaps, h, w, c, λ_storms)
 
     # randomly sample nextremes from the sampled data
     print(f"Sampling {nextremes} samples from {n} synthetic events.")
@@ -204,10 +200,6 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500, domain="uniform",
     x_gen = np.flip(x_gen, axis=1)
     del u_tmp
 
-    print("WARNING: ind/dep arrays may also need to flip lats.")
-    x_ind = statistics.invPIT(u_ind, x_ref, params)
-    x_dep = statistics.invPIT(u_dep, x_ref, params)
-
     # reorder samples in x space
     gen_max = x_gen[..., 0].max(axis=(1,2))
     gen_ord = np.argsort(gen_max)[::-1]
@@ -215,33 +207,69 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500, domain="uniform",
     u_gen = u_gen[gen_ord]
     y_gen = y_gen[gen_ord]
 
+    # calculate empirical copulas for all datasets
+    print("\nCalculating empirical copulas for all datasets.")
+    copula_trn = statistics.empiricalPIT(x_trn)
+    copula_val = statistics.empiricalPIT(x_val, x_trn)
+
+    # only get copula for first 149 samples to match other sets
+    nboot = n // nextreme
+    copula_subsets = []
+    for b in range(1, nboot):
+        print(f"Calculating empirical copula for subset {b} of {nboot-1} size={nextreme}")
+        start = b * nextreme
+        end   = (b + 1) * nextreme
+        copula_gen = statistics.empiricalPIT(x_gen[start:end, ...])
+        copula_subsets.append(copula_gen)
+    copula_gen = np.concatenate(copula_subsets, axis=0)
+
     # for southern hemisphere these should be upside-down in
-    # heatmaps and correctly orientated in geographic plots 
-    return {
+    # heatmaps and correctly orientated in geographic plots
+    output_dict = {
         'samples': {
             'u': yflip(u_gen),
             'y': yflip(y_gen),
             'x': yflip(x_gen),
-            'mask': yflip(u_gen_mask)
+            'mask': yflip(u_gen_mask),
+            'copula': yflip(copula_gen)
         }, 'training': {
             'u': u_trn,
             'y': y_trn,
             'x': x_trn,
-            'mask': u_trn_mask
+            'mask': u_trn_mask,
+            'copula': copula_trn
         }, 'valid': {
             'u': u_val,
             'y': y_val,
             'x': x_val,
-            'mask': u_val_mask
-        }, "independent": {
-            'u': u_ind,
-            'x': x_ind,
-        }, "dependent": {
-            'u': u_dep,
-            'rp': rp_dep,
-            'x': x_dep
-        }     
+            'mask': u_val_mask,
+            'copula': copula_val
+        }
     }
+    if make_benchmarks:
+        print(f"Generating {nevents} (non-extreme) benchmark samples "\
+            f"for {ny} years of data at rate {λ_storms:,.4f} storms/year")
+        u_ind = np.random.uniform(1e-6, 1-1e-6, size=(nevents, h, w, c))
+        u_dep, rp_dep = sample_dep(10, h, w, c, λ_storms)
+        print("WARNING: ind/dep arrays may also need to flip lats.")
+        x_ind = statistics.invPIT(u_ind, x_ref, params)
+        x_dep = statistics.invPIT(u_dep, x_ref, params)
+        benchmark_dict = {
+             "independent": {
+                'u': u_ind,
+                'x': x_ind,
+            }, "dependent": {
+                'u': u_dep,
+                'rp': rp_dep,
+                'x': x_dep
+            }     
+        }
+        output_dict = {**output_dict, **benchmark_dict}
+    else:
+        print("Not generating benchmark samples.")
+
+    return output_dict
+
 
 
 def plot(array, field, yflip=False, contours=False, mask=None, title='',
@@ -249,9 +277,7 @@ def plot(array, field, yflip=False, contours=False, mask=None, title='',
          standardise_colours=True,
          vmin=None, vmax=None,
          cmap=CMAP, levels=13):
-    """
 
-    """
     array = array.copy()
     if yflip:
         array = np.flip(array, axis=1)

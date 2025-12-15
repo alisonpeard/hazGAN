@@ -95,6 +95,7 @@ if DOMAIN == "gumbel":
     n = len(array)
     array = (array - array_min) / (array_max - array_min)
     array = (array * (n - 1) + 1) / (n + 1)
+    # array  = array * 0.9
 
     print("Range:", array.min(), array.max())
     print("Shape:", array_min.shape, array_max.shape)

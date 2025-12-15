@@ -89,45 +89,34 @@ def invPIT(
     return quantiles
 
 
-def PIT(
+def empiricalPIT(
         x:np.ndarray,
-        xref:np.ndarray,
-        theta:np.ndarray=None,
-        margins:str=None,
-        distribution:str="genpareto"
+        xref:np.ndarray=None,
     ) -> np.ndarray:
     """
-    Transform original distribution to uniform marginals via interpolation of empirical CDF.
+    Transform original distribution to uniform marginals via empirical CDF.
     
     Parameters
     ----------
     x : np.ndarray
         Original data for quantile calculation
-    theta : np.ndarray, optional (default = None)
-        Parameters of fitted Generalized Pareto Distribution (GPD)
-    margins : str, optional (default = False)
-        Whether to apply inverse transform for reduced variate margins
+    xref : np.ndarray, optional (default = None)
+        Reference data for empirical CDF calculation
     
     Returns
     -------
     np.ndarray
         Transformed marginals with same shape as input u
     """
+    if xref is None:
+        xref = x
 
-    semiparametric_cdf = partial(
-        semiparametric_cdf0, distribution=distribution
-    )
-
-    # flatten along spatial dimensions
     original_shape = x.shape
     if x.ndim == 4:
         n, h, w, c = x.shape
         hw = h * w
         x = x.reshape(n, hw, c)
         xref = xref.reshape(len(xref), hw, c)
-        if theta is not None:
-            theta = theta.reshape(hw, 3, c)
-            theta = theta.transpose(1, 0, 2)
     elif x.ndim == 3:
         n, hw, c = x.shape
     else:
@@ -136,30 +125,20 @@ def PIT(
             )    
 
     # vectorised numpy transform
-    distns = ["weibull", "genpareto", "genpareto"]
-    def transform(x, xref, theta, i, c):
+    def transform(x, xref, i, c):
         x_i = x[:, i, c]
         x_r = xref[:, i, c]
-        theta_i = theta[:, i, c] if theta is not None else None
-        distn = distns[c]
         return (
-            semiparametric_cdf(x_r, theta_i, distn)(x_i)
-            if theta is not None
-            else ecdf(x_r)(x_i)
+            ecdf(x_r)(x_i)
         )
 
     probs = np.array([
-        transform(x, xref, theta, i, channel)
+        transform(x, xref, i, channel)
         for i in range(hw) for channel in range(c) 
     ])
 
     probs = probs.T
     probs = probs.reshape(*original_shape)
 
-    if margins:
-        ppf = getattr(base, margins)
-        y = ppf(probs)
-    else:
-        y = probs
-    return y
+    return probs
 
