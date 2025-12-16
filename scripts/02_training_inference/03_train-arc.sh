@@ -15,13 +15,13 @@ OUTDIR="/data/ouce-opsis/spet5107/data"
 SCRIPT="/data/ouce-opsis/spet5107/hazGAN/styleGAN-DA/src/train.py"
 
 module load Anaconda3
-conda activate /data/ouce-opsis/spet5107/hazGAN2/.snakemake/conda/55ad1cb60ae140a2919a9f3f8906a963_ # styleGAN snakemake env
+ENV="/data/ouce-opsis/spet5107/hazGAN2/.snakemake/conda/55ad1cb60ae140a2919a9f3f8906a963_"
 
 source /data/ouce-opsis/spet5107/hazGAN2/workflow/scripts/cuda_env.sh
 
 mkdir -p $OUTDIR
 
-python $SCRIPT \
+conda run --prefix $ENV python $SCRIPT \
     --outdir=$OUTDIR \
     --data=$DATA \
     --gpus=1 \
