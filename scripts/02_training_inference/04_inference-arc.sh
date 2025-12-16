@@ -20,7 +20,7 @@ ENV="/data/ouce-opsis/spet5107/hazGAN2/.snakemake/conda/55ad1cb60ae140a2919a9f3f
 
 mkdir -p $OUTDIR
 
-conda run -n $ENV python ${SCRIPT} \
+conda run --prefix $ENV python ${SCRIPT} \
   --outdir=${OUTDIR} \
   --seeds=1-914 \
   --trunc=1.0 \
