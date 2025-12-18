@@ -1,6 +1,4 @@
 """Load the generated samples and training data and plot metrics.
-
-00030: new data for 300 epochs
 """
 # %%
 import os
@@ -22,9 +20,10 @@ FIELD     = 0
 THRESHOLD = [None, 15.][1]
 MONTH     = 9
 NYEARS    = 500
-DOMAIN    = ["uniform", "gaussian", "gumbel", "rescaled"][0]
-SAMPLES   = f"/soge-home/projects/mistral/alison/hazGAN-data/stylegan_output/{DOMAIN}/gen"
-
+DOMAIN    = ["uniform", "gaussian", "gumbel", "rescaled"][3]
+VERSION    = ["", "-04", "-05", "-06"][0] # for different experiments with same domain
+SAMPLES   = f"/soge-home/projects/mistral/alison/hazGAN-data/stylegan_output/{DOMAIN}{VERSION}/gen"
+# %%
 
 savefigs = True
 figdir = SAMPLES.replace("stylegan_output", "figures").replace("/gen", "")
@@ -43,6 +42,7 @@ def savefig(fig, outpath:str, savefigs:bool, savefig_kws:dict):
 
 def export_nc(data, lats, lons, ny, nx, domain):
     print("\nWARNING: export netCDF is hardcoded for BoB study.")
+    # delete the file if it
     lats = np.linspace(lats[0], lats[1], ny)
     lons = np.linspace(lons[0], lons[1], nx)
     samples_idx = np.arange(data['samples']['x'].shape[0])
@@ -57,7 +57,8 @@ def export_nc(data, lats, lons, ny, nx, domain):
             "field": (("field",), ["u10", "tp", "mslp"]),
             "sample": (("sample",), samples_idx),
         })
-    ds.to_netcdf(f'/soge-home/projects/mistral/alison/hazGAN-data/{domain}.nc')
+    ds.to_netcdf(f'/soge-home/projects/mistral/alison/hazGAN-data/{domain}{VERSION}.nc')
+    print(f"Exported netCDF to /soge-home/projects/mistral/alison/hazGAN-data/{domain}{VERSION}.nc")
         
 
 if __name__ == "__main__":
@@ -74,21 +75,25 @@ if __name__ == "__main__":
     samples_dir = os.path.expanduser(samples_dir)
     train_dir   = os.path.expanduser(train_dir)
 
-
     # loading takes a while
     data = load_samples(
         samples_dir, train_dir,
         threshold=THRESHOLD, ny=NYEARS, domain=DOMAIN
     )
-    
+    # %%
+    if not os.path.exists(f'/soge-home/projects/mistral/alison/hazGAN-data/{DOMAIN}{VERSION}.nc'):
+        export_nc(data, lats=[5, 25], lons=[80, 95], ny=64, nx=64, domain=DOMAIN)
+    # %%
     u_trn = data['training']['u']
     y_trn = data['training']['y']
     x_trn = data['training']['x']
+    cop_trn = data['training']['copula']
     mask_trn = data['training']['mask']
 
     u_gen = data['samples']['u']
     y_gen = data['samples']['y']
     x_gen = data['samples']['x']
+    cop_gen = data['samples']['copula']
     mask_gen = data['samples']['mask']
 
     #  add monthly medians to x data
@@ -133,7 +138,7 @@ if __name__ == "__main__":
     plt.ylabel("Density");
 
     # %% barchart
-    if True:
+    if False:
         reload(misc)
         fig, ax = misc.saffirsimpson_barchart(x_gen, x_trn, title="", scale="fives")
         fig.tight_layout()
@@ -141,7 +146,7 @@ if __name__ == "__main__":
         savefig(fig, outpath, savefigs, savefig_kws)
     
     # %% wind maxima vs return period plot
-    if True:
+    if False:
         _lambda = len(x_trn) / 81
         fig, ax = plt.subplots(figsize=(4, 4))
         transpose = False
@@ -160,7 +165,7 @@ if __name__ == "__main__":
         savefig(fig, outpath, savefigs, savefig_kws)
     
     # %% Brown-Resnick style scatterplots
-    if True:
+    if False:
         from hazGAN.constants import OBSERVATION_POINTS
         from hazGAN import op2idx
         reload(scatter)
@@ -203,7 +208,7 @@ if __name__ == "__main__":
         print("generated:", ecs_gen)
 
     # %% Make 64x64 plots of data
-    if True:
+    if False:
         import cmocean.cm as cmo
         reload(samples)
 
@@ -246,15 +251,17 @@ if __name__ == "__main__":
 
         FIELDS = [0, 1]
 
-        print(f"\nTail dependence coefficient:")
-        figa, metrics_a = fields.plot(u_gen, u_trn, fields.tail_dependence, fields=FIELDS, figsize=.6,
-                    title="", cbar_label=r"$\hat\lambda$",
-                    cmap="Spectral", vmin=0, vmax=1)
+        print(f"{FIELD_LABELS[FIELDS[0]]} and {FIELD_LABELS[FIELDS[1]]}:")
 
         print(f"\nPearson:")
-        figb, metrics_b = fields.plot(u_gen, u_trn, fields.pearson, fields=FIELDS, figsize=.6,
+        figb, metrics_b = fields.plot(cop_gen, cop_trn, fields.pearson, fields=FIELDS, figsize=.6,
                     title="", cbar_label=r"$r$", cmap="Spectral_r", vmin=-1, vmax=1)
 
+        print(f"\nTail dependence coefficient:")
+        figa, metrics_a = fields.plot(cop_gen, cop_trn, fields.tail_dependence, fields=FIELDS, figsize=.6,
+                    title="", cbar_label=r"$\hat\lambda$",
+                    cmap="Spectral", vmin=0, vmax=1)
+        
         outpath = os.path.join(figdir, "fig12a.png")
         savefig(figa, outpath, savefigs, savefig_kws)
         outpath = os.path.join(figdir, "fig12b.png")
@@ -271,32 +278,34 @@ if __name__ == "__main__":
 
         print(text)
     # %% - - - - - Plot spatial correlations - - - - - - - - - - - - - - - - -
-    if True:
+    if False:
         reload(spatial)
 
         for FIELD in [0]: #, 1, 2]:
-            figa, metrics_a = spatial.plot(u_gen , u_trn, spatial.pearson, field=FIELD, figsize=.6,
+            figa, metrics_a = spatial.plot(cop_gen , cop_trn, spatial.pearson, field=FIELD, figsize=.6,
             title="", cbar_label=r"$r$", cmap="Spectral_r", vmin=-1, vmax=1)
 
             outpath = os.path.join(figdir, f"fig11a_{FIELD}.png")
             savefig(figa, outpath, savefigs, savefig_kws)
 
             # %%  extremal coefficients (takes a minute)
-            figb, metrics_b = spatial.plot(u_gen, u_trn, spatial.tail_dependence, field=FIELD, figsize=.6,
-            title="", cbar_label=r"$\hat\lambda$", cmap="Spectral", vmin=0, vmax=1)
+            if False: # turn off (too slow for now)
+                # TODO: add resampling as in hazGAN2
+                figb, metrics_b = spatial.plot(u_gen, u_trn, spatial.tail_dependence, field=FIELD, figsize=.6,
+                title="", cbar_label=r"$\hat\lambda$", cmap="Spectral", vmin=0, vmax=1)
 
-            outpath = os.path.join(figdir, f"fig11b_{FIELD}.png")
-            savefig(figb, outpath, savefigs, savefig_kws)
+                outpath = os.path.join(figdir, f"fig11b_{FIELD}.png")
+                savefig(figb, outpath, savefigs, savefig_kws)
 
-            text = f"\nThe spatial correlation between the ERA5 and GAN-generated fields " \
-                f"for {FIELD_LABELS[FIELD]} is {metrics_a['pearson']:.3f} " \
-                f"(MAE = {metrics_a['mae']:.3f})."
-            
-            text += f"\nFor the extremes, spatial correlation between the ERA5 and GAN-generated fields of tail dependence coefficients " \
-                    f"for {FIELD_LABELS[FIELD]} is {metrics_b['pearson']:.3f} " \
-                    f"(MAE = {metrics_b['mae']:.3f})."
-            
-            print(text)
+                text = f"\nThe spatial correlation between the ERA5 and GAN-generated fields " \
+                    f"for {FIELD_LABELS[FIELD]} is {metrics_a['pearson']:.3f} " \
+                    f"(MAE = {metrics_a['mae']:.3f})."
+                
+                text += f"\nFor the extremes, spatial correlation between the ERA5 and GAN-generated fields of tail dependence coefficients " \
+                        f"for {FIELD_LABELS[FIELD]} is {metrics_b['pearson']:.3f} " \
+                        f"(MAE = {metrics_b['mae']:.3f})."
+                
+                print(text)
 
     # %% 
  

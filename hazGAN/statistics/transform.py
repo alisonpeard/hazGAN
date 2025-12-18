@@ -5,13 +5,14 @@ from functools import partial
 
 if __name__ == "__main__":
     import base
-    from empirical import quantile
+    from empirical import quantile, ecdf
     from empirical import semiparametric_quantile as semiparametric_quantile0
+    from empirical import semiparametric_cdf as semiparametric_cdf0
 else:
     from . import base
-    from .empirical import quantile
+    from .empirical import quantile, ecdf
     from .empirical import semiparametric_quantile as semiparametric_quantile0
-
+    from .empirical import semiparametric_cdf as semiparametric_cdf0
 
 
 def invPIT(
@@ -88,49 +89,56 @@ def invPIT(
     return quantiles
 
 
-def invPITDataset(ds:xr.Dataset, theta_var:str="params",
-                  u_var:str="uniform", x_var:str="anomaly",
-                  gumbel_margins:bool=False) -> xr.DataArray:
+def empiricalPIT(
+        x:np.ndarray,
+        xref:np.ndarray=None,
+    ) -> np.ndarray:
     """
-    Wrapper of invPIT for xarray.Dataset.
-    """
-    u = ds[u_var].values
-    x = ds[x_var].values
-    theta = ds[theta_var].values if theta_var in ds else None
-
-    x_inv = invPIT(u, x, theta, gumbel_margins)
-    x_inv = xr.DataArray(x_inv, dims=ds[x_var].dims, coords=ds[x_var].coords)
-
-    return x_inv
-
-
-# %% Developing tests
-if __name__ == "__main__":
-    import os
-    import pandas as pd
-    import xarray as xr
-    from environs import Env
-    import matplotlib.pyplot as plt
-    from hazGAN.utils import TEST_YEAR
-    from hazGAN.xarray import make_grid
-
-    env = Env()
-    env.read_env(recurse=True)
-    datadir = env.str("TRAINDIR")
-
+    Transform original distribution to uniform marginals via empirical CDF.
     
-    storms = pd.read_parquet(os.path.join(datadir, "storms.parquet"))
-    storms['time.u10'] = pd.to_datetime(storms['time.u10'])
-    storms['time.tp'] = pd.to_datetime(storms['time.tp'])
-    storms['time.mslp'] = pd.to_datetime(storms['time.mslp'])
-    storms = storms[storms['time.u10'].dt.year != TEST_YEAR]
-    storms_test = storms[storms['time.u10'].dt.year == TEST_YEAR]
+    Parameters
+    ----------
+    x : np.ndarray
+        Original data for quantile calculation
+    xref : np.ndarray, optional (default = None)
+        Reference data for empirical CDF calculation
+    
+    Returns
+    -------
+    np.ndarray
+        Transformed marginals with same shape as input u
+    """
+    if xref is None:
+        xref = x
 
-    data = xr.open_dataset(os.path.join(datadir, "data.nc"))
-    mask = data['time.year'] != TEST_YEAR
-    test_mask = data['time.year'] == TEST_YEAR
+    original_shape = x.shape
+    if x.ndim == 4:
+        n, h, w, c = x.shape
+        hw = h * w
+        x = x.reshape(n, hw, c)
+        xref = xref.reshape(len(xref), hw, c)
+    elif x.ndim == 3:
+        n, hw, c = x.shape
+    else:
+        raise ValueError(
+            "Data must have dimensions [n, h, w, c] or [n, h * w, c]."
+            )    
 
-    data_test = data.sel(time=test_mask)
-    data = data.sel(time=mask)
+    # vectorised numpy transform
+    def transform(x, xref, i, c):
+        x_i = x[:, i, c]
+        x_r = xref[:, i, c]
+        return (
+            ecdf(x_r)(x_i)
+        )
 
-    # %% test alignment with cellwise
+    probs = np.array([
+        transform(x, xref, i, channel)
+        for i in range(hw) for channel in range(c) 
+    ])
+
+    probs = probs.T
+    probs = probs.reshape(*original_shape)
+
+    return probs
+

@@ -1,8 +1,10 @@
-from glob import glob
 import os
+from glob import glob
 import numpy as np
 from PIL import Image
 import xarray as xr
+from tqdm import tqdm
+
 from hazGAN import statistics
 
 EPS   = 1e-6
@@ -45,7 +47,8 @@ def sample_dep(n, h, w, c, freq):
     return u_dep, rp_dep
 
 
-def load_samples(png_dir, training_dir, threshold=15., ny=500):
+def load_samples(
+        png_dir, training_dir, threshold=15., ny=500, make_benchmarks=False) -> dict:
     """Load and process samples and training data for visualisation"""
     print(f"\nLoading samples from {png_dir} with domain=rescaled")
     # load all the png files
@@ -55,9 +58,10 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500):
     print("WARNING: future work will use .npy to avoid quantisation issues.")
 
     samples = []
-    for png in png_list:
-        img = Image.open(png)
-        samples.append(np.array(img))
+    for png in (pbar := tqdm(png_list, desc="Loading PNG files")):
+        pbar.set_description(f"Loading {os.path.basename(png)}")
+        with Image.open(png) as img:
+            samples.append(np.array(img))
     samples = np.array(samples).astype(float)
     samples /= 255.
     print(f"Loaded {samples.shape} samples")
@@ -99,7 +103,7 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500):
 
     train  = train.sortby('maxwind', ascending=False)
     x_trn  = train.anomaly.values
-    u_trn  = train.uniform.values
+    u_trn = train.uniform.values
     params = train.params.values
     print(f"Loaded {params.shape} parameters")
     
@@ -130,7 +134,15 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500):
     # transformations (just ECDF here)
     y_trn = x_trn
     y_val = x_val
-    u_gen = statistics.ecdf(y_gen)
+    print("Calculating generated ECDF")
+    for c in range(3):
+        print(f"\n Channel {c}")
+        print(f"x_trn range: {x_trn[...,c].min()} to {x_trn[...,c].max()}")
+        print(f"x_ref range: {x_ref[...,c].min()} to {x_ref[...,c].max()}")
+        print(f"y_gen range: {y_gen[...,c].min()} to {y_gen[...,c].max()}")
+        print(f"params: {params[...,c]}")
+
+    u_gen = statistics.empiricalPIT(y_gen)
 
     # calculate how many of each set we need to generate n_y years of data
     nevents   = len(x_ref); print(f"{nevents=}")
@@ -139,14 +151,9 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500):
     λ_extreme = λ(nextreme, nyears)
     nevents   = int(ny * λ_storms)
     nextremes = int(ny * λ_extreme)
-    nhazmaps  = 10
-    print(f"Generating {nevents} (non-extreme) benchmark samples "\
-          f"for {ny} years of data at rate {λ_storms:,.4f} storms/year")
 
     # make comparison samples for total dependence/independence assumptions
     n, h, w, c = u_gen.shape
-    u_ind = np.random.uniform(1e-6, 1-1e-6, size=(nevents, h, w, c))
-    u_dep, rp_dep = sample_dep(nhazmaps, h, w, c, λ_storms)
 
     # randomly sample nextremes from the sampled data
     print(f"Sampling {nextremes} samples from {n} synthetic events.")
@@ -169,10 +176,6 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500):
     # get samples into data space (just y space here)
     x_gen = y_gen
 
-    print("WARNING: ind/dep arrays may also need to flip lats.")
-    x_ind = statistics.invPIT(u_ind, x_ref, params)
-    x_dep = statistics.invPIT(u_dep, x_ref, params)
-
     # reorder samples from largest to smallest max value
     gen_max = x_gen[..., 0].max(axis=(1,2))
     gen_ord = np.argsort(gen_max)[::-1]
@@ -180,30 +183,62 @@ def load_samples(png_dir, training_dir, threshold=15., ny=500):
     u_gen = u_gen[gen_ord]
     y_gen = y_gen[gen_ord]
 
+    # make empirical copulas
+    print("Calculating empirical copulas")
+    cop_trn = statistics.empiricalPIT(x_trn)
+    cop_val = statistics.empiricalPIT(x_val, x_trn)
+    # only get copula for first 149 samples to match other sets
+    nboot = n // nextreme
+    copula_subsets = []
+    for b in range(1, nboot):
+        print(f"Calculating empirical copula for subset {b} of {nboot-1} size={nextreme}")
+        start = b * nextreme
+        end   = (b + 1) * nextreme
+        copula_gen = statistics.empiricalPIT(x_gen[start:end, ...])
+        copula_subsets.append(copula_gen)
+    cop_gen = np.concatenate(copula_subsets, axis=0)
+
     # for southern hemisphere these should be upside-down in
     # heatmaps and correctly orientated in geographic plots 
-    return {
+    output_dict =  {
         'samples': {
             'u': yflip(u_gen),
             'y': yflip(y_gen),
             'x': yflip(x_gen),
-            'mask': yflip(u_gen_mask)
+            'mask': yflip(u_gen_mask),
+            'copula': yflip(cop_gen)
         }, 'training': {
             'u': u_trn,
             'y': y_trn,
             'x': x_trn,
-            'mask': u_trn_mask
+            'mask': u_trn_mask,
+            'copula': cop_trn
         }, 'valid': {
             'u': u_val,
             'y': y_val,
             'x': x_val,
-            'mask': u_val_mask
-        }, "independent": {
-            'u': u_ind,
-            'x': x_ind,
-        }, "dependent": {
-            'u': u_dep,
-            'rp': rp_dep,
-            'x': x_dep
-        }     
+            'mask': u_val_mask,
+            'copula': cop_val
+        }
     }
+    if make_benchmarks:
+        print(f"Generating {nevents} (non-extreme) benchmark samples "\
+            f"for {ny} years of data at rate {λ_storms:,.4f} storms/year")
+    
+        u_ind = np.random.uniform(1e-6, 1-1e-6, size=(nevents, h, w, c))
+        u_dep, rp_dep = sample_dep(10, h, w, c, λ_storms)
+        print("WARNING: ind/dep arrays may also need to flip lats.")
+        x_ind = statistics.invPIT(u_ind, x_ref, params)
+        x_dep = statistics.invPIT(u_dep, x_ref, params)
+        benchmark_dict = {
+            "independent": {
+                'u': u_ind,
+                'x': x_ind,
+            }, "dependent": {
+                'u': u_dep,
+                'rp': rp_dep,
+                'x': x_dep
+            }  
+        }
+        output_dict = {**output_dict, **benchmark_dict}
+    return output_dict

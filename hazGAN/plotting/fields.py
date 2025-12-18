@@ -93,32 +93,32 @@ def tail_dependence(array):
     return coeffs
 
 
-def _tail_dependence_coeff(u, v):
-    """
-    Classical tail dependence coefficient λ for upper tail dependence.
+# def _tail_dependence_coeff(u, v):
+#     """
+#     Classical tail dependence coefficient λ for upper tail dependence.
 
-    Args:
-        u, v: 1D arrays of uniform marginals
-        tail: 'upper' or 'lower'
-    Returns:
-        λ: tail dependence coefficient
+#     Args:
+#         u, v: 1D arrays of uniform marginals
+#         tail: 'upper' or 'lower'
+#     Returns:
+#         λ: tail dependence coefficient
 
-    Refs:
-        https://doi.org/10.1201/9780367803896
-        Nelsen, R. B. (2006). An Introduction to Copulas. Springer.
-    """
-    thresholds = np.arange(0.8, 0.99, 0.01)  # Multiple thresholds
-    lambdas = []
+#     Refs:
+#         https://doi.org/10.1201/9780367803896
+#         Nelsen, R. B. (2006). An Introduction to Copulas. Springer.
+#     """
+#     # thresholds = np.arange(0.8, 0.99, 0.01)  # Multiple thresholds
+#     lambdas = []
     
-    for t in thresholds:
-        u_exceed = u > t
-        both_exceed = (u > t) & (v > t)
+#     for t in thresholds:
+#         u_exceed = u > t
+#         both_exceed = (u > t) & (v > t)
         
-        if np.sum(u_exceed) > 0:
-            lambda_t = np.sum(both_exceed) / np.sum(u_exceed)
-            lambdas.append(lambda_t)
+#         if np.sum(u_exceed) > 0:
+#             lambda_t = np.sum(both_exceed) / np.sum(u_exceed)
+#             lambdas.append(lambda_t)
 
-    return np.mean(lambdas) if lambdas else 0
+#     return np.mean(lambdas) if lambdas else 0
 
 
 def _tail_dependence_coeff(u, v):
@@ -137,7 +137,8 @@ def _tail_dependence_coeff(u, v):
         https://rdrr.io/cran/extRemes/man/taildep.html
     """
     n = len(u)
-    thresholds = np.arange(0.8, 0.99, 0.01)  # Multiple thresholds
+    # thresholds = np.arange(0.8, 0.99, 0.01)  # Multiple thresholds
+    thresholds = np.arange(0.75, 0.9, 0.01)
     lambdas = []
     
     for t in thresholds:

@@ -1,3 +1,6 @@
+"""
+Make training JPEGS for comparison without the PIT transforms.
+"""
 # %%
 import os
 from environs import Env
@@ -12,7 +15,7 @@ import glob
 from hazGAN.utils import res2str
 
 WINDTHRESHOLD = [15, -float("inf")][0]
-DOMAIN        = ["uniform", "gumbel", "gaussian"][0]
+DOMAIN = "rescaled"
 EPS           = 1e-6
 
 def apply_colormap(grayscale_array, colormap_name='Spectral_r'):
@@ -66,7 +69,6 @@ ds   = ds.isel(time=idx)
 # %%
 ds.isel(time=0, field=0).uniform.plot(cmap=CMAP)
 ds.isel(time=0, field=0).uniform
-# ds = ds.fillna(1.) #! TEMPORARY
 
 print(f"\nFound {ds.time.size} images with maximum wind exceeding {WINDTHRESHOLD} m/s")
 
@@ -77,56 +79,24 @@ os.makedirs(winddir, exist_ok=True)
 os.makedirs(stormdir, exist_ok=True)
 
 nimgs = ds.time.size
-array = ds.uniform.values
+array = ds.anomaly.values #! NB using anomalies instead of uniform
 array = np.flip(array, axis=1) # flip latitude
-
-if not ((array.max() <= 1.) and (array.min() >= 0.)):
-        raise ValueError("Percentiles not in [0,1] range")
 
 assert array.shape[1:] == (64, 64, 3), f"Unexpected shape: {array.shape}"
 
-if DOMAIN == "gumbel":
-    # array = np.clip(array, EPS, 1-EPS) # Avoid log(0)
-    # only clip lower
-    array = np.clip(array, EPS, None)
-    array = -np.log(-np.log(array))
+# max-min rescale to (0, 1)
+array_min = np.min(array, axis=(0, 1, 2), keepdims=True)
+array_max = np.max(array, axis=(0, 1, 2), keepdims=True)
+n = len(array)
+array = (array - array_min) / (array_max - array_min)
+# array = (array * (n - 1) + 1) / (n + 1)
+array = array * 0.9
 
-    # scale to (0, 1)
-    array_min = np.min(array, axis=(0, 1, 2), keepdims=True)
-    array_max = np.max(array, axis=(0, 1, 2), keepdims=True)
-    n = len(array)
-    array = (array - array_min) / (array_max - array_min)
-    # array = (array * (n - 1) + 1) / (n + 1)
-    array  = array * 0.9
+print("Range:", array.min(), array.max())
+print("Shape:", array_min.shape, array_max.shape)
 
-    print("Range:", array.min(), array.max())
-    print("Shape:", array_min.shape, array_max.shape)
-
-    stats_path = os.path.join(winddir, "..", "image_stats.npz")
-    np.savez(stats_path, min=array_min, max=array_max, n=n)
-
-elif DOMAIN == "gaussian":
-    # array = np.clip(array, EPS, 1-EPS) # Avoid inv erf issues
-    array = np.clip(array, EPS, None)
-    from scipy.special import erfinv
-    array = np.sqrt(2) * erfinv(2 * array - 1)
-
-    # scale to (0, 1)
-    array_min = np.min(array, axis=(0, 1, 2), keepdims=True)
-    array_max = np.max(array, axis=(0, 1, 2), keepdims=True)
-    n = len(array)
-    array = (array - array_min) / (array_max - array_min)
-    # array = (array * (n - 1) + 1) / (n + 1)
-    array  = array * 0.9
-
-    print("Range:", array.min(), array.max())
-    print("Shape:", array_min.shape, array_max.shape)
-
-    stats_path = os.path.join(winddir, "..", "image_stats.npz")
-    np.savez(stats_path, min=array_min, max=array_max, n=n)
-
-elif DOMAIN == "uniform":
-    array = array * 0.9
+stats_path = os.path.join(winddir, "..", "image_stats.npz")
+np.savez(stats_path, min=array_min, max=array_max, n=n)
 
 for i in range(nimgs):
     arr = array[i]

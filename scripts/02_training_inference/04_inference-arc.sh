@@ -10,16 +10,17 @@
 #SBATCH --mem=24G
 #SBATCH --cpus-per-task=4
 
-OUTDIR="/data/ouce-opsis/spet5107/data/gaussian/gen"
-NETWORK="/data/ouce-opsis/spet5107/data/00000-gaussian-low_shot-kimg300-color-translation-cutout/network-snapshot-000300.pkl"
-SCRIPT="/data/ouce-opsis/spet5107/hazGAN/styleGAN-DA/src/train.py"
+OUTDIR="/data/ouce-opsis/spet5107/data/gaussian-06/gen"
+NETWORK="/data/ouce-opsis/spet5107/data/00006-gaussian-low_shot-kimg300-color-translation-cutout/network-snapshot-000300.pkl"
+SCRIPT="/data/ouce-opsis/spet5107/hazGAN/styleGAN-DA/src/generate.py"
 
 module load Anaconda3
-conda activate /data/ouce-opsis/spet5107/hazGAN2/.snakemake/conda/55ad1cb60ae140a2919a9f3f8906a963_ # styleGAN snakemake env
+
+ENV="/data/ouce-opsis/spet5107/hazGAN2/.snakemake/conda/55ad1cb60ae140a2919a9f3f8906a963_"
 
 mkdir -p $OUTDIR
 
-python ${SCRIPT} \
+conda run --prefix $ENV python ${SCRIPT} \
   --outdir=${OUTDIR} \
   --seeds=1-914 \
   --trunc=1.0 \
