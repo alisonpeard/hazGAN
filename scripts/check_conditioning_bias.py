@@ -1,7 +1,5 @@
 """
-This is a bit over-simplified, it identifies the maximum wind speed per storm rather
-than the daily max grid cell over the storm duration, but should be sufficient to
-get an idea of the conditioning bias.
+Identify conditioning grid cell for all storms.
 """
 # %%
 import os
@@ -11,10 +9,15 @@ import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+from environs import Env
 
 SIMPLIFIED = False
 
-path = "/Users/alison/Documents/dphil/paper1/nhess/v1/hazGAN-data/processing/storms.parquet"
+env = Env()
+env.read_env()
+
+data_dir = env.str("DATA_DIR")
+path = os.path.join(data_dir, "processing", "storms.parquet")
 
 
 if SIMPLIFIED:
@@ -38,11 +41,11 @@ if SIMPLIFIED:
 else:
     # try including all days of storms
     os.listdir(os.path.dirname(path))
-    daily_path = "/Users/alison/Documents/dphil/paper1/nhess/v1/hazGAN-data/processing/daily.parquet"
+    daily_path = os.path.join(data_dir, "processing", "daily.parquet")
     daily_df = pd.read_parquet(daily_path)
     daily_df.head()
 
-    meta_path = "/Users/alison/Documents/dphil/paper1/nhess/v1/hazGAN-data/processing/storms_metadata.parquet"
+    meta_path = os.path.join(data_dir, "processing", "storms_metadata.parquet")
     meta_df = pd.read_parquet(meta_path)
     meta_df.head()
 
@@ -59,7 +62,7 @@ else:
 
 
 # %% Add visualisation
-path = "/Users/alison/Documents/dphil/paper1/nhess/v1/hazGAN-data/processing/data_1941_2022.nc"
+path = os.path.join(data_dir, "processing", "data_1941_2022.nc")
 coords = xr.open_dataset(path)
 coords = coords['grid'].to_dataframe().reset_index()
 coords = gpd.GeoDataFrame(
@@ -87,7 +90,7 @@ ax.add_feature(cfeature.BORDERS, linestyle=':')
 ax.set_title("Number of storms conditioned on each grid cell (1941-2022)")
 
 # %%
-path = "/Users/alison/Documents/dphil/paper1/nhess/v1/hazGAN-data/processing/data_1941_2022.nc"
+path = os.path.join(data_dir, "processing", "data_1941_2022.nc")
 ds = xr.open_dataset(path)
 # %%
 mean_u10 = ds["u10"].mean(dim="time")
@@ -130,7 +133,6 @@ ax[2].add_feature(cfeature.COASTLINE)
 ax[2].add_feature(cfeature.BORDERS, linestyle=':')
 ax[2].set_title("Storm conditioning")
 
-# fig.suptitle("1941-2022")
 plt.tight_layout()
 # %%
 
