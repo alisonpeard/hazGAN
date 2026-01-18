@@ -20,14 +20,10 @@ FIELD     = 0
 THRESHOLD = [None, 15.][1]
 MONTH     = 9
 NYEARS    = 500
-DOMAIN    = ["uniform", "gaussian", "gumbel", "rescaled"][3]
-VERSION    = ["", "-04", "-05", "-06"][0] # for different experiments with same domain
-SAMPLES   = f"/soge-home/projects/mistral/alison/hazGAN-data/stylegan_output/{DOMAIN}{VERSION}/gen"
-# %%
-
+DOMAIN    = ["uniform", "gaussian", "gumbel", "rescaled"][1]
+VERSION   = ["", "-04", "-05", "-06"][0] # for different experiments with same domain
+# SAMPLES   = f"/soge-home/projects/mistral/alison/hazGAN-data/stylegan_output/{DOMAIN}{VERSION}/gen"
 savefigs = True
-figdir = SAMPLES.replace("stylegan_output", "figures").replace("/gen", "")
-os.makedirs(figdir, exist_ok=True)
 savefig_kws = dict(dpi=300, bbox_inches='tight', transparent=True)
 
 
@@ -40,7 +36,7 @@ def savefig(fig, outpath:str, savefigs:bool, savefig_kws:dict):
         print("Not saving figure. (savefigs is False)")
 
 
-def export_nc(data, lats, lons, ny, nx, domain):
+def export_nc(path, data, lats, lons, ny, nx, domain):
     print("\nWARNING: export netCDF is hardcoded for BoB study.")
     # delete the file if it
     lats = np.linspace(lats[0], lats[1], ny)
@@ -57,8 +53,8 @@ def export_nc(data, lats, lons, ny, nx, domain):
             "field": (("field",), ["u10", "tp", "mslp"]),
             "sample": (("sample",), samples_idx),
         })
-    ds.to_netcdf(f'/soge-home/projects/mistral/alison/hazGAN-data/{domain}{VERSION}.nc')
-    print(f"Exported netCDF to /soge-home/projects/mistral/alison/hazGAN-data/{domain}{VERSION}.nc")
+    ds.to_netcdf(path)
+    print(f"Exported netCDF to {path}")
         
 
 if __name__ == "__main__":
@@ -67,7 +63,9 @@ if __name__ == "__main__":
     env.read_env()
 
     train_dir   = env.str("TRAINDIR")
-    samples_dir = SAMPLES
+    samples_dir = os.path.join(env.str("SAMPLES_DIR"), f"{DOMAIN}{VERSION}/gen")
+    figdir = samples_dir.replace("stylegan_output", "figures").replace("/gen", "")
+    os.makedirs(figdir, exist_ok=True)
 
     np.random.seed(42)
 
@@ -81,8 +79,11 @@ if __name__ == "__main__":
         threshold=THRESHOLD, ny=NYEARS, domain=DOMAIN
     )
     # %%
-    if not os.path.exists(f'/soge-home/projects/mistral/alison/hazGAN-data/{DOMAIN}{VERSION}.nc'):
-        export_nc(data, lats=[5, 25], lons=[80, 95], ny=64, nx=64, domain=DOMAIN)
+    out_netcdf = env.str("DATA_DIR", "netcdf_samples", f"{DOMAIN}{VERSION}.nc")
+    if not os.path.exists(out_netcdf):
+        print("\nExporting samples to netCDF...")
+        os.makedirs(os.path.dirname(out_netcdf), exist_ok=True)
+        export_nc(out_netcdf, data, lats=[5, 25], lons=[80, 95], ny=64, nx=64, domain=DOMAIN)
     # %%
     u_trn = data['training']['u']
     y_trn = data['training']['y']
