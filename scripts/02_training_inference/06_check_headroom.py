@@ -1,4 +1,6 @@
-"""Load the generated samples and training data and plot metrics.
+"""
+Compare generated and training data tails for different training
+configurations.
 """
 # %%
 import os
@@ -6,12 +8,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from PIL import Image
+from environs import Env
 
-THRESHOLD = [None, 15.][1]
-MONTH     = 9
-NYEARS    = 500
-DOMAINS    = ["uniform", "gaussian", "gumbel", "rescaled"]
-VERSION    = ["", "-04", "-05", "-06"][0] # for different experiments with same domain
+
+DOMAINS   = ["uniform", "gaussian", "gumbel", "rescaled"]
+VERSION   = ["", "-04", "-05", "-06"][0]
+FIELD     = 0
+THRESH    = 0.6
+
 
 def load_pngs(png_dir):
     png_list = os.listdir(png_dir)
@@ -29,58 +33,32 @@ def load_pngs(png_dir):
     print(f"Loaded {samples.shape} samples")
     return samples
 
-FIELD = 0
-# %%
-# %%
-thresh = 0.8
-for DOMAIN in ["gaussian"]:
-    TRAIN     = f"/soge-home/projects/mistral/alison/hazGAN-data/training/images/{DOMAIN}/storm"
-    SAMPLES   = f"/soge-home/projects/mistral/alison/hazGAN-data/stylegan_output/{DOMAIN}{VERSION}/gen"
-    train = load_pngs(TRAIN)
-    # gen   = load_pngs(SAMPLES)
-    # headroom = gen.max() - train.max()
-    # print(f"Headroom between training and generated samples for {DOMAIN}: {headroom}")
-    
-    train = train[..., FIELD].ravel()
-    train = train[train > thresh]
 
-    # gen = gen[..., FIELD].ravel()
-    # gen = gen[gen > thresh]
+if __name__ == "__main__":
+    env = Env()
+    env.read_env()
 
-    fig, ax = plt.subplots(figsize=(6, 4))
-    hist_kws = dict(density=True, bins=50, alpha=0.5, edgecolor='k', linewidth=0.1)
-    ax.hist(train, label="Training data", **hist_kws);
-    # ax.hist(gen, label="Generated samples", **hist_kws);
-    ax.legend(loc="upper right")
-    fig.suptitle(f"Field {FIELD} using {DOMAIN}")
-    ax.set_xlim([thresh, 1.0])
-    plt.show()
-    # print(sum(gen == 1.) / len(gen) * 100., "% of generated samples at one")
+    for DOMAIN in DOMAINS:
+        TRAIN   = os.path.join(env.str("TRAINDIR"), "images", DOMAIN, "storm")
+        SAMPLES = os.path.join(env.str("SAMPLES_DIR"), f"{DOMAIN}{VERSION}/gen")
+        train = load_pngs(TRAIN)
+        gen   = load_pngs(SAMPLES)
+        headroom = gen.max() - train.max()
+        print(f"Headroom between training and generated samples for {DOMAIN}: {headroom}")
+        
+        train = train[..., FIELD].ravel()
+        train = train[train > THRESH]
 
-# %%
-thresh = 0.8
-for DOMAIN in DOMAINS:
-    TRAIN     = f"/soge-home/projects/mistral/alison/hazGAN-data/training/images/{DOMAIN}/storm"
-    SAMPLES   = f"/soge-home/projects/mistral/alison/hazGAN-data/stylegan_output/{DOMAIN}{VERSION}/gen"
-    train = load_pngs(TRAIN)
-    gen   = load_pngs(SAMPLES)
-    headroom = gen.max() - train.max()
-    print(f"Headroom between training and generated samples for {DOMAIN}: {headroom}")
-    
-    train = train[..., FIELD].ravel()
-    train = train[train > thresh]
+        gen = gen[..., FIELD].ravel()
+        gen = gen[gen > THRESH]
 
-    gen = gen[..., FIELD].ravel()
-    gen = gen[gen > thresh]
-
-    fig, ax = plt.subplots(figsize=(6, 4))
-    hist_kws = dict(density=True, bins=50, alpha=0.5, edgecolor='k', linewidth=0.1)
-    ax.hist(train, label="Training data", **hist_kws);
-    ax.hist(gen, label="Generated samples", **hist_kws);
-    ax.legend(loc="upper right")
-    fig.suptitle(f"Field {FIELD} using {DOMAIN}")
-    plt.show()
-    print(sum(gen == 1.) / len(gen) * 100., "% of generated samples at one")
-
+        fig, ax = plt.subplots(figsize=(6, 4))
+        hist_kws = dict(density=True, bins=25, alpha=0.5, edgecolor='k', linewidth=0.1)
+        ax.hist(train, label="Training data", **hist_kws);
+        ax.hist(gen, label="Generated samples", **hist_kws);
+        ax.legend(loc="upper right")
+        fig.suptitle(f"Field {FIELD} using {DOMAIN}")
+        plt.show()
+        print(sum(gen == 1.) / len(gen) * 100., "% of generated samples at one")
 
 # %%
