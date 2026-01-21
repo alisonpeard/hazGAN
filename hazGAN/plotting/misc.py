@@ -83,27 +83,11 @@ def windvsreturnperiod(x:np.ndarray, _lambda:float, ax=None, windchannel=0,
 
     return ax
 
-
-    def category(x):
-        if x < 17:
-            return -1
-        elif x < 33:
-            return 0
-        elif x < 43:
-            return 1
-        elif x < 49:
-            return 2
-        elif x < 58:
-            return 3
-        elif x < 70:
-            return 4
-        else:
-            return 5
         
 def saffirsimpson_barchart(fake, train, title='',
                             xlabel="", yscale='linear',
                             bar_width=0.25, grid=True,
-                            scale="saffirsimpson"):
+                            scale="saffirsimpson", density=True):
     """Plot bar charts comparing fake and train data across hurricane categories."""
     fake = maxwinds(fake)
     train = maxwinds(train)
@@ -163,8 +147,12 @@ def saffirsimpson_barchart(fake, train, title='',
     train_counts = train.value_counts().sort_index()
     
     # Convert to probabilities/densities
-    fake_density = fake_counts / len(fake)
-    train_density = train_counts / len(train)
+    if density:
+        fake_density = fake_counts / len(fake)
+        train_density = train_counts / len(train)
+    else:
+        fake_density = fake_counts
+        train_density = train_counts
     
     # Make sure all categories are represented (fill with zeros if missing)
     max_cat = max(fake_density.index.max(), train_density.index.max())

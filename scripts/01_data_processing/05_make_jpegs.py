@@ -9,194 +9,107 @@ from PIL import Image
 import numpy as np
 import glob
 
-from hazGAN.utils import res2str
+from hazGAN import statistics
 
 WINDTHRESHOLD = [15, -float("inf")][0]
-DOMAIN        = ["uniform", "gumbel", "gaussian"][0]
 EPS           = 1e-6
-
-def apply_colormap(grayscale_array, colormap_name='Spectral_r'):
-    normalized = grayscale_array.astype(float) / 255
-    colormap = plt.get_cmap(colormap_name)
-    colored = colormap(normalized)
-    rgb_uint8 = np.uint8(colored[..., :3] * 255)
-    return rgb_uint8
-
-
-def create_image_grid(image_paths, grid_size=(32, 32), output_path="grid.png"):
-    with Image.open(image_paths[0]) as img:
-        tile_width, tile_height = img.size
-        
-    total_width = tile_width * grid_size[1]
-    total_height = tile_height * grid_size[0]
-    
-    output_img = Image.new('RGB', (total_width, total_height), 'white')
-    
-    n_images = min(len(image_paths), grid_size[0] * grid_size[1])
-    
-    for idx in range(n_images):
-        row = idx // grid_size[1]
-        col = idx % grid_size[1]
-        
-        x = col * tile_width
-        y = row * tile_height
-        
-        with Image.open(image_paths[idx]) as img:
-            output_img.paste(img, (x, y))
-            
-    output_img.save(output_path)
-    print(f"Grid saved to: {output_path}")
-    return output_img
-
 RES  = (64, 64)
 CMAP = "Spectral_r"
 
-env = Env()
-env.read_env(recurse=True)
-traindir = env.str("TRAINDIR")
-# traindir = os.path.join(traindir, res2str(RES))
-os.listdir(traindir)
-# %%
-ds = xr.open_dataset(os.path.join(traindir, 'data.nc'))
-ds['windmax'] = ds.sel(field='u10').anomaly.max(dim=['lon', 'lat'])
-mask = (ds['windmax'] > WINDTHRESHOLD).values
-idx  = np.where(mask)[0]
-ds   = ds.isel(time=idx)
+i, j = 3, 1
+DOMAIN = ["rescaled", "uniform", "gumbel", "gaussian"][i]
+RESCALE_METHOD = ["minmax", "rp"][j]
+RESCALE_ARG = [0.9, 10_000][j]
 
-# %%
-ds.isel(time=0, field=0).uniform.plot(cmap=CMAP)
-ds.isel(time=0, field=0).uniform
-# ds = ds.fillna(1.) #! TEMPORARY
+def rescale_array(array, method="minmax09", arg=RESCALE_ARG, domain=DOMAIN):
 
-print(f"\nFound {ds.time.size} images with maximum wind exceeding {WINDTHRESHOLD} m/s")
+    array = np.copy(array)
 
-# %% Make JPEGS of percentiles
-winddir = os.path.join(traindir, 'images', DOMAIN, "wind")
-stormdir = os.path.join(traindir, 'images', DOMAIN, "storm")
-os.makedirs(winddir, exist_ok=True)
-os.makedirs(stormdir, exist_ok=True)
+    if method == "minmax":
+        array_min = np.min(array, axis=(0, 1, 2), keepdims=True)
+        array_max = np.max(array, axis=(0, 1, 2), keepdims=True)
+        array = (array - array_min) / (array_max - array_min)
+        array  = arg * array
+        stats = {'min': array_min, 'max': array_max, 'param': arg,  'method': method}
+        return array, stats
 
-nimgs = ds.time.size
-array = ds.uniform.values
-array = np.flip(array, axis=1) # flip latitude
+    elif method == "rp":
+        if domain == "rescaled":
+            raise ValueError("Return period scaling not defined for 'rescaled' domain")
 
-if not ((array.max() <= 1.) and (array.min() >= 0.)):
-        raise ValueError("Percentiles not in [0,1] range")
+        ppf = getattr(statistics, domain)
+        array_max = ppf(1 - 1 / arg)
+        array_min = ppf(1 / arg)
 
-assert array.shape[1:] == (64, 64, 3), f"Unexpected shape: {array.shape}"
+        assert array_max > array.max(), \
+            f"Return level max less than data max {array_max:.4f} < {array.max():.4f}"
+        array = (array - array_min) / (array_max - array_min)
+        stats = {'min': array_min, 'max': array_max, 'param': arg, 'method': method}
+        return array, stats
 
-if DOMAIN == "gumbel":
-    # array = np.clip(array, EPS, 1-EPS) # Avoid log(0)
-    # only clip lower
-    array = np.clip(array, EPS, None)
-    array = -np.log(-np.log(array))
 
-    # scale to (0, 1)
-    array_min = np.min(array, axis=(0, 1, 2), keepdims=True)
-    array_max = np.max(array, axis=(0, 1, 2), keepdims=True)
-    n = len(array)
-    array = (array - array_min) / (array_max - array_min)
-    # array = (array * (n - 1) + 1) / (n + 1)
-    array  = array * 0.9
+if __name__ == "__main__":
+    env = Env()
+    env.read_env(recurse=True)
+    traindir = env.str("TRAINDIR")
 
-    print("Range:", array.min(), array.max())
-    print("Shape:", array_min.shape, array_max.shape)
+    print(f"Loading training data from {traindir}")
+    ds = xr.open_dataset(os.path.join(traindir, 'data.nc'))
+    ds['windmax'] = ds.sel(field='u10').anomaly.max(dim=['lon', 'lat'])
+    mask = (ds['windmax'] > WINDTHRESHOLD).values
+    idx  = np.where(mask)[0]
+    ds   = ds.isel(time=idx)
 
-    stats_path = os.path.join(winddir, "..", "image_stats.npz")
-    np.savez(stats_path, min=array_min, max=array_max, n=n)
+    print(f"\nFound {ds.time.size} training events with maximum wind exceeding {WINDTHRESHOLD} m/s")
 
-elif DOMAIN == "gaussian":
-    # array = np.clip(array, EPS, 1-EPS) # Avoid inv erf issues
-    array = np.clip(array, EPS, None)
-    from scipy.special import erfinv
-    array = np.sqrt(2) * erfinv(2 * array - 1)
+    outdir = os.path.join(traindir, 'images', f"{DOMAIN}_{RESCALE_METHOD}{str(RESCALE_ARG).replace('.', '')}", "png")
+    stats_path = os.path.join(outdir, "..", "image_stats.npz")
+    os.makedirs(os.path.join(outdir, "png"), exist_ok=True)
 
-    # scale to (0, 1)
-    array_min = np.min(array, axis=(0, 1, 2), keepdims=True)
-    array_max = np.max(array, axis=(0, 1, 2), keepdims=True)
-    n = len(array)
-    array = (array - array_min) / (array_max - array_min)
-    # array = (array * (n - 1) + 1) / (n + 1)
-    array  = array * 0.9
+    nimgs = ds.time.size
 
-    print("Range:", array.min(), array.max())
-    print("Shape:", array_min.shape, array_max.shape)
+    if DOMAIN == "rescaled":
+         u = ds.anomaly.values
+    else:
+        u = ds.uniform.values
+        print(f"Maximum u-value found is {u.max():.6f}")
+        print(f"Corresponds to {1/(1-u.max()):,.0f}-year return level assumption")
+        print(f"Minimum u-value found is {u.min():.6f}")
+        print(f"Corresponds to {1/(1-u.min()):,.0f}-year return level assumption")
 
-    stats_path = os.path.join(winddir, "..", "image_stats.npz")
-    np.savez(stats_path, min=array_min, max=array_max, n=n)
-
-elif DOMAIN == "uniform":
-    array = array * 0.9
-
-for i in range(nimgs):
-    arr = array[i]
-    # assert nothing bigger than one or smaller than zero
-    assert np.all((arr >= 0.) & (arr <= 1.)), f"Array values out of [0,1] range: min {arr.min()}, max {arr.max()}"
-    arr = np.uint8(arr * 255)
+        if not ((u.max() < 1.0) and (u.min() >= 0.0)):
+            raise ValueError("Percentiles not in [0, 1) range")
     
-    first_channel = arr[..., 0]
-    colored_array = apply_colormap(first_channel)  # Try different colormaps!
-    colored_img = Image.fromarray(colored_array)
-    output_path = os.path.join(winddir, f"wind_{i}.png")
-    colored_img.save(output_path)
+    u = np.flip(u, axis=1) #! flip latitude
 
-    img = Image.fromarray(arr, 'RGB')
-    output_path = os.path.join(stormdir, f"storm_{i}.png")
-    img.save(output_path)
+    assert u.shape[1:] == (64, 64, 3), f"Unexpected shape: {u.shape}"
 
-    # Optional: verify saved image
-    test_load = Image.open(output_path)
+    ppf = getattr(statistics, DOMAIN)
+    y = ppf(u)
+    y, stats = rescale_array(y, method=RESCALE_METHOD, arg=RESCALE_ARG, domain=DOMAIN)
+    np.savez(stats_path, **stats)
 
-storm_paths = sorted(glob.glob(os.path.join(stormdir, "storm_*.png")))
-wind_paths  = sorted(glob.glob(os.path.join(winddir, "wind_*.png")))
+    # save images
+    for i in range(nimgs):
+        y_i = y[i]
+        assert np.all((y_i >= 0.) & (y_i < 1.)), \
+            f"Array values out of [0,1) range: min {y_i.min()}, max {y_i.max()}"
+        y_i = np.uint8(y_i * 255)
+        img = Image.fromarray(y_i, 'RGB')
+        output_path = os.path.join(outdir, f"storm_{i}.png")
+        img.save(output_path)
 
-# Create grids
-create_image_grid(storm_paths, (8, 8), os.path.join(stormdir, "..", "percentiles_storm.png"))
-create_image_grid(wind_paths, (8, 8), os.path.join(winddir, "..", "percentiles_wind.png"))
+    storm_paths = sorted(glob.glob(os.path.join(outdir, "storm_*.png")))
+    print(f"\nSaved {len(storm_paths)} images to {outdir}")
 
-# %% Quantiles
-# winddir = os.path.join(traindir, 'images', "anomaly", "wind")
-stormdir = os.path.join(traindir, "rgb")
-os.makedirs(winddir, exist_ok=True)
-os.makedirs(stormdir, exist_ok=True)
+    zipdir = os.path.join(traindir, 'images', 'zipfiles')
+    os.makedirs(zipdir, exist_ok=True)
+    zippath = os.path.join(zipdir, f"{DOMAIN}_{RESCALE_METHOD}{str(RESCALE_ARG).replace('.', '')}.zip")
+    print(f"Zipping images to {zippath} ...")
+    # os.system(f"cd {outdir} && zip -r {zippath} .")
+    # zip only .png files
+    os.system(f"cd {outdir} && zip -r {zippath} . -i '*.png'")
+    print("Done.")
 
-nimgs = ds.time.size
 
-for i in range(nimgs):
-    array = ds.isel(time=i).anomaly.values
-    array = np.flip(array, axis=0)
-
-    if not ((array.max() <= 1.) and (array.min() >= 0.)):
-        print("WARNING: Quantile data not in [0,1] range, normalizing...")
-        minima = np.min(array, axis=(0, 1), keepdims=True)
-        maxima = np.max(array, axis=(0, 1), keepdims=True)
-        print("Minima:", minima.min())
-        print("Maxima:", maxima.max())
-        array  = (array - minima) / (maxima - minima)
-
-    assert array.shape== (64, 64, 3), f"Unexpected shape: {array.shape}"
-
-    array = np.uint8(array * 255)
-
-    first_channel = array[..., 0]
-    colored_array = apply_colormap(first_channel)  # Try different colormaps!
-    colored_img = Image.fromarray(colored_array)
-    output_path = os.path.join(winddir, f"wind_{i}.png")
-    colored_img.save(output_path)
-
-    img = Image.fromarray(array, 'RGB')
-    output_path = os.path.join(stormdir, f"storm_{i}.png")
-    img.save(output_path)
-
-    # Optional: verify saved image
-    test_load = Image.open(output_path)
-
-storm_paths = sorted(glob.glob(os.path.join(stormdir, "storm_*.png")))
-wind_paths  = sorted(glob.glob(os.path.join(winddir, "wind_*.png")))
-
-print("{} storms processed".format(len(storm_paths)))
-
-# Create grids
-create_image_grid(storm_paths, (8, 8), os.path.join(stormdir, "..", "quantiles_storm.png"))
-create_image_grid(wind_paths, (8, 8), os.path.join(winddir, "..", "quantiles_wind.png"))
-# %%
+# %% 

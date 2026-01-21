@@ -10,31 +10,31 @@ source("utils/settings.R")
 
 readRenviron("../../.env")
 
-WD         <- Sys.getenv("ERA5DIR")
-DRYRUN     <- FALSE
-NDRYRUN    <- 8
+WD      <- Sys.getenv("PROCESSING_DIR")
+DRYRUN  <- FALSE
+NDRYRUN <- 8
 
 daily    <- read_parquet(paste0(WD, "/", "daily.parquet"))
 metadata <- read_parquet(paste0(WD, "/", "storms_metadata.parquet"))
 
-# subset to mini dataset if it's a dry run
+# subset to mini data set if it's a dry run
 if(DRYRUN) {
   subgrid <- unique(daily$grid)[1:NDRYRUN]
-  daily   <- daily[daily$grid %in% subgrid,]
+  daily   <- daily[daily$grid %in% subgrid, ]
 }
 
 #%%######## TRANSFORM STORMS ###################################################
-print("Tranforming fields...")
-storms_wind <- weibull_transformer(daily, metadata, "u10", Q);warnings()
+print("Transforming fields...")
+# storms_wind <- weibull_transformer(daily, metadata, "u10", Q);warnings()
+storms_wind <- gpd_transformer(daily, metadata, "u10", Q);warnings()
 storms_mslp <- gpd_transformer(daily, metadata, "msl", Q);warnings()
 storms_tp   <- gpd_transformer(daily, metadata, "tp", Q);warnings()
 
 print("Done. Putting it all together...")
 renamer <- function(df, var) {
-  # rename all fields for joining dataframes
+  # rename all fields for joining data frames
   df <- df %>%
-    rename_with(~ paste0(., ".", var),
-                -c("grid", "storm", "storm.rp", "variable"))
+    rename_with(~ paste0(., ".", var), -c("grid", "storm", "storm.rp", "variable"))
   df <- df %>% rename_with(~ var, "variable")
   return(df)
 }

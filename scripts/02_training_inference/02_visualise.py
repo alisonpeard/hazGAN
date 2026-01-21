@@ -1,4 +1,5 @@
-"""Load the generated samples and training data and plot metrics.
+"""
+Create diagnostic plots of the generated png files.
 """
 # %%
 import os
@@ -20,9 +21,9 @@ FIELD     = 0
 THRESHOLD = [None, 15.][1]
 MONTH     = 9
 NYEARS    = 500
+SCALING   = "rp10000"
 DOMAIN    = ["uniform", "gaussian", "gumbel", "rescaled"][1]
 VERSION   = ["", "-04", "-05", "-06"][0] # for different experiments with same domain
-# SAMPLES   = f"/soge-home/projects/mistral/alison/hazGAN-data/stylegan_output/{DOMAIN}{VERSION}/gen"
 savefigs = True
 savefig_kws = dict(dpi=300, bbox_inches='tight', transparent=True)
 
@@ -38,7 +39,6 @@ def savefig(fig, outpath:str, savefigs:bool, savefig_kws:dict):
 
 def export_nc(path, data, lats, lons, ny, nx, domain):
     print("\nWARNING: export netCDF is hardcoded for BoB study.")
-    # delete the file if it
     lats = np.linspace(lats[0], lats[1], ny)
     lons = np.linspace(lons[0], lons[1], nx)
     samples_idx = np.arange(data['samples']['x'].shape[0])
@@ -63,8 +63,8 @@ if __name__ == "__main__":
     env.read_env()
 
     train_dir   = env.str("TRAINDIR")
-    samples_dir = os.path.join(env.str("SAMPLES_DIR"), f"{DOMAIN}{VERSION}/gen")
-    figdir = samples_dir.replace("stylegan_output", "figures").replace("/gen", "")
+    samples_dir = os.path.join(env.str("SAMPLES_DIR"), SCALING, f"{DOMAIN}{VERSION}", "png")
+    figdir = samples_dir.replace("generated", "figures").replace("/png", "")
     os.makedirs(figdir, exist_ok=True)
 
     np.random.seed(42)
@@ -73,18 +73,22 @@ if __name__ == "__main__":
     samples_dir = os.path.expanduser(samples_dir)
     train_dir   = os.path.expanduser(train_dir)
 
+    all_sample_files = os.listdir(samples_dir)
+    print(f"\nFound {len(all_sample_files)} sample files in {samples_dir}.")
+
     # loading takes a while
     data = load_samples(
         samples_dir, train_dir,
-        threshold=THRESHOLD, ny=NYEARS, domain=DOMAIN
+        threshold=THRESHOLD, ny=NYEARS, domain=DOMAIN, scaling=SCALING
     )
-    # %%
-    out_netcdf = env.str("DATA_DIR", "netcdf_samples", f"{DOMAIN}{VERSION}.nc")
+    # %%
+    out_netcdf = os.path.join(samples_dir.replace("png", "nc"), f"{DOMAIN}{VERSION}.nc")
     if not os.path.exists(out_netcdf):
         print("\nExporting samples to netCDF...")
         os.makedirs(os.path.dirname(out_netcdf), exist_ok=True)
         export_nc(out_netcdf, data, lats=[5, 25], lons=[80, 95], ny=64, nx=64, domain=DOMAIN)
     # %%
+
     u_trn = data['training']['u']
     y_trn = data['training']['y']
     x_trn = data['training']['x']
@@ -115,8 +119,8 @@ if __name__ == "__main__":
     print(f"precipitation:  {np.quantile(x_trn[..., 1], 0.5):.2f} m")
     print(f"pressure:       {np.quantile(x_trn[..., 2], 0.5):.2f} Pa")
 
-    x_trn += medians
-    x_gen += medians
+    x_trn = x_trn.copy() + medians
+    x_gen = x_gen.copy() + medians
 
     # for pressure, invert sign
     x_trn[..., 2] *= -1
@@ -127,19 +131,8 @@ if __name__ == "__main__":
     print(f"precipitation:  {np.quantile(x_trn[..., 1], 0.5):.2f} m")
     print(f"pressure:       {np.quantile(x_trn[..., 2], 0.5):0.2f} Pa")
 
-    # quick histogram of field maxima
-    FIELD = 0
-    ymax_trn = np.max(y_trn[..., FIELD], axis=(1, 2))
-    ymax_gen = np.max(y_gen[..., FIELD], axis=(1, 2))
-
-    plt.figure(figsize=(6, 4), dpi=300)
-    plt.hist(ymax_gen, bins=25, density=True, alpha=0.5, label='Generated')
-    plt.hist(ymax_trn, bins=25, density=True, alpha=0.5, label='ERA5')
-    plt.xlabel(f"maxima, field: {FIELD}")
-    plt.ylabel("Density");
-
     # %% barchart
-    if False:
+    if True:
         reload(misc)
         fig, ax = misc.saffirsimpson_barchart(x_gen, x_trn, title="", scale="fives")
         fig.tight_layout()
@@ -147,7 +140,7 @@ if __name__ == "__main__":
         savefig(fig, outpath, savefigs, savefig_kws)
     
     # %% wind maxima vs return period plot
-    if False:
+    if True:
         _lambda = len(x_trn) / 81
         fig, ax = plt.subplots(figsize=(4, 4))
         transpose = False
@@ -166,7 +159,7 @@ if __name__ == "__main__":
         savefig(fig, outpath, savefigs, savefig_kws)
     
     # %% Brown-Resnick style scatterplots
-    if False:
+    if True:
         from hazGAN.constants import OBSERVATION_POINTS
         from hazGAN import op2idx
         reload(scatter)
@@ -209,7 +202,7 @@ if __name__ == "__main__":
         print("generated:", ecs_gen)
 
     # %% Make 64x64 plots of data
-    if False:
+    if True:
         import cmocean.cm as cmo
         reload(samples)
 

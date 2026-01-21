@@ -5,7 +5,7 @@ from . import plotting
 # from .tensorflow import *
 # from . import conditional
 # from .R import R
-# from .statistics import *
+from . import statistics
 # from .xarray import *
 
 __version__ = "2.02"

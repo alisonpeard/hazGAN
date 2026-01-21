@@ -159,7 +159,7 @@ class SemiParametric(Empirical):
 
             
             except AssertionError as e:
-                print(e)
+                print(f"\nError in SemiParametric._semicdf:")
                 print("x: ", min(x), max(x))
                 print("u: ", min(u), max(u))
                 print("loc: ", self.loc)
@@ -171,19 +171,15 @@ class SemiParametric(Empirical):
 
 
     def _semiquantile(self, u) -> np.ndarray:
-        # empirical base
         x = self.quantile(u)
 
-        # check parameters are not NaN
         if np.isfinite(self.loc):
-            # parametric tail
             loc_u = self.ecdf(self.loc)
             tail_mask = u > loc_u
             tail_u = u[tail_mask]
 
             tail_u = 1 - ((1 - tail_u) / (1 - loc_u))
             tail_x = self.distn.ppf(tail_u, self.shape, loc=self.loc, scale=self.scale)
-
             x[tail_mask] = tail_x
 
             try:
@@ -191,7 +187,7 @@ class SemiParametric(Empirical):
                 assert not np.isnan(x).any(), "NaN values in quantile function."
 
             except AssertionError as e:
-                # debugging statements
+                print(f"\nError in SemiParametric._semiquantile:")
                 print("u: ", min(u), max(u))
                 print("x: ", min(x), max(x))
                 print("loc: ", self.loc)

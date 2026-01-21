@@ -44,6 +44,10 @@ def invPIT(
     cdf = getattr(base, "inv_" + margins)
     u = cdf(u)
 
+    # check x for nans
+    if np.any(np.isnan(x)):
+        raise ValueError("'x' contains NaNs. Cannot compute quantiles.")
+
     semiparametric_quantile = partial(
         semiparametric_quantile0, distribution=distribution
     )
@@ -66,7 +70,7 @@ def invPIT(
             )    
 
     # vectorised numpy transform
-    distns = ["weibull", "genpareto", "genpareto"]
+    distns = ["genpareto", "genpareto", "genpareto"]
     def transform(x, u, theta, i, c):
         x_i = x[:, i, c]
         u_i = u[:, i, c]

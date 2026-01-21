@@ -11,17 +11,18 @@ Input files:
 Output files:
 -------------
     - data.nc
+    - plots of marginal fit quality (if VISUALISATIONS=True)
 """
 # %%
 import os
 os.environ["USE_PYGEOS"] = "0"
 from environs import Env
-import warnings
 
 import numpy as np
 import pandas as pd
 import geopandas as gpd
 import xarray as xr
+import scipy.stats
 
 from datetime import datetime
 from calendar import month_name as month
@@ -32,22 +33,43 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
-plt.rcParams['font.family'] = 'serif'
-hist_kws = {'bins': 50, 'color': 'lightgrey', 'edgecolor': 'k', 'density': True}
+
+plt.rcParams.update({
+    'font.family': 'monospace',
+    'font.size': 9,
+    'axes.labelsize': 10,
+    'axes.titlesize': 10,
+    'legend.fontsize': 8,
+    'xtick.labelsize': 8,
+    'ytick.labelsize': 8,
+})
+
 
 FIELDS = ["u10", "tp", 'mslp']
 VISUALISATIONS = True
 PROCESS_OUTLIERS = False
-SAVE_DATA = False
 THRESHOLD = 0.75 # (for outliers, not using)
 RES = (64, 64)
 
 # for snakemake in future
+CMAP = "PuBu_r"
 INFILES = ['data_1941_2022.nc', 'storms.parquet', 'storms_metadata.parquet', 'medians.csv']
 OUTFILES = ['data.nc']
 
+hist_kws = {
+    'bins': 50,
+    'color': 'lightgrey',
+    'edgecolor': 'k',
+    'density': True
+}
 
-def main(datadir):
+
+if __name__ == "__main__":
+    env = Env()
+    env.read_env(recurse=True)
+    datadir = env.str("PROCESSING_DIR")
+    outdir = env.str("TRAINDIR")
+
     # load coordinates
     coords = xr.open_dataset(os.path.join(datadir, INFILES[0]))
     coords = coords['grid'].to_dataframe().reset_index()
@@ -63,7 +85,7 @@ def main(datadir):
     df = df.rename(columns={"msl": "mslp"})
     df['day_of_storm'] = df.groupby('storm')['time_u10'].rank('dense')
 
-    #  add event sizes
+    # add event sizes
     events = pd.read_parquet(os.path.join(datadir, INFILES[2]))
     rate = events['lambda'][0]
     events = events[["storm", "storm.size", "lambda"]].groupby("storm").mean()
@@ -77,92 +99,102 @@ def main(datadir):
     
     # Check fit quality and that it looks right
     if VISUALISATIONS:
-        import scipy.stats
         for var in  FIELDS:
-            p_crit = 0.05
-            # s0 = gdf["storm"].min()
-
+            alpha = 0.05
             ds = gdf.set_index(['lat', 'lon', 'storm']).to_xarray().isel(storm=0)
 
-            fig, axs = plt.subplots(1, 4, figsize=(16, 3), sharex=True, sharey=True,
-            subplot_kw={'projection': ccrs.PlateCarree()})
 
-            ax4 = fig.add_axes([0.825, 0.1, 0.15, 0.8])   # [left, bottom, width, height]
-            plt.tight_layout()
-            plt.subplots_adjust(right=0.8) 
+            import matplotlib.gridspec as gridspec
 
-            cmap = "PuBu_r"
-            p_cmap = plt.get_cmap(cmap)
+            fig = plt.figure(figsize=(7, 2), constrained_layout=True)
+            gs = gridspec.GridSpec(2, 5, height_ratios=[1, 0.04], width_ratios=[1, 1, 1, 1, 1.4],
+                                wspace=0.0, figure=fig
+            )
+
+            # Top row: plots
+            axs = [fig.add_subplot(gs[0, i], projection=ccrs.PlateCarree()) for i in range(4)]
+            ax4 = fig.add_subplot(gs[0, 4])
+
+            # Bottom row: colorbars
+            caxs = [fig.add_subplot(gs[1, i]) for i in range(5)]
+
+            p_cmap = plt.get_cmap(CMAP)
             p_cmap.set_under("crimson")
 
-            ds[f"pk_{var}"].plot(ax=axs[0], cmap=p_cmap, vmin=p_crit, cbar_kwargs={'label': None})
-            ds[f"thresh_{var}"].plot(ax=axs[1], cmap=cmap, cbar_kwargs={'label': None})
-            ds[f"scale_{var}"].plot(ax=axs[2], cmap=cmap, cbar_kwargs={'label': None})
-            ds[f"shape_{var}"].plot(ax=axs[3], cmap=cmap, add_colorbar=False) #, vmin=-0.81, vmax=0.28)
+            im0 = ds[f"pk_{var}"].plot(ax=axs[0], cmap=p_cmap, vmin=alpha, add_colorbar=False)
+            im1 = ds[f"thresh_{var}"].plot(ax=axs[1], cmap=CMAP, add_colorbar=False)
+            im2 = ds[f"scale_{var}"].plot(ax=axs[2], cmap=CMAP, add_colorbar=False)
+            im3 = ds[f"shape_{var}"].plot(ax=axs[3], cmap=CMAP, add_colorbar=False)
 
+            # add colorbars manually for better control
+            #! increased shrink and halved aspect 12 -> 6
+            #! changed aspect back to 12
+            #! changes aspect to 24
+            #! changed aspect to 1000
+            #! changed shrink to 0.01
+            cbar_kwargs = {'orientation': 'horizontal', 'shrink': 1.0, 'aspect': 0.01,
+                           'pad': 0.0}
+            labels = ['p', 'μ', 'σ', 'ξ', 'ξ']
+            for cax, im, label in zip(caxs, [im0, im1, im2, im3, im3], labels):
+                fig.colorbar(im, cax=cax, **cbar_kwargs).set_label(label)
+            
             # plot the density for three sample grid points
-            if var == 'u10':
-                dist = getattr(scipy.stats, 'weibull_min')
-            else:
-                dist = getattr(scipy.stats, 'genpareto')
-
-            # plot some densities
+            dist = getattr(scipy.stats, 'genpareto')
             shapes_all = gdf[f'shape_{var}'].values
             percentiles = np.linspace(0.01, 0.99, 10)
             shapes = gdf[f'shape_{var}'].quantile(percentiles)
-            loc    = gdf[f'thresh_{var}'].mean()
             scale  = gdf[f'scale_{var}'].mean()
 
             vmin = min(shapes_all)
             vmax = max(shapes_all)
             norm = plt.Normalize(vmin, vmax)
-            colors = [plt.get_cmap(cmap)(norm(value)) for value in shapes]
+            colors = [plt.get_cmap(CMAP)(norm(value)) for value in shapes]
             
             for i, shape in enumerate(shapes):
                 u = np.linspace(0.95, 0.999, 100)
-                x = dist.ppf(u, shape) #, loc=loc, scale=scale)
-                y = dist.pdf(x, shape) #, loc=loc, scale=scale)
-                ax4.plot(x, y, label=f"ξ={shape:.2f}", color=colors[i])
-
-                # axis cleanup
-                def percentage_formatter(x, pos):
-                    return f'{100 * x:.0f}%'  # Multiply by 100 and add % sign
+                x = dist.ppf(u, shape)
+                y = dist.pdf(x, shape)
+                ax4.plot(x, y, linewidth=1, label=f"ξ={shape:.2f}", color=colors[i])
+                
+                def fraction_formatter(x, pos):
+                    return f'{x:.2f}'
                 
                 ax4.set_xlabel("")
                 ax4.set_ylabel("")
-                ax4.yaxis.set_major_formatter(percentage_formatter)
+                ax4.yaxis.set_major_formatter(fraction_formatter)
                 ax4.tick_params(direction='in')
                 ax4.yaxis.set_label_position("right")
+                ax4.set_box_aspect(0.7)
+                ax4.spines['top'].set_visible(False)
+                ax4.spines['right'].set_visible(False)
 
-            # add colorbar for shape
-            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-            sm.set_array([])
-            cbar = fig.colorbar(sm, ax=ax4)
-            cbar.set_label(None)
-            cbar.set_label("ξ")
-            cbar.ax.yaxis.set_label_position('left')
-            cbar.ax.set_ylabel('ξ', rotation=0, labelpad=15)
+            axs[0].set_title("")
+            axs[1].set_title("")
+            axs[2].set_title("")
+            axs[3].set_title("")
+            ax4.set_title("")
 
-            if var == 'u10':
-                axs[0].set_title("H₀: X~Weibull(ξ,μ,σ)")
-            else:
-                axs[0].set_title("H₀: X~GPD(ξ,μ,σ)")
-
-            axs[1].set_title("μ")
-            axs[2].set_title("σ")
-            axs[3].set_title("ξ")
-
-            for ax in axs[:-1].ravel():
+            for ax in axs[:-1]:
                 ax.add_feature(cfeature.COASTLINE, linewidth=0.5)
                 ax.set_xlabel("Longitude")
                 ax.set_ylabel("Latitude")
 
-            print(gdf[gdf[f"pk_{var}"] < p_crit]["grid"].nunique(), "significant p-values")
+            print(gdf[gdf[f"pk_{var}"] < alpha]["grid"].nunique(), "significant p-values")
 
-    # return gdf # TODO: remove this line later
-    #  important: check ecdfs are in (0, 1)
-    assert gdf[['ecdf_u10', 'ecdf_tp', 'ecdf_mslp']].max().max() <= 1, "ECDF values should be between 0 and 1"
-    assert gdf[['ecdf_u10', 'ecdf_tp', 'ecdf_mslp']].min().min() >= 0, "ECDF values should be between 0 and 1"
+    #  important: check ecdfs are in [0, 1)
+    maxima = gdf[['ecdf_u10', 'ecdf_tp', 'ecdf_mslp']].max()
+    minima = gdf[['ecdf_u10', 'ecdf_tp', 'ecdf_mslp']].min()
+    print(f"{maxima=}")
+    print(f"{minima=}")
+
+    assert maxima.max() < 1, "ECDF values should be between 0 and 1"
+    assert minima.min() >= 0, "ECDF values should be between 0 and 1"
+
+    for max_i, min_i, var in zip(maxima, minima, FIELDS):
+        print(f"ECDF {var}: min {min_i:.6f}, max {max_i:.6f}")
+        print(f"Corresponds to {1/(1 - max_i):,.0f}-year max return level")
+        print(f"Corresponds to {1/(1 - min_i):,.0f}-year min return level")
+
 
     # merge in monthly medians
     monthly_medians = pd.read_csv(os.path.join(datadir, INFILES[3]), index_col="month")
@@ -218,9 +250,9 @@ def main(datadir):
     params = np.stack([thresh, scale, shape], axis=-2)
 
     # make an xarray dataset for training
-    # NOTE: using SemiCDF instead of ECDF because invPIT works better
-    ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'field'], U1),
+    ds = xr.Dataset({'uniform': (['time', 'lat', 'lon', 'field'], U0),
                     'ecdf': (['time', 'lat', 'lon', 'field'], U0),
+                    'scdf': (['time', 'lat', 'lon', 'field'], U1),
                     'anomaly': (['time', 'lat', 'lon', 'field'], X),
                     'medians': (['time', 'lat', 'lon', 'field'], M),
                     'day_of_storm': (['time', 'lat', 'lon'], D),
@@ -249,18 +281,11 @@ def main(datadir):
     ds.attrs['note'] = "Fixed interpolation: [0, 1] --> (0, 1)."
 
     # save
-    if SAVE_DATA:
-        print("Finished! Saving to netcdf...")
-        print("Saved to", os.path.join(datadir, OUTFILES[0]))
+    print("Finished! Saving to netcdf...")
+    ds.to_netcdf(os.path.join(outdir, OUTFILES[0]))
+    print("Saved to", os.path.join(outdir, OUTFILES[0]))
         
     ds.close()
-    return gdf
-
-# %%
-if __name__ == "__main__":
-    env = Env()
-    env.read_env(recurse=True)
-    datadir = os.path.join(env.str("ERA5DIR"))
-    gdf = main(datadir)
+    print(f"U1 max in memory: {U1.max()}")
 
 # %%

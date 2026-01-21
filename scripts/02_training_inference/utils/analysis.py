@@ -47,17 +47,24 @@ def rescale(samples:np.array, stats_file:str) -> np.array:
     if not os.path.exists(stats_file):
         print(f"WARNING: Statistics file not found: {stats_file}")
         return samples
+    
     stats = np.load(stats_file)
     image_minima = stats['min']
     image_maxima = stats['max']
-    n            = stats['n']
+    method       = stats['method']
+    arg          = stats['param']
     image_range  = image_maxima - image_minima
 
-    print(f"\nLoaded image statistics with shape {image_minima.shape}")
-    print(f"Statistics: {image_minima.squeeze()} to {image_maxima.squeeze()} over {n.squeeze()} samples")
+    if method == "rp":
+        samples = samples * image_range + image_minima
+        print(f"\nRescaling using return period method with arg={arg}")
+    elif method == "minmax":
+        samples = (samples / arg) * image_range + image_minima
 
-    print("WARNING: Current rescaling (Jan 2025) will be changed in future work.")
-    samples = (samples * (n + 1) - 1) / (n - 1) * image_range + image_minima
+    print(f"\nLoaded image statistics with shape {image_minima.shape}")
+    print(f"Statistics: {image_minima.squeeze()} to {image_maxima.squeeze()} samples")
+    print(f"Method: {method} with param: {arg}")
+
     return samples
 
 
@@ -73,19 +80,19 @@ def sample_dep(n, h, w, c, freq):
 
 
 def load_samples(
-        png_dir, training_dir, threshold=15., ny=500, domain="uniform",
+        png_dir, training_dir, threshold=15., ny=500, domain="uniform", scaling="rescaled",
         make_benchmarks=False
     ) -> dict:
     """Load and process samples and training data for visualisation"""
     if domain == "rescaled":
         return rescaled.load_samples(png_dir, training_dir, threshold, ny)
-    print(f"\nLoading samples from {png_dir} with {domain=}")
+    
     # load all the png files
+    print(f"\nLoading samples from {png_dir} with {domain=}")
     png_list = glob(os.path.join(png_dir, "seed*.png"))
     png_list = sorted(png_list)
     print(f"Found {len(png_list)} PNG files in {png_dir}")
     print("WARNING: future work will use .npy to avoid quantisation issues.")
-
     samples = []
     for png in (pbar := tqdm(png_list, desc="Loading PNG files")):
         pbar.set_description(f"Loading {os.path.basename(png)}")
@@ -96,7 +103,7 @@ def load_samples(
     print(f"Loaded {samples.shape} samples")
 
     # filepath changed Dec 2025
-    stats_file = os.path.join(training_dir, "images", domain, "image_stats.npz")
+    stats_file = os.path.join(training_dir, "images", scaling, domain, "image_stats.npz")
     y_gen = rescale(samples, stats_file)
 
     # order samples
@@ -182,7 +189,7 @@ def load_samples(
     u_gen = u_gen[idx]
     y_gen = y_gen[idx]
 
-    # remove [0,1] values
+    # remove u=1 values
     if (u_gen >= 1).sum() > 0:
         print("WARNING: Some uniform samples are greater than 1")
         u_gen_mask = (u_gen >= 1).astype(bool)
@@ -211,7 +218,6 @@ def load_samples(
     print("\nCalculating empirical copulas for all datasets.")
     copula_trn = statistics.empiricalPIT(x_trn)
     copula_val = statistics.empiricalPIT(x_val, x_trn)
-
     # only get copula for first 149 samples to match other sets
     nboot = n // nextreme
     copula_subsets = []
@@ -223,8 +229,8 @@ def load_samples(
         copula_subsets.append(copula_gen)
     copula_gen = np.concatenate(copula_subsets, axis=0)
 
-    # for southern hemisphere these should be upside-down in
-    # heatmaps and correctly orientated in geographic plots
+    # for southern hemisphere these should appear upside-down
+    # in heatmaps but correctly orientated in geographic coords
     output_dict = {
         'samples': {
             'u': yflip(u_gen),
@@ -246,7 +252,9 @@ def load_samples(
             'copula': copula_val
         }
     }
+
     if make_benchmarks:
+        # add total dependence / independence benchmarks
         print(f"Generating {nevents} (non-extreme) benchmark samples "\
             f"for {ny} years of data at rate {λ_storms:,.4f} storms/year")
         u_ind = np.random.uniform(1e-6, 1-1e-6, size=(nevents, h, w, c))
