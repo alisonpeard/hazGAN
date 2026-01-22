@@ -1,6 +1,8 @@
 """
 Compare generated and training data tails for different training
 configurations.
+
+TODO: clean up
 """
 # %%
 import os
@@ -9,15 +11,19 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from PIL import Image
 from environs import Env
+from pathlib import Path
+
+from hazGAN import statistics
 
 # script parameters
 SCALING = "rp10000"
-DOMAINS   = ["gaussian"] #["rescaled", "uniform", "gaussian", "gumbel"] #["uniform", "gaussian", "gumbel", "rescaled"]
+DOMAINS   = ["gaussian", "gumbel", "uniform"] #["rescaled", "uniform", "gaussian", "gumbel"] #["uniform", "gaussian", "gumbel", "rescaled"]
 VERSION   = ["", "-04", "-05", "-06"][0]
 FIELD     = [0, 1, 2][1]
 FIELD_NAME = ['u10', 'tp', 'mslp'][0]
 ORIENT    = ["portrait", "landscape"][1]
 METHOD    = ["ravel", "max", "pixel"][-1]
+UPPER_THRESH = 0.8
 plt.rcParams.update({'font.family': 'monospace', 'font.size': 6, 'axes.labelsize': 7, 'axes.titlesize': 7, 'legend.fontsize': 6})
 
 
@@ -67,20 +73,23 @@ def qqplot(ax, i, j, gen, train, THRESH):
     print(f"Making 100 bootstrap samples of size {len(train)} for quantile CI estimation...")
     gen_q_mean, gen_q_min, gen_q_max = quantiles_boot(gen, nboot=100, bootsize=len(train), nquantiles=1000)
 
-    ax.plot([THRESH, 1], [THRESH, 1], ls="--", color="#666666", lw=0.8, label="1:1 line")
+    lower = np.quantile(train, THRESH)
+    upper = np.max(train)
+    ax.plot([lower, upper], [lower, upper], ls="--", color="#666666", lw=0.8, label="1:1 line")
 
     ax.plot(train_q, gen_q_mean, color="blue", label="data", lw=1.0)
     ax.fill_between(train_q, gen_q_min, gen_q_max, color="blue", alpha=0.3, label="95% CI")
 
     if i == j == 0:
-        ax.legend(loc="lower right", frameon=False)
+        ax.legend(loc="best", frameon=False)
     if i == 0:
         ax.set_title(f"{DOMAIN.capitalize()}")
     if j == 0:
-        ax.set_ylabel(f"y ≥ {THRESH:.1f}\ndensity", rotation=0, ha="right")
+        ax.set_ylabel(f"y ≥ q({THRESH:.1f})\ndensity", rotation=0, ha="right")
     
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
+
 
 if __name__ == "__main__":
     
@@ -91,7 +100,7 @@ if __name__ == "__main__":
 
         fig, axes = plt.subplots(4, 2, figsize=(3.35, 6), sharex='col', sharey='col')
 
-        for j, THRESH in enumerate([0.0, 0.8]):
+        for j, THRESH in enumerate([0.0, UPPER_THRESH]):
             bins = np.linspace(THRESH, 1.0, 20)
             hist_kws = dict(density=True, bins=bins, alpha=0.6, edgecolor='k', linewidth=0.4, histtype='stepfilled')
 
@@ -114,16 +123,42 @@ if __name__ == "__main__":
 
     elif ORIENT == "landscape":
 
-        fig, axes = plt.subplots(2, 4, figsize=(7, 3.35), sharex='row', sharey='row')
+        fig, axes = plt.subplots(2, 4, figsize=(7, 3.35))#, sharex='row')#, sharey='row')
 
         for j, DOMAIN in enumerate(DOMAINS):
-            TRAIN   = os.path.join(env.str("TRAINDIR"), "images", SCALING, DOMAIN, "png")
-            SAMPLES = os.path.join(env.str("SAMPLES_DIR"), SCALING, f"{DOMAIN}{VERSION}", "png")
+            TRAIN   = Path(env.str("TRAINDIR")) / "images" / SCALING / DOMAIN / "png"
+            SAMPLES = Path(env.str("SAMPLES_DIR")) / SCALING / f"{DOMAIN}{VERSION}" / "png"
             train = load_pngs(TRAIN)
             gen   = load_pngs(SAMPLES)
             print(f"  Loaded {gen.shape} samples for {DOMAIN}.")
             headroom = gen.max() - train.max()
             print(f"  Headroom between training and generated samples for {DOMAIN}: {headroom:.4f}")
+
+            # use image stats to invert scaling
+            stats = TRAIN.parent / "image_stats.npz"
+            stats = np.load(stats)
+            minima = stats["min"]
+            maxima = stats["max"]
+            method = stats["method"]
+            params = stats["param"]
+            ranges = maxima - minima
+            if method == "minmax":
+                print("  Inverting min-max scaling...")
+                train = (train / params) * ranges + minima
+                gen = (gen / params) * ranges + minima
+            elif method == "rp":
+                train = train * ranges + minima
+                gen = gen * ranges + minima
+
+            # if DOMAIN != "gumbel":
+            #     print("DEBUG: transforming train to gumbel...")
+            #     train = getattr(statistics, f"inv_{DOMAIN}")(train)
+            #     train = statistics.gumbel(train)
+            #     print("DEBUG: transforming gen to gumbel...")
+            #     # replace ones with np.nan
+            #     gen = np.where(gen == 1., np.nan, gen)
+            #     gen = getattr(statistics, f"inv_{DOMAIN}")(gen)
+            #     gen = statistics.gumbel(gen)
             
             if METHOD == "ravel":
                 # all pixels histogram
@@ -138,13 +173,15 @@ if __name__ == "__main__":
                 train = train[:, 32, 32, FIELD].squeeze()
                 gen = gen[:, 32, 32, FIELD].squeeze()
 
-            for i, THRESH in enumerate([0.0, 0.8]): # [0.0. [0.8]]
-                bins = np.linspace(THRESH, 1.0, 20)
+            for i, THRESH in enumerate([0.0, UPPER_THRESH]):
+                lower = np.quantile(train, THRESH)
+                upper = np.max(train)
+                bins = np.linspace(lower, upper, 20)
                 hist_kws = dict(density=True, bins=bins, alpha=0.6, edgecolor='k', linewidth=0.4, histtype='stepfilled')
 
                 ax = axes[i, j]
                 # histogram(ax, i, j, gen, train, hist_kws)
-                qqplot(ax, i, j, gen[gen>THRESH], train[train>THRESH], THRESH)
+                qqplot(ax, i, j, gen[gen>lower], train[train>lower], THRESH)
             
         fig.subplots_adjust(wspace=0.3, hspace=0.4)
     
