@@ -24,13 +24,14 @@ source /data/ouce-opsis/spet5107/hazGAN2/workflow/scripts/cuda_env.sh
 
 mkdir -p $OUTDIR
 
+: '
 python $SCRIPT \
     --outdir=$OUTDIR \
     --data=$DATA \
     --gpus=1 \
     --DiffAugment="color,translation,cutout" \
     --kimg=$KIMG
-
+'
 
 # and generate samples
 SCRIPT="/data/ouce-opsis/spet5107/hazGAN/styleGAN-DA/src/generate.py"
@@ -55,7 +56,7 @@ python ${SCRIPT} \
   --outdir=${GENDIR} \
   --seeds=1-914 \
   --trunc=1.0 \
-  --network=${NETWORK}
+  --network=${NETWORK} \
   --output-format=${FORMAT}
 
 
