@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCALINGS=("rp10000")
-DOMAINS=("gaussian" "gumbel" "uniform") # "rescaled"
+DOMAINS=("gaussian") # "gumbel" "uniform") # "rescaled"
 FORMATS=("png") # "npy"
 
 for SCALING in "${SCALINGS[@]}"; do
