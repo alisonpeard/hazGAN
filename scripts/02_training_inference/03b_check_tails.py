@@ -17,6 +17,7 @@ SCALING = "rp10000"
 DOMAINS = ["gaussian", "gumbel", "uniform"]
 FIELD = 1
 FIELD_NAME = "u10"
+FORMAT = "npy"
 THRESH = 0.8
 N_PIXELS = 500
 N_BOOT = 100
@@ -37,6 +38,16 @@ def load_pngs(png_dir):
     for png in tqdm(png_list, desc=f"Loading {png_dir.name}"):
         with Image.open(png_dir / png) as img:
             samples.append(np.array(img))
+    samples = np.array(samples).astype(float) / 255.
+    return samples
+
+
+def load_npys(npy_dir):
+    npy_list = sorted([f for f in os.listdir(npy_dir) if not f.startswith(".")])
+    samples = []
+    for npy in tqdm(npy_list, desc=f"Loading {npy_dir.name}"):
+        arr = np.load(npy_dir / npy)
+        samples.append(arr)
     samples = np.array(samples).astype(float) / 255.
     return samples
 
@@ -119,12 +130,16 @@ if __name__ == "__main__":
     fig, axes = plt.subplots(1, len(DOMAINS), figsize=(7, 2.5), sharex='row', sharey='row')
 
     for j, domain in enumerate(DOMAINS):
-        train_dir = Path(env.str("TRAINDIR")) / "images" / SCALING / domain / "png"
-        gen_dir = Path(env.str("SAMPLES_DIR")) / SCALING / domain / "png"
+        train_dir = Path(env.str("TRAINDIR")) / "images" / SCALING / domain / FORMAT
+        gen_dir = Path(env.str("SAMPLES_DIR")) / SCALING / domain / FORMAT
         stats_path = train_dir.parent / "image_stats.npz"
 
-        train = load_pngs(train_dir)
-        gen = load_pngs(gen_dir)
+        if FORMAT == "png":
+            train = load_pngs(train_dir)
+            gen = load_pngs(gen_dir)
+        elif FORMAT == "npy":
+            train = load_npys(train_dir)
+            gen = load_npys(gen_dir)
 
         train = invert_scaling(train, stats_path)
         gen = invert_scaling(gen, stats_path)

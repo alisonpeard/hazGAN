@@ -19,10 +19,11 @@ from hazGAN import statistics
 SCALING   = "rp10000"
 DOMAINS   = ["gaussian", "gumbel", "uniform"] #["rescaled", "uniform", "gaussian", "gumbel"] #["uniform", "gaussian", "gumbel", "rescaled"]
 VERSION   = ["", "-04", "-05", "-06"][0]
+FORMAT    = ["png", "npy"][1]
 FIELD     = [0, 1, 2][1]
 FIELD_NAME = ['u10', 'tp', 'mslp'][0]
 ORIENT    = ["portrait", "landscape"][1]
-METHOD    = ["ravel", "max", "pixel"][-1]
+METHOD    = ["ravel", "max", "pixel"][0]
 X0, X1    = 0, 0
 UPPER_THRESH = 0.8
 plt.rcParams.update({'font.family': 'monospace', 'font.size': 6, 'axes.labelsize': 7, 'axes.titlesize': 7, 'legend.fontsize': 6})
@@ -39,6 +40,22 @@ def load_pngs(png_dir):
         pbar.set_description(f"Loading {os.path.basename(png)}")
         with Image.open(png) as img:
             samples.append(np.array(img))
+    samples = np.array(samples).astype(float)
+    samples /= 255.
+    return samples
+
+
+def load_npys(npy_dir):
+    npy_list = os.listdir(npy_dir)
+    npy_list = [npy for npy in npy_list if not npy.startswith(".")]
+    npy_list = [os.path.join(npy_dir, npy) for npy in npy_list]
+    npy_list = sorted(npy_list)
+
+    samples = []
+    for npy in (pbar := tqdm(npy_list, desc=f"Loading files from {npy_dir}")):
+        pbar.set_description(f"Loading {os.path.basename(npy)}")
+        arr = np.load(npy)
+        samples.append(arr)
     samples = np.array(samples).astype(float)
     samples /= 255.
     return samples
@@ -99,10 +116,15 @@ if __name__ == "__main__":
     fig, axes = plt.subplots(2, 3, figsize=(7, 3.35), sharex='row', sharey='row')
 
     for j, DOMAIN in enumerate(DOMAINS):
-        TRAIN   = Path(env.str("TRAINDIR")) / "images" / SCALING / DOMAIN / "png"
-        SAMPLES = Path(env.str("SAMPLES_DIR")) / SCALING / f"{DOMAIN}{VERSION}" / "png"
-        train = load_pngs(TRAIN)
-        gen   = load_pngs(SAMPLES)
+        TRAIN   = Path(env.str("TRAINDIR")) / "images" / SCALING / DOMAIN / FORMAT
+        SAMPLES = Path(env.str("SAMPLES_DIR")) / SCALING / f"{DOMAIN}{VERSION}" / FORMAT
+
+        if FORMAT == "npy":
+            train   = load_npys(TRAIN)
+            gen = load_npys(SAMPLES)
+        elif FORMAT == "png":
+            train = load_pngs(TRAIN)
+            gen = load_pngs(SAMPLES)
 
         # use image stats to invert scaling
         stats = TRAIN.parent / "image_stats.npz"
@@ -122,12 +144,18 @@ if __name__ == "__main__":
         print(f"  After inverting {method} scaling: train range [{np.min(train):.2f}, {np.max(train):.2f}]\ngen range [{np.min(gen):.2f}, {np.max(gen):.2f}]")
 
         if DOMAIN != "gumbel":
+            print(f" Train {DOMAIN} range: [{np.min(train):.2f}, {np.max(train):.2f}]")
+            print(f"  Gen {DOMAIN} range: [{np.min(gen):.2f}, {np.max(gen):.2f}]")
             train = getattr(statistics, f"inv_{DOMAIN}")(train)
             train = statistics.gumbel(train)
             gen = getattr(statistics, f"inv_{DOMAIN}")(gen)
-            print(f"  Found {(gen >= 1.).sum()} of F({DOMAIN}) ≥ 1.")
+            print(f"  Train uniform range: [{np.min(train):.2f}, {np.max(train):.2f}]")
+            print(f"  Gen uniform range: [{np.min(gen):.2f}, {np.max(gen):.2f}]")
             gen = np.where(gen >= 1., np.nan, gen)
             gen = statistics.gumbel(gen)
+
+        print(f" Train gumbel range: [{np.nanmin(train):.2f}, {np.nanmax(train):.2f}]")
+        print(f"  Gen gumbel range: [{np.nanmin(gen):.2f}, {np.nanmax(gen):.2f}]")
 
         print(f"  After {DOMAIN} transform: train range [{np.nanmin(train):.2f}, {np.nanmax(train):.2f}], gen range [{np.nanmin(gen):.2f}, {np.nanmax(gen):.2f}]")
         
@@ -148,8 +176,8 @@ if __name__ == "__main__":
             hist_kws = dict(density=True, bins=bins, alpha=0.6, edgecolor='k', linewidth=0.4, histtype='stepfilled')
 
             ax = axes[i, j]
-            # histogram(ax, i, j, gen, train, hist_kws)
-            qqplot(ax, i, j, gen[gen>lower], train[train>lower], THRESH)
+            histogram(ax, i, j, gen, train, hist_kws)
+            # qqplot(ax, i, j, gen[gen>lower], train[train>lower], THRESH)
         
     fig.subplots_adjust(wspace=0.3, hspace=0.4)
     
