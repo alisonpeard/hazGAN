@@ -7,24 +7,25 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
-import glob
+from pathlib import Path
 
 from hazGAN import statistics
 
-WINDTHRESHOLD = [15, -float("inf")][0]
-EPS           = 1e-6
-RES  = (64, 64)
-CMAP = "Spectral_r"
 
-i, j = 3, 1
-DOMAIN = ["rescaled", "uniform", "gumbel", "gaussian"][i]
-RESCALE_METHOD = ["minmax", "rp"][j]
-RESCALE_ARG = [0.9, 10_000][j]
+# parameters
+i, j, k = 3, 1, 0
+DOMAINS = ["uniform", "gumbel", "gaussian"] # "rescaled"
+RESCALE_METHODS = ["rp"] # minmax
+RESCALE_ARGS = [10_000] # 0.9 for minmax
+FORMATS = ["png"] # TODO: add npy from hazGAN2 later
 
-def rescale_array(array, method="minmax09", arg=RESCALE_ARG, domain=DOMAIN):
+# hardcode for now
+WINDTHRESHOLD = 15
 
+
+def rescale_array(array, method, arg, domain):
+    """Rescale array according to specified method."""
     array = np.copy(array)
-
     if method == "minmax":
         array_min = np.min(array, axis=(0, 1, 2), keepdims=True)
         array_max = np.max(array, axis=(0, 1, 2), keepdims=True)
@@ -48,13 +49,14 @@ def rescale_array(array, method="minmax09", arg=RESCALE_ARG, domain=DOMAIN):
         return array, stats
 
 
-if __name__ == "__main__":
+
+def main(rescale_method, rescale_arg, domain, output_format):
     env = Env()
     env.read_env(recurse=True)
-    traindir = env.str("TRAINDIR")
+    traindir = Path(env.str("TRAINDIR"))
 
     print(f"Loading training data from {traindir}")
-    ds = xr.open_dataset(os.path.join(traindir, 'data.nc'))
+    ds = xr.open_dataset(traindir / 'data.nc')
     ds['windmax'] = ds.sel(field='u10').anomaly.max(dim=['lon', 'lat'])
     mask = (ds['windmax'] > WINDTHRESHOLD).values
     idx  = np.where(mask)[0]
@@ -62,54 +64,60 @@ if __name__ == "__main__":
 
     print(f"\nFound {ds.time.size} training events with maximum wind exceeding {WINDTHRESHOLD} m/s")
 
-    outdir = os.path.join(traindir, 'images', f"{DOMAIN}_{RESCALE_METHOD}{str(RESCALE_ARG).replace('.', '')}", "png")
-    stats_path = os.path.join(outdir, "..", "image_stats.npz")
-    os.makedirs(os.path.join(outdir, "png"), exist_ok=True)
+    outdir = traindir / 'images' / (rescale_method + str(rescale_arg)) / domain 
+    stats_path = outdir / "image_stats.npz"
+    os.makedirs(outdir / output_format, exist_ok=True)
 
     nimgs = ds.time.size
 
-    if DOMAIN == "rescaled":
+    if domain == "rescaled":
          u = ds.anomaly.values
     else:
         u = ds.uniform.values
-        print(f"Maximum u-value found is {u.max():.6f}")
-        print(f"Corresponds to {1/(1-u.max()):,.0f}-year return level assumption")
-        print(f"Minimum u-value found is {u.min():.6f}")
-        print(f"Corresponds to {1/(1-u.min()):,.0f}-year return level assumption")
+        print(f"\nINFO: Maximum u-value found is {u.max():.6f}")
+        print(f"INFO: Corresponds to {1/(1-u.max()):,.0f}-year return level assumption")
+        print(f"INFO: Minimum u-value found is {u.min():.6f}")
+        print(f"INFO: Corresponds to {1/(1-u.min()):,.0f}-year return level assumption")
 
         if not ((u.max() < 1.0) and (u.min() >= 0.0)):
             raise ValueError("Percentiles not in [0, 1) range")
     
-    u = np.flip(u, axis=1) #! flip latitude
+    u = np.flip(u, axis=1)
 
     assert u.shape[1:] == (64, 64, 3), f"Unexpected shape: {u.shape}"
 
-    ppf = getattr(statistics, DOMAIN)
+    ppf = getattr(statistics, domain)
     y = ppf(u)
-    y, stats = rescale_array(y, method=RESCALE_METHOD, arg=RESCALE_ARG, domain=DOMAIN)
+    y, stats = rescale_array(y, method=rescale_method, arg=rescale_arg, domain=domain)
     np.savez(stats_path, **stats)
 
     # save images
+    storm_paths = []
     for i in range(nimgs):
         y_i = y[i]
         assert np.all((y_i >= 0.) & (y_i < 1.)), \
             f"Array values out of [0,1) range: min {y_i.min()}, max {y_i.max()}"
         y_i = np.uint8(y_i * 255)
         img = Image.fromarray(y_i, 'RGB')
-        output_path = os.path.join(outdir, f"storm_{i}.png")
+        output_path = outdir / output_format / f"storm_{i}.{output_format}"
         img.save(output_path)
+        storm_paths.append(output_path)
 
-    storm_paths = sorted(glob.glob(os.path.join(outdir, "storm_*.png")))
     print(f"\nSaved {len(storm_paths)} images to {outdir}")
 
-    zipdir = os.path.join(traindir, 'images', 'zipfiles')
+    # zip files for transfer to remote training server
+    zipdir = traindir / 'zipfiles' / (rescale_method + str(rescale_arg)) / domain
     os.makedirs(zipdir, exist_ok=True)
-    zippath = os.path.join(zipdir, f"{DOMAIN}_{RESCALE_METHOD}{str(RESCALE_ARG).replace('.', '')}.zip")
+    zippath = zipdir / (output_format + ".zip")
     print(f"Zipping images to {zippath} ...")
-    # os.system(f"cd {outdir} && zip -r {zippath} .")
-    # zip only .png files
     os.system(f"cd {outdir} && zip -r {zippath} . -i '*.png'")
     print("Done.")
 
 
+if __name__ == "__main__":
+    for method in RESCALE_METHODS:
+        for arg in RESCALE_ARGS:
+            for domain in DOMAINS:
+                for fmt in FORMATS:
+                     main(method, arg, domain, fmt)
 # %% 

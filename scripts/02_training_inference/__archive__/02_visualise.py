@@ -22,7 +22,7 @@ THRESHOLD = [None, 15.][1]
 MONTH     = 9
 NYEARS    = 500
 SCALING   = "rp10000"
-DOMAIN    = ["uniform", "gaussian", "gumbel", "rescaled"][1]
+DOMAIN    = ["uniform", "gaussian", "gumbel", "rescaled"][2]
 VERSION   = ["", "-04", "-05", "-06"][0] # for different experiments with same domain
 savefigs = True
 savefig_kws = dict(dpi=300, bbox_inches='tight', transparent=True)
