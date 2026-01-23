@@ -2,9 +2,9 @@
 
 # just run on headnode with bash, i.e. "bash 00_submit-arc.sh"
 SCALINGS=("rp10000")
-DOMAINS=("gaussian") # "gumbel" "uniform") # "rescaled"
+DOMAINS=("gaussian" "gumbel" "uniform") # "gumbel" "uniform") # "rescaled"
 FORMATS=("npy") # ("npy" "png")
-KIMG=10
+KIMG=300
 
 for SCALING in "${SCALINGS[@]}"; do
   for DOMAIN in "${DOMAINS[@]}"; do

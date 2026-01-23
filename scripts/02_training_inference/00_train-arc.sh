@@ -24,14 +24,13 @@ source /data/ouce-opsis/spet5107/hazGAN2/workflow/scripts/cuda_env.sh
 
 mkdir -p $OUTDIR
 
-: '
 python $SCRIPT \
     --outdir=$OUTDIR \
     --data=$DATA \
     --gpus=1 \
     --DiffAugment="color,translation,cutout" \
     --kimg=$KIMG
-'
+
 
 # and generate samples
 SCRIPT="/data/ouce-opsis/spet5107/hazGAN/styleGAN-DA/src/generate.py"
@@ -41,6 +40,7 @@ mkdir -p ${GENDIR}
 # find the latest network snapshot
 KIMG_PADDED=$(printf "%06d" $KIMG)
 NETWORK=$(ls ${OUTDIR}/*/network-snapshot-$KIMG_PADDED.pkl 2>/dev/null)
+
 if [[ -z "$NETWORK" ]]; then
     echo "ERROR: No network snapshot found in ${OUTDIR}"
     exit 1
@@ -58,8 +58,10 @@ python ${SCRIPT} \
   --network=${NETWORK}
   --output-format=${FORMAT}
 
+
 # zip samples to
 ZIPDIR="/data/ouce-opsis/spet5107/data/zipfiles/${SCALING}/${DOMAIN}"
 mkdir -p ${ZIPDIR}
 cd ${GENDIR}
+echo "Zipping *.${FORMAT} files..."
 zip -r ${ZIPDIR}/${FORMAT}.zip *.${FORMAT}
