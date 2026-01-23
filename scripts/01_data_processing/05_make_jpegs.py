@@ -17,7 +17,7 @@ i, j, k = 3, 1, 0
 DOMAINS = ["uniform", "gumbel", "gaussian"] # "rescaled"
 RESCALE_METHODS = ["rp"] # minmax
 RESCALE_ARGS = [10_000] # 0.9 for minmax
-FORMATS = ["png"] # TODO: add npy from hazGAN2 later
+FORMATS = ["npy", "png"] # TODO: add npy from hazGAN2 later
 
 # hardcode for now
 WINDTHRESHOLD = 15
@@ -97,10 +97,14 @@ def main(rescale_method, rescale_arg, domain, output_format):
         y_i = y[i]
         assert np.all((y_i >= 0.) & (y_i < 1.)), \
             f"Array values out of [0,1) range: min {y_i.min()}, max {y_i.max()}"
-        y_i = np.uint8(y_i * 255)
-        img = Image.fromarray(y_i, 'RGB')
-        output_path = outdir / output_format / f"storm_{i}.{output_format}"
-        img.save(output_path)
+        if output_format == "png":
+            y_i = np.uint8(y_i * 255)
+            img = Image.fromarray(y_i, 'RGB')
+            output_path = outdir / output_format / f"storm_{i}.{output_format}"
+            img.save(output_path)
+        elif output_format == "npy":
+            output_path = outdir / output_format / f"storm_{i}.{output_format}"
+            np.save(output_path, y_i * 255)
         storm_paths.append(output_path)
 
     print(f"\nSaved {len(storm_paths)} images to {outdir}")
@@ -110,7 +114,7 @@ def main(rescale_method, rescale_arg, domain, output_format):
     os.makedirs(zipdir, exist_ok=True)
     zippath = zipdir / (output_format + ".zip")
     print(f"Zipping images to {zippath} ...")
-    os.system(f"cd {outdir} && zip -r {zippath} . -i '*.png'")
+    os.system(f"cd {outdir} && zip -r {zippath} . -i '*.{output_format}'")
     print("Done.")
 
 

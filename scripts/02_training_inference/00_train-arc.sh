@@ -29,7 +29,7 @@ python $SCRIPT \
     --data=$DATA \
     --gpus=1 \
     --DiffAugment="color,translation,cutout" \
-    --kimg=300
+    --kimg=$KIMG
 
 
 # and generate samples
@@ -37,7 +37,7 @@ SCRIPT="/data/ouce-opsis/spet5107/hazGAN/styleGAN-DA/src/generate.py"
 GENDIR="/data/ouce-opsis/spet5107/data/generated/${SCALING}/${DOMAIN}/${FORMAT}"
 
 # find the latest network snapshot
-NETWORK=$(ls ${OUTDIR}/*/network-snapshot-000300.pkl 2>/dev/null)
+NETWORK=$(ls ${OUTDIR}/*/network-snapshot-000$KIMG.pkl 2>/dev/null)
 if [[ -z "$NETWORK" ]]; then
     echo "ERROR: No network snapshot found in ${OUTDIR}"
     exit 1
