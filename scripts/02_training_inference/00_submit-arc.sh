@@ -4,7 +4,7 @@
 SCALINGS=("rp10000")
 DOMAINS=("gaussian") # "gumbel" "uniform") # "rescaled"
 FORMATS=("npy") # ("npy" "png")
-KIMG=300
+KIMG=10
 
 for SCALING in "${SCALINGS[@]}"; do
   for DOMAIN in "${DOMAINS[@]}"; do
