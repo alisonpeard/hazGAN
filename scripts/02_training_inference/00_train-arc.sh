@@ -56,6 +56,7 @@ python ${SCRIPT} \
   --seeds=1-914 \
   --trunc=1.0 \
   --network=${NETWORK}
+  --output-format=${FORMAT}
 
 # zip samples to
 ZIPDIR="/data/ouce-opsis/spet5107/data/zipfiles/${SCALING}/${DOMAIN}"

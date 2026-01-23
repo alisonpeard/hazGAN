@@ -43,6 +43,7 @@ def num_range(s: str) -> List[int]:
 @click.option('--noise-mode', help='Noise mode', type=click.Choice(['const', 'random', 'none']), default='const', show_default=True)
 @click.option('--projected-w', help='Projection result file', type=str, metavar='FILE')
 @click.option('--outdir', help='Where to save the output images', type=str, required=True, metavar='DIR')
+@click.option('--output-format', type=click.Choice(['png', 'npy']), default='npy', help='Output format')
 def generate_images(
     ctx: click.Context,
     network_pkl: str,
@@ -51,7 +52,8 @@ def generate_images(
     noise_mode: str,
     outdir: str,
     class_idx: Optional[int],
-    projected_w: Optional[str]
+    projected_w: Optional[str],
+    output_format: str = "png",
 ):
     """Generate images using pretrained network pickle.
 
@@ -118,13 +120,14 @@ def generate_images(
         z = torch.from_numpy(np.random.RandomState(seed).randn(1, G.z_dim)).to(device)
         img = G(z, label, truncation_psi=truncation_psi, noise_mode=noise_mode)
         
-        #! TO DO
-        if True: # png output
+        if output_format == "png":
             img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8)
             PIL.Image.fromarray(img[0].cpu().numpy(), 'RGB').save(f'{outdir}/seed{seed:04d}.png')
-        else: # npy output (TODO)
+        elif output_format == "npy":
             img = (img.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255)
             np.save(f'{outdir}/seed{seed:04d}.npy', img[0].cpu().numpy())
+        else:
+            raise ValueError(f"Unsupported output format: {output_format}")
 
 
 #----------------------------------------------------------------------------
