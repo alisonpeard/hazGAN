@@ -1,5 +1,5 @@
 """
-Plot χ(u) for generated data.
+Plot χ(u) (extremal correlation) for generated data.
 
 Notes:
 - saves to figures/extcorr/<scaling>/<margins>/gen/<fields>/nc/
@@ -23,9 +23,10 @@ from hazGAN.statistics import ecdf
 plt.rcParams.update({
     'font.size': 6,
     'axes.labelsize': 7,
-    'axes.titlesize': 7,
+    'axes.titlesize': 8,
+    'axes.titleweight': 'normal',
     'legend.fontsize': 6,
-    'font.family': 'monospace'
+    'font.family': 'sans-serif'
 })
 
 
