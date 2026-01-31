@@ -17,7 +17,8 @@ from hazGAN import statistics
 plt.rcParams.update({
     'font.size': 6,
     'axes.labelsize': 7,
-    'axes.titlesize': 7,
+    'axes.titlesize': 8,
+    'axes.titleweight': 'normal',
     'legend.fontsize': 6,
     'font.family': 'sans-serif'
 })
@@ -27,14 +28,14 @@ plt.rcParams.update({
 scaling   = "rp10000"
 domains   = ["uniform", "gumbel", "gaussian"]
 field_idx = 0
-field_nom = "u10"
+field_nom = "mslp" # u10, tp, mslp
 tmax = 0.95
 hist_bins = 20
 
 trn_kws = dict(
     density=True,
-    alpha=0.8,
-    color="#A6CEE3",
+    alpha=0.2, #0.8,
+    color="brown",#"#A6CEE3",
     histtype="stepfilled",
     joinstyle="round"
 
@@ -42,7 +43,7 @@ trn_kws = dict(
 
 gen_kws = dict(
     density=True,
-    color="#D55E00",
+    color='C0',#"#D55E00",
     histtype="step",
     alpha=1.0,
     lw=1.3,
@@ -93,9 +94,9 @@ def histogram(ax, i, j, thresh, train, gen, trn_kws, gen_kws):
     ax.hist(gen, label=f"HazGAN", **gen_kws);
 
     if (i == 0) & (j == 2):
-        ax.legend(loc="upper right", frameon=False)
+        ax.legend(loc="center right", frameon=False)
     if i == 0:
-        ax.set_title(f"{domain.capitalize()}")
+        ax.set_title(f"{domain.capitalize()}", y=0.85)
     if (j == 0) & (i == 0):
         ax.set_ylabel(f"Density\n\ny ≥ q{100 * thresh:.0f}", rotation=0, ha="right")
     if (j == 0) & (i == 1):
@@ -191,5 +192,7 @@ if __name__ == "__main__":
     respath = figdir / f"{field_nom}.txt"
     save_stats_text(respath, results)
     print(f"Saved results summary to {respath}\n")
+
+# %%
 
 # %%
