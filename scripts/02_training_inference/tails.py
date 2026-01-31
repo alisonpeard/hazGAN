@@ -34,19 +34,21 @@ hist_bins = 20
 
 trn_kws = dict(
     density=True,
-    alpha=0.2, #0.8,
-    color="brown",#"#A6CEE3",
-    histtype="stepfilled",
+    alpha=0.25,
+    color="gray",
+    lw=0.5,
+    rwidth=0.95,
+    edgecolor="none",
     joinstyle="round"
 
 )
 
 gen_kws = dict(
     density=True,
-    color='C0',#"#D55E00",
+    color='k',
     histtype="step",
     alpha=1.0,
-    lw=1.3,
+    lw=0.5,
     joinstyle="round"
 )
 
