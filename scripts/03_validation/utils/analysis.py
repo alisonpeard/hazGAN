@@ -66,9 +66,18 @@ def sample_dep(n, h, w, c, freq):
 
 
 def load_samples(
-        npy_dir, training_dir, threshold=15., nyrs=500, domain="uniform", scaling="rescaled",
+        npy_dir, training_dir, threshold=15., nyrs=500,
+        domain="uniform", scaling="rescaled",
         make_benchmarks=False, bootstrap_copulas=True
     ) -> dict:
+
+    if domain == "rescaled":
+        return rescaled.load_samples(
+            npy_dir, training_dir,
+            threshold, nyrs, scaling=scaling,
+            make_benchmarks=make_benchmarks,
+            bootstrap_copulas=bootstrap_copulas
+        )
 
     # load all the generated samples
     npy_list = glob(os.path.join(npy_dir, "seed*.npy"))
@@ -95,12 +104,10 @@ def load_samples(
     train   = xr.open_dataset(Path(training_dir) / "data.nc")
     nyears = int(train['time.year'].max() - train['time.year'].min() + 1)
     train['maxwind'] = train.sel(field='u10')['anomaly'].max(dim=['lat', 'lon'])
-    
-    # sort descending by wind speed
     train  = train.sortby('maxwind', ascending=False)
 
     if threshold:
-        # warning: will affect ecdf results
+        # warning: will affect ecdf values
         ref  = train.copy()
         mask = train.where(train['maxwind'] >= threshold, drop=True).time
         train = train.sel(time=mask)
@@ -170,7 +177,7 @@ def load_samples(
     print("calculating empirical copulas for train.")
     copula_trn = statistics.empiricalPIT(x_trn)
 
-    # only get copula for first 149 samples to match other sets
+    # only get copula for first 150 samples to match trn
     if bootstrap_copulas:
         nboot = n // ntrn
         copula_subsets = []
@@ -203,8 +210,10 @@ def load_samples(
             'copula': copula_trn
         }
     }
-
-    if make_benchmarks:
+    if not make_benchmarks:
+        print("not generating benchmark samples.")
+        return output_dict
+    else:
         # add total dependence / independence benchmarks
         nevents   = len(x_ref); print(f"{nevents=}")
         λ_events  = λ(nevents, nyears)
@@ -228,10 +237,7 @@ def load_samples(
             }     
         }
         output_dict = {**output_dict, **benchmark_dict}
-    else:
-        print("not generating benchmark samples.")
-
-    return output_dict
+        return output_dict
 
 
 

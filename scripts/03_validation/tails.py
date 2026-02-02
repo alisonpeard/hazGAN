@@ -26,7 +26,7 @@ plt.rcParams.update({
 
 # script parameters
 scaling   = "rp10000"
-domains   = ["uniform", "gumbel", "gaussian"]
+domains   = ["rescaled", "uniform", "gumbel", "gaussian"]
 field_idx = 0
 field_nom = "mslp" # u10, tp, mslp
 tmax = 0.95
@@ -83,9 +83,12 @@ def undo_scaling(x:np.array, stats:dict) -> np.array:
 
 
 def transform_to_gumbel(x:np.array, domain:str="gumbel") -> np.array:
-    u = getattr(statistics, "inv_" + domain)(x)
-    if (u >= 1.).any():
-        print(f"WARNING: u ≥ 1 encountered for {domain}.")
+    if domain == "rescaled":
+        u = statistics.empiricalPIT(x)
+    else:
+        u = getattr(statistics, "inv_" + domain)(x)
+        if (u >= 1.).any():
+            print(f"WARNING: u ≥ 1 encountered for {domain}.")
     u = np.where(u >= 1., np.nan, u)
     y = statistics.gumbel(u)
     return y
@@ -125,7 +128,7 @@ if __name__ == "__main__":
     env.read_env()
 
     # one figure for everything
-    fig, axes = plt.subplots(2, 3, figsize=(6, 2.5), constrained_layout=True)
+    fig, axes = plt.subplots(2, 4, figsize=(6, 2.0), constrained_layout=True)
 
     trndir = Path(env.str("TRAINDIR")) / "images" / scaling
     gendir = Path(env.str("SAMPLES_DIR")) / scaling
@@ -194,7 +197,5 @@ if __name__ == "__main__":
     respath = figdir / f"{field_nom}.txt"
     save_stats_text(respath, results)
     print(f"Saved results summary to {respath}\n")
-
-# %%
 
 # %%

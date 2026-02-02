@@ -13,49 +13,105 @@ env.read_env()
 
 figdir = Path(env.str("FIG_DIR"))
 
-# %% Discuss extremal dependence results
+# %% Summarise wasserstein distances
+# NOTE: these are divided by std.
+wd = figdir / "wasserstein"
+domains = ["rescaled", "uniform", "gaussian", "gumbel"]
+
+dfs = []
+for domain in domains:
+    statspath = wd / f"{domain}.csv"
+    df = pd.read_csv(statspath, index_col=0)
+    # rename index name to "field"
+    df.index.name = "field"
+    df = df.melt(var_name="metric", value_name="value", ignore_index=False)
+    df = df.reset_index()
+    df["margins"] = domain
+    dfs.append(df)
+df = pd.concat(dfs, axis=0)
+df = df.groupby(["field", "metric", "margins"]).mean()
+df.to_csv(wd / "summary.csv")
+df
+
+# %% Discuss bivariate extremal correlation results
 wd = figdir / "corr-fields" 
-domains = ["gaussian", "gumbel", "uniform"]
+domains = ["rescaled", "uniform", "gaussian", "gumbel"]
 
 pearsoncols = ["pearson01", "pearson02", "pearson12"]
 extremalcols = ["extremal01", "extremal02", "extremal12"]
 headers = ["mae (best)", "mae (avg)", "r (best)", "r (avg)"]
 
 results_r = {}
-results_θ = {}
+results_χ = {}
 
 for domain in domains:
     statspath = wd / domain / "summary.csv"
     df = pd.read_csv(statspath, index_col=0)
 
     best_mae_r = df.loc["mae", pearsoncols].min()
-    best_mae_θ = df.loc["mae", extremalcols].min()
+    best_mae_χ = df.loc["mae", extremalcols].min()
 
     avg_mae_r = df.loc["mae", pearsoncols].mean()
-    avg_mae_θ = df.loc["mae", extremalcols].mean()
+    avg_mae_χ = df.loc["mae", extremalcols].mean()
 
     best_r_r = df.loc["pearson", pearsoncols].max()
-    best_r_θ = df.loc["pearson", extremalcols].max()
+    best_r_χ = df.loc["pearson", extremalcols].max()
 
     avg_r_r = df.loc["pearson", pearsoncols].mean()
-    avg_r_θ = df.loc["pearson", extremalcols].mean()
+    avg_r_χ = df.loc["pearson", extremalcols].mean()
 
     results_r[domain] = [best_mae_r, avg_mae_r, best_r_r, avg_r_r]
-    results_θ[domain] = [best_mae_θ, avg_mae_θ, best_r_θ, avg_r_θ]
+    results_χ[domain] = [best_mae_χ, avg_mae_χ, best_r_χ, avg_r_χ]
 
 results_r = pd.DataFrame.from_dict(results_r, orient="index", columns=headers)
-results_θ = pd.DataFrame.from_dict(results_θ, orient="index", columns=headers)
-
-results = pd.concat([results_r, results_θ], keys=["pearson", "extremal"], axis=0)
+results_χ = pd.DataFrame.from_dict(results_χ, orient="index", columns=headers)
+results = pd.concat([results_r, results_χ], keys=["pearson", "extremal"], axis=0)
 results.to_csv(wd / "summary.csv")
+results
+
+# %% Discuss spatial extremal correlation results
+wd = figdir / "corr-spatial"
+domains = ["rescaled", "uniform","gaussian", "gumbel"]
+
+pearsoncols = ["pearson0", "pearson1", "pearson2"]
+extremalcols = ["extremal0", "extremal1", "extremal2"]
+headers = ["mae (best)", "mae (avg)", "r (best)", "r (avg)"]
+
+results_r = {}
+results_χ = {}
+
+for domain in domains:
+    statspath = wd / domain / "summary.csv"
+    df = pd.read_csv(statspath, index_col=0)
+
+    best_mae_r = df.loc["mae", pearsoncols].min()
+    best_mae_χ = df.loc["mae", extremalcols].min()
+
+    avg_mae_r = df.loc["mae", pearsoncols].mean()
+    avg_mae_χ = df.loc["mae", extremalcols].mean()
+
+    best_r_r = df.loc["pearson", pearsoncols].max()
+    best_r_χ = df.loc["pearson", extremalcols].max()
+
+    avg_r_r = df.loc["pearson", pearsoncols].mean()
+    avg_r_χ = df.loc["pearson", extremalcols].mean()
+
+    results_r[domain] = [best_mae_r, avg_mae_r, best_r_r, avg_r_r]
+    results_χ[domain] = [best_mae_χ, avg_mae_χ, best_r_χ, avg_r_χ]
+
+results_r = pd.DataFrame.from_dict(results_r, orient="index", columns=headers)
+results_χ = pd.DataFrame.from_dict(results_χ, orient="index", columns=headers)
+results = pd.concat([results_r, results_χ], keys=["pearson", "extremal"], axis=0)
+results.to_csv(wd / "summary.csv")
+results
 
 # %% Discuss overall storm distributions
 wd = figdir / "saffir-simpson" 
-domains = ["gaussian", "gumbel", "uniform"]
 
-headers = ["value", "train", "uniform", "gaussian", "gumbel",
-           "Δuniform", "Δgaussian", "Δgumbel",
-           "%uniform", "%gaussian", "%gumbel"]
+domains = ["rescaled", "uniform","gaussian", "gumbel"]
+headers = ["value", "train", "rescaled", "uniform", "gaussian", "gumbel",
+           "Δrescaled", "Δuniform", "Δgaussian", "Δgumbel",
+           "%rescaled", "%uniform", "%gaussian", "%gumbel"]
 
 dfs = []
 for domain in domains:
@@ -89,11 +145,9 @@ p = dfkl["train"].apply(perc_to_float)
 p = np.clip(p, 1e-6, None)
 p = p / p.sum()
 
-
 results = {}
 
 for domain in domains:
-    
     q = dfkl[domain].apply(perc_to_float)
     q = np.clip(q, 1e-6, None)
     q = q / q.sum()
@@ -103,6 +157,7 @@ for domain in domains:
 
 dfkl = pd.DataFrame.from_dict(results, orient="index", columns=["kl divergence"])
 dfkl.to_csv(wd / "kl_divergence.csv")
+dfkl
 
 # %% jensen-shannon divergence
 results = {}
@@ -124,6 +179,8 @@ for domain in domains:
 
 dfjs = pd.DataFrame.from_dict(results, orient="index", columns=["js divergence"])
 dfjs.to_csv(wd / "js_divergence.csv")
+dfjs
+
 # %% wasserstein distance
 def extract_pos(s):
     return float(s.replace("cat-", ""))
@@ -148,22 +205,6 @@ dfwd
 # %%
 dfall = pd.concat([dfkl, dfjs, dfwd], axis=1).T
 dfall.to_csv(wd / "metrics.csv")
-# %%
+dfall
 
-wd = figdir / "wasserstein" 
-domains = ["gaussian", "gumbel", "uniform"]
-
-dfs = []
-for domain in domains:
-    statspath = wd / f"{domain}.csv"
-    df = pd.read_csv(statspath, index_col=0)
-    df = df.reset_index()
-    df["metric"] = df["metric"].replace({
-        "fake": domain,
-    })
-    df["margins"] = domain
-    dfs.append(df)
-
-df = pd.concat(dfs, axis=0)
-df.groupby(["metric", "margins"]).mean()
 # %%

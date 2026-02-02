@@ -32,8 +32,8 @@ plt.rcParams.update({
 
 # settings
 scaling = "rp10000"
-margins = "gaussian"
-fields = "mslp" # use string for spatial, list for multivariate
+margins = "rescaled"
+fields = ["u10", "mslp"] # use string for spatial, list for multivariate
 tmin = 0.7
 tmax = 0.99
 tstep = 0.01

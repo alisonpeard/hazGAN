@@ -7,28 +7,26 @@ from tqdm import tqdm
 
 from hazGAN import statistics
 
-EPS   = 1e-6
+from pathlib import Path
 
+eps   = 1e-6
 
 def λ(number_extremes:int, total_years:int, unit:int=1) -> float:
     """Calculate the extreme event rate for a given return period."""
     return number_extremes / (total_years / unit)
 
 
-def rescale(samples:np.array, stats_file:str) -> np.array:
-    """Rescale samples from [0, 1] to data space using stored image statistics."""
-    stats = np.load(stats_file)
-    image_minima = stats['min']
-    image_maxima = stats['max']
-    n            = stats['n']
-    image_range  = image_maxima - image_minima
+def undo_scaling(x:np.array, stats:dict) -> np.array:
+    mins = stats['min']
+    maxs = stats['max']
+    method = stats['method']
+    arg = stats['param']
+    ranges = maxs - mins
 
-    print(f"\nLoaded image statistics with shape {image_minima.shape}")
-    print(f"Statistics: {image_minima.squeeze()} to {image_maxima.squeeze()} over {n.squeeze()} samples")
-
-    print("WARNING: Current rescaling (Jan 2025) will be changed in future work.")
-    samples = (samples * (n + 1) - 1) / (n - 1) * image_range + image_minima
-    return samples
+    if method == "rp":
+        return x * ranges + mins
+    elif method == "minmax":
+        return(x / arg) * ranges + mins
 
 
 def yflip(array: np.ndarray, ax=1) -> np.ndarray:
@@ -48,197 +46,162 @@ def sample_dep(n, h, w, c, freq):
 
 
 def load_samples(
-        png_dir, training_dir, threshold=15., ny=500, make_benchmarks=False) -> dict:
-    """Load and process samples and training data for visualisation"""
-    print(f"\nLoading samples from {png_dir} with domain=rescaled")
-    # load all the png files
-    png_list = glob(os.path.join(png_dir, "seed*.png"))
-    png_list = sorted(png_list)
-    print(f"Found {len(png_list)} PNG files in {png_dir}")
-    print("WARNING: future work will use .npy to avoid quantisation issues.")
+        npy_dir, training_dir,
+        threshold=15., nyrs=500, scaling="rp10000",
+        make_benchmarks=False, bootstrap_copulas=True) -> dict:
 
-    samples = []
-    for png in (pbar := tqdm(png_list, desc="Loading PNG files")):
-        pbar.set_description(f"Loading {os.path.basename(png)}")
-        with Image.open(png) as img:
-            samples.append(np.array(img))
-    samples = np.array(samples).astype(float)
-    samples /= 255.
-    print(f"Loaded {samples.shape} samples")
+    # load all the generated samples
+    npy_list = glob(os.path.join(npy_dir, "seed*.npy"))
+    npy_list = sorted(npy_list)
 
-    # filepath changed Dec 2025
-    stats_file = os.path.join(training_dir, "images", "rescaled", "image_stats.npz")
-    y_gen = rescale(samples, stats_file)
+    gen = []
+    for npy in (pbar := tqdm(npy_list, desc="Loading NPY files")):
+        pbar.set_description(f"Loading {os.path.basename(npy)}")
+        arr = np.load(npy)
+        gen.append(arr)
+    gen = np.array(gen).astype(float)
+    gen /= 255.
 
-    # order samples
+    # undo (0,1) scaling
+    stats_file = Path(training_dir) / "images" / scaling / 'rescaled' / "image_stats.npz"
+    stats = np.load(stats_file)
+    y_gen = undo_scaling(gen, stats)
+
+    # sort the samples increasing by wind speed
     y_max = y_gen[..., 0].max(axis=(1, 2))
     y_ord  = np.argsort(y_max)
     y_gen  = y_gen[y_ord]
 
     # load training data for reference
-    data   = xr.open_dataset(os.path.join(training_dir, "data.nc"))
-    nyears = len(np.unique(data['time.year'].values))
-    data['maxwind'] = data.sel(field='u10')['anomaly'].max(dim=['lat', 'lon'])
-    trainmask = data.where(data['time.year'] != 2021, drop=True).time
-    validmask = data.where(data['time.year'] == 2021, drop=True).time
-    train  = data.sel(time=trainmask)
-    valid = data.sel(time=validmask)
-    del data
+    train   = xr.open_dataset(Path(training_dir) / "data.nc")
+    nyears = int(train['time.year'].max() - train['time.year'].min() + 1)
+    train['maxwind'] = train.sel(field='u10')['anomaly'].max(dim=['lat', 'lon'])
+    train  = train.sortby('maxwind', ascending=False)
 
     if threshold:
-        # this affects ECDF calculations so be careful
-        print(f"\nApplying threshold of {threshold} m/s")
+        # warning: will affect ecdf values
         ref  = train.copy()
-        mask = train.where(train['maxwind'] > threshold, drop=True).time
+        mask = train.where(train['maxwind'] >= threshold, drop=True).time
         train = train.sel(time=mask)
-        print(f"Selected {len(train.time)} training samples above threshold")
-
-        mask = valid.where(valid['maxwind'] >= threshold, drop=True).time
-        valid = valid.sel(time=mask)
-        print(f"Selected {len(valid.time)} validation samples above threshold")
+        print(f"train ≥ {threshold}: {len(train.time)}.")
     else:
         ref = train.copy()
     
+    # create arrays
     x_ref = ref.anomaly.values
-
-    train  = train.sortby('maxwind', ascending=False)
     x_trn  = train.anomaly.values
-    u_trn = train.uniform.values
+    u_trn  = train.uniform.values
     params = train.params.values
-    print(f"Loaded {params.shape} parameters")
+    print(f"{params.shape=}")
     
-    valid = valid.sortby('maxwind', ascending=False)
-    x_val = valid.anomaly.values
-    u_val = valid.uniform.values
-
-    # order training samples by x value
-    x_max = x_trn[..., 0].max(axis=(1, 2))
-    x_ord = np.argsort(x_max)[::-1]
-    u_trn = u_trn[x_ord]
-    x_trn = x_trn[x_ord]
-
-    if (u_trn >= 1).sum() > 0:
-        print("Some data.nc is greater than 1")
+    # check u_trn in [0, 1)
+    if np.nanmax(u_trn) >= 1.:
+        print("warning: some u_trn ≥ 1 (data.nc), rescaling.")
         u_trn_mask = (u_trn >= 1).astype(bool)
-        u_trn *= (1-EPS)
+        u_trn *= (1-eps)
     else:
         u_trn_mask = None
 
-    if (u_val >= 1.).sum() > 0:
-        print("Some valid data.nc is greater than 1")
-        u_val_mask = (u_val >= 1).astype(bool)
-        u_val *= (1-EPS)
-    else:
-        u_val_mask = None
-
-    # transformations (just ECDF here)
+    # make uniform (u) and reduced variate (y)
     y_trn = x_trn
-    y_val = x_val
-    print("Calculating generated ECDF")
-    for c in range(3):
-        print(f"\n Channel {c}")
-        print(f"x_trn range: {x_trn[...,c].min()} to {x_trn[...,c].max()}")
-        print(f"x_ref range: {x_ref[...,c].min()} to {x_ref[...,c].max()}")
-        print(f"y_gen range: {y_gen[...,c].min()} to {y_gen[...,c].max()}")
-        print(f"params: {params[...,c]}")
-
     u_gen = statistics.empiricalPIT(y_gen)
 
-    # calculate how many of each set we need to generate n_y years of data
-    nevents   = len(x_ref); print(f"{nevents=}")
-    nextreme  = len(x_trn) + len(x_val); print(f"{nextreme=}")
-    λ_storms  = λ(nevents, nyears)
-    λ_extreme = λ(nextreme, nyears)
-    nevents   = int(ny * λ_storms)
-    nextremes = int(ny * λ_extreme)
-
-    # make comparison samples for total dependence/independence assumptions
+    # calculate number of samples to use
+    ntrn = len(x_trn)
+    λ_trn = λ(ntrn, nyears)
+    ngen = int(nyrs * λ_trn)
     n, h, w, c = u_gen.shape
 
-    # randomly sample nextremes from the sampled data
-    print(f"Sampling {nextremes} samples from {n} synthetic events.")
-    idx = np.random.choice(n, nextremes, replace=False)
+    # randomly sample ngen samples
+    print(f"taking {ngen} of {n} samples for {nyrs} years.")
+    idx = np.random.choice(n, ngen, replace=False)
     u_gen = u_gen[idx]
     y_gen = y_gen[idx]
 
-    # remove [0,1] values
-    if (u_gen >= 1).sum() > 0:
-        print("WARNING: Some uniform samples are greater than 1")
+    # remove u=1 values
+    if np.nanmax(u_gen) >= 1.:
+        print("warning: some u_gen ≥ 1 (generated samples), rescaling.")
         u_gen_mask = (u_gen >= 1).astype(bool)
-        u_gen *= (1 - EPS)
+        u_gen *= (1-eps)
     else:
         u_gen_mask = None
 
     if np.nanmin(u_gen) <= 0.:
-        print("WARNING: Some uniform samples == 0")
-        u_gen = np.clip(u_gen, EPS, float('inf'))
+        print("warning: some u_gen ≤ 0, clipping.")
+        u_gen = np.clip(u_gen, eps, float('inf'))
 
-    # get samples into data space (just y space here)
+    # transform u_gen into data space
     x_gen = y_gen
 
-    # reorder samples from largest to smallest max value
+    # reorder x_gen
     gen_max = x_gen[..., 0].max(axis=(1,2))
     gen_ord = np.argsort(gen_max)[::-1]
     x_gen = x_gen[gen_ord]
     u_gen = u_gen[gen_ord]
     y_gen = y_gen[gen_ord]
 
-    # make empirical copulas
-    print("Calculating empirical copulas")
-    cop_trn = statistics.empiricalPIT(x_trn)
-    cop_val = statistics.empiricalPIT(x_val, x_trn)
-    # only get copula for first 149 samples to match other sets
-    nboot = n // nextreme
-    copula_subsets = []
-    for b in range(1, nboot):
-        print(f"Calculating empirical copula for subset {b} of {nboot-1} size={nextreme}")
-        start = b * nextreme
-        end   = (b + 1) * nextreme
-        copula_gen = statistics.empiricalPIT(x_gen[start:end, ...])
-        copula_subsets.append(copula_gen)
-    cop_gen = np.concatenate(copula_subsets, axis=0)
+    # calculate empirical copulas
+    print("calculating empirical copulas for train.")
+    copula_trn = statistics.empiricalPIT(x_trn)
 
-    # for southern hemisphere these should be upside-down in
-    # heatmaps and correctly orientated in geographic plots 
-    output_dict =  {
+    # only get copula for first 150 samples to match trn
+    if bootstrap_copulas:
+        nboot = n // ntrn
+        copula_subsets = []
+        print(f"bootstrapping {nboot} empirical copulas of {ntrn} samples each.")
+        for b in (pbar := tqdm(range(1, nboot), leave=False)):
+            pbar.set_postfix_str(f"{b}/{nboot-1}")
+            start = b * ntrn
+            end   = (b + 1) * ntrn
+            copula_gen = statistics.empiricalPIT(x_gen[start:end, ...])
+            copula_subsets.append(copula_gen)
+        copula_gen = np.concatenate(copula_subsets, axis=0)
+    else:
+        print(f"calculating empirical copulas for gen (no bootstrap).")
+        copula_gen = statistics.empiricalPIT(x_gen, x_trn)
+
+    # for southern hemisphere these should appear upside-down
+    # in numpy but correctly orientated in geographic coords
+    output_dict = {
         'samples': {
             'u': yflip(u_gen),
             'y': yflip(y_gen),
             'x': yflip(x_gen),
             'mask': yflip(u_gen_mask),
-            'copula': yflip(cop_gen)
+            'copula': yflip(copula_gen)
         }, 'training': {
             'u': u_trn,
             'y': y_trn,
             'x': x_trn,
             'mask': u_trn_mask,
-            'copula': cop_trn
-        }, 'valid': {
-            'u': u_val,
-            'y': y_val,
-            'x': x_val,
-            'mask': u_val_mask,
-            'copula': cop_val
+            'copula': copula_trn
         }
     }
-    if make_benchmarks:
-        print(f"Generating {nevents} (non-extreme) benchmark samples "\
-            f"for {ny} years of data at rate {λ_storms:,.4f} storms/year")
-    
+    if not make_benchmarks:
+        print("not generating benchmark samples.")
+        return output_dict
+    else:
+        # add total dependence / independence benchmarks
+        nevents   = len(x_ref); print(f"{nevents=}")
+        λ_events  = λ(nevents, nyears)
+        nevents   = int(nyrs * λ_events)
+
+        print(f"generating {nevents} (non-extreme) benchmark samples "\
+            f"for {nyrs} years of data at rate {λ_events:,.4f} storms/year.")
         u_ind = np.random.uniform(1e-6, 1-1e-6, size=(nevents, h, w, c))
-        u_dep, rp_dep = sample_dep(10, h, w, c, λ_storms)
-        print("WARNING: ind/dep arrays may also need to flip lats.")
+        u_dep, rp_dep = sample_dep(10, h, w, c, λ_events)
+        print("warning: ind/dep arrays may also need to flip lats.")
         x_ind = statistics.invPIT(u_ind, x_ref, params)
         x_dep = statistics.invPIT(u_dep, x_ref, params)
         benchmark_dict = {
-            "independent": {
+             "independent": {
                 'u': u_ind,
                 'x': x_ind,
             }, "dependent": {
                 'u': u_dep,
                 'rp': rp_dep,
                 'x': x_dep
-            }  
+            }     
         }
         output_dict = {**output_dict, **benchmark_dict}
-    return output_dict
+        return output_dict

@@ -1,15 +1,23 @@
 """
-Create diagnostic plots of the generated png files.
+Make main paper figures.
+
+>>> micromamba activate hazGAN
+>>> python -m figures.py --domain gaussian
+>>> python -m figures.py --domain rescaled
+>>> python -m figures.py --domain uniform
+>>> python -m figures.py --domain gumbel
 """
 # %%
 import os
+import sys
 from environs import Env
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 from importlib import reload
 from pathlib import Path
-
+from argparse import ArgumentParser
 from utils.analysis import load_samples
 
 from hazGAN.plotting import fields
@@ -31,37 +39,48 @@ plt.rcParams.update({
 })
 
 
-# settings
-FIELD     = 0
-THRESHOLD = [None, 15.][1]
-MONTH     = 9
-NYEARS    = 500
-SCALING   = "rp10000"
-DOMAIN    = "gumbel"
-savefigs = True
-savefig_kws = dict(dpi=300, bbox_inches='tight', transparent=True)
-
+# settings for interactive script
+global DOMAIN
+DOMAIN = "gaussian"
 
 # field metadata
+savefigs = True
 units_orig = ["m/s", "m", "Pa"]
 units = ["m/s", "mm", "hPa"]
 scales = [1, 1000, 0.01]
 field_names = ["u10", "tp", "mslp"]
 field_labels = ["wind speed", "precipitation", "pressure"]
 field_cmaps = ["viridis", "PuBu", "OrRd_r"]
+savefig_kws = dict(dpi=300, bbox_inches='tight', transparent=True)
+
+
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument("-t", "--thresh", type=float, default=15., help="Max wind threshold (m/s)")
+    parser.add_argument("-m", "--month", type=int, default=9, help="Month to plot (1-12)")
+    parser.add_argument("-n", "--nyrs", type=int, default=500, help="Number of years of samples")
+    parser.add_argument("-s", "--scaling", type=str, default="rp10000", choices=["rp10000", "minmax"])
+    parser.add_argument("-d", "--domain", type=str, default=DOMAIN, choices=["rescaled", "uniform", "gaussian", "gumbel"])
+
+    interactive = 'ipykernel' in sys.modules or hasattr(sys, 'ps1')
+    
+    if interactive:
+        return parser.parse_args(args=[]) 
+    else:
+        return parser.parse_args()
 
 
 def savefig(fig, outpath:str, savefigs:bool, savefig_kws:dict):
     """simple wrapper."""
     if savefigs:
         fig.savefig(outpath, **savefig_kws)
-        print(f"Saved figure to {outpath}")
+        print(f"saved figure to {outpath}")
     else:
-        print("Not saving figure. (savefigs is False)")
+        print("not saving figure. (savefigs is False)")
 
 
 def export_nc(path, data, lats, lons, ny, nx, domain):
-    print("\nWARNING: export netCDF is hardcoded for BoB study.")
+    print("warning: netcdf export domain is hardcoded to BoB.")
     lats = np.linspace(lats[0], lats[1], ny)
     lons = np.linspace(lons[0], lons[1], nx)
     samples_idx = np.arange(data['samples']['x'].shape[0])
@@ -80,21 +99,11 @@ def export_nc(path, data, lats, lons, ny, nx, domain):
     print(f"Exported netCDF to {path}")
         
 
-def clean_str(s):
-    s = s.replace(", ", "_")
-    s = s.replace(",", "_")
-    s = s.replace(" ", "-")
-    s = s.lower()
-    return s
-
 
 def save_stats_csv(path, stats_dict):
     with open(path, "w") as f:
-        # header
         headers = ["metric"] + list(stats_dict.keys())
-        headers = [clean_str(h) for h in headers]
         f.write(",".join(headers) + "\n")
-        # rows
         metrics = list(next(iter(stats_dict.values())).keys())
         for metric in metrics:
             row = [metric]
@@ -112,9 +121,12 @@ if __name__ == "__main__":
     env = Env()
     env.read_env()
 
+    args = parse_args()
+    del DOMAIN
+
     # configure paths   
     train_dir = Path(env.str("TRAINDIR"))
-    samples_dir = Path(env.str("SAMPLES_DIR")) / SCALING / DOMAIN / "npy"
+    samples_dir = Path(env.str("SAMPLES_DIR")) / args.scaling / args.domain / "npy"
     figdir = Path(env.str("FIG_DIR"))
     figdir.mkdir(parents=True, exist_ok=True)
     medians_path = train_dir / "data.nc"
@@ -130,17 +142,17 @@ if __name__ == "__main__":
     # loading takes a while
     data = load_samples(
         samples_dir, train_dir,
-        threshold=THRESHOLD, nyrs=NYEARS,
-        domain=DOMAIN, scaling=SCALING,
-        make_benchmarks=True
+        threshold=args.thresh, nyrs=args.nyrs,
+        domain=args.domain, scaling=args.scaling,
+        make_benchmarks=False
     )
 
-    # export netCDF if doesn't exist
+    # export netcdf if doesn't exist
     outnc = samples_dir.parent / "nc" / "data.nc"
 
     if not os.path.exists(outnc):
         outnc.parent.mkdir(parents=True, exist_ok=True)
-        export_nc(outnc, data, lats=[5, 25], lons=[80, 95], ny=64, nx=64, domain=DOMAIN)
+        export_nc(outnc, data, lats=[5, 25], lons=[80, 95], ny=64, nx=64, domain=args.domain)
         print(f"saved netCDF to {outnc}")
 
     # unpack data
@@ -158,10 +170,11 @@ if __name__ == "__main__":
 
     # load climatology data
     medians = xr.open_dataset(medians_path)["medians"]
-    medians = medians.isel(month=MONTH).values
+    medians = medians.isel(month=args.month).values
 
-    # %% update results dict
-    statspath = figdir / "stats" / f"{DOMAIN}.csv"
+    # %% ==============================================================
+    # update results dict
+    statspath = figdir / "stats" / f"{args.domain}.csv"
     statspath.parent.mkdir(parents=True, exist_ok=True)
     results = {}
     
@@ -192,14 +205,15 @@ if __name__ == "__main__":
     print(f"Saved summary statistics to {statspath}")
     del results, statspath
 
-    # %% saffir-simpson barchart
-    barcharts = False
+    # %% ==============================================================
+    # saffir-simpson barchart
+    barcharts = True
     if barcharts:
         reload(misc)
 
-        outpath = figdir / "saffir-simpson" / (DOMAIN + ".pdf")
+        outpath = figdir / "saffir-simpson" / (args.domain + ".pdf")
         outpath.parent.mkdir(parents=True, exist_ok=True)
-        statspath = figdir / "saffir-simpson" / (DOMAIN + ".csv")
+        statspath = figdir / "saffir-simpson" / (args.domain + ".csv")
 
         results = {}
 
@@ -215,8 +229,9 @@ if __name__ == "__main__":
         print(f"Saved summary statistics to {statspath}")
         del results, statspath
     
-    # %% wind maxima vs return period plot
-    windprofiles = False
+    # %% ==============================================================
+    # wind maxima vs return period plot
+    windprofiles = True
     if windprofiles:
         λ_trn = len(x_trn) / 81
         fig, ax = plt.subplots(figsize=(2.5, 1.5), constrained_layout=True)
@@ -235,12 +250,13 @@ if __name__ == "__main__":
                                linestyle='',
                                **profile_kws)   
 
-        outpath = figdir / "wind-profile" / (DOMAIN + ".pdf")
+        outpath = figdir / "wind-profile" / (args.domain + ".pdf")
         outpath.parent.mkdir(parents=True, exist_ok=True)
         savefig(fig, outpath, savefigs, savefig_kws)
     
-    # %% Boulagiem (2022)-style scatterplots
-    scatterplots = False
+    # %% ==============================================================
+    # Boulagiem (2022)-style scatterplots
+    scatterplots = True
     if scatterplots:
 
         from hazGAN.constants import OBSERVATION_POINTS
@@ -257,7 +273,7 @@ if __name__ == "__main__":
             ecs = np.divide(n, minima, out=np.zeros_like(minima), where=minima != 0, dtype=float)
             return ecs
         
-        outdir = figdir / "scatter-ops" / DOMAIN
+        outdir = figdir / "scatter-ops" / args.domain
         outdir.mkdir(parents=True, exist_ok=True)
         statspath = outdir / "smith1990.csv"
 
@@ -291,7 +307,7 @@ if __name__ == "__main__":
                     suptitle=f"{field_labels[i].capitalize()} ({unit})"
                 )
                 
-                outpath = outdir / f"{op_a}-{op_b}" / (DOMAIN + ".pdf") 
+                outpath = outdir / f"{op_a}-{op_b}" / (field_names[i] + ".pdf") 
                 outpath.parent.mkdir(parents=True, exist_ok=True)
                 savefig(fig, outpath, savefigs, savefig_kws)
             
@@ -312,15 +328,16 @@ if __name__ == "__main__":
 
         del results, statspath
 
-    # %% 64x64 plots of data
-    sampleplots = False
+    # %% ==============================================================
+    # 64x64 plots of data
+    sampleplots = True
     if sampleplots:
         reload(samples)
 
         def format_rp(value, tick_number):
             return f"{value:,.0f}"
 
-        field = 1
+        field = 0
         shuffle = False
 
         k = scales[field]
@@ -342,7 +359,7 @@ if __name__ == "__main__":
         fig_rp = samples.plot(rp_gen[id_gen], rp_trn[id_trn], field=field, title="", cbar_label="return period (years)", cmap=cmap, cbar_formatter=FuncFormatter(format_rp))
         fig_x = samples.plot(k*x_gen[id_gen], k*x_trn[id_trn], field=field, title="", cbar_label=metric, cmap=cmap, vmin=0)
     
-        outdir = figdir / "samples-64x64" / DOMAIN
+        outdir = figdir / "samples-64x64" / args.domain
         outdir.mkdir(parents=True, exist_ok=True)
 
         outpath = os.path.join(outdir, f"{field_names[field]}_y.png")
@@ -354,8 +371,9 @@ if __name__ == "__main__":
         outpath = os.path.join(outdir, f"{field_names[field]}_x.png")
         savefig(fig_x, outpath, savefigs, savefig_kws)
     
-    # %% - - - - - Wassterstein distances - - - - - - - - - - - - - - -
-    wassdists = False
+    # %% ==============================================================
+    # wasserstein distance maps
+    wassdists = True
     if wassdists:
         reload(fields)
         import cartopy.crs as ccrs
@@ -363,7 +381,7 @@ if __name__ == "__main__":
 
         outdir = figdir / "wasserstein"
         outdir.mkdir(parents=True, exist_ok=True)
-        statspath = outdir / f"{DOMAIN}.csv"
+        statspath = outdir / f"{args.domain}.csv"
 
 
         def _wasserstein_1d(x0, x1):# Sort both distributions
@@ -428,19 +446,20 @@ if __name__ == "__main__":
         cbar = fig.colorbar(im, ax=axs, orientation='vertical', shrink=0.6, fraction=0.05, pad=0.04)
         cbar.set_label("W. dist.\n(x / std dev.)")
         
-        fig.savefig(os.path.join(outdir, f"{DOMAIN}.png"), dpi=300, bbox_inches='tight', transparent=True)
+        fig.savefig(os.path.join(outdir, f"{args.domain}.png"), dpi=300, bbox_inches='tight', transparent=True)
 
         save_stats_csv(statspath, results)
         print(f"Saved summary statistics to {statspath}")
         del results, statspath
     
-    # %% - - - - - Plot inter-field correlations - - - - - - - - - - - - - - -
-    fieldcorrplots = False
+    # %% ==============================================================
+    # inter-field correlation plots
+    fieldcorrplots = True
     if fieldcorrplots:
         from itertools import combinations
         reload(fields)
 
-        outdir = figdir / "corr-fields" / DOMAIN
+        outdir = figdir / "corr-fields" / args.domain
         outdir.mkdir(parents=True, exist_ok=True)
         statspath = outdir / "summary.csv"
 
@@ -481,9 +500,10 @@ if __name__ == "__main__":
 
 
         save_stats_csv(statspath, results)
-        print(f"Saved summary statistics to {statspath}")
+        print(f"saved summary statistics to {statspath}")
     
-    # %% - - - - - Plot spatial correlations - - - - - - - - - - - - - - - - -
+    # %% ==============================================================
+    # spatial correlation plots
     spatialcorrplots = True
     extcorrplot = True
 
@@ -495,7 +515,7 @@ if __name__ == "__main__":
     if spatialcorrplots:
         reload(spatial)
 
-        outdir = figdir / "corr-spatial" / DOMAIN
+        outdir = figdir / "corr-spatial" / args.domain
         outdir.mkdir(parents=True, exist_ok=True)
         statspath = outdir / "summary.csv"
 
@@ -524,8 +544,8 @@ if __name__ == "__main__":
                 results[f"extremal{k}"] = {}
                 fig_χ, metrics_χ = spatial.plot(
                     cop_gen_lores, cop_trn_lores,
-                    # spatial.extcorrboot,
-                    spatial.extcorr, # bootstrap for final version; compare results first
+                    spatial.extcorrboot,
+                    # spatial.extcorr, # bootstrap for final version; compare results first
                     field=k,
                     figsize=.3, title="", cbar_label="χ(u)",
                     cmap="viridis", vmin=0, vmax=1)
@@ -537,7 +557,7 @@ if __name__ == "__main__":
                 savefig(fig_χ, outpath, savefigs, savefig_kws)
                 
         save_stats_csv(statspath, results)
-        print(f"Saved summary statistics to {statspath}")
+        print(f"saved summary statistics to {statspath}")
 
-    # %% 
+# %% ==============================================================
  

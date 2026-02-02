@@ -1,4 +1,3 @@
-# %%
 import numpy as np
 import matplotlib.pyplot as plt
 from numba import njit, prange
@@ -82,19 +81,7 @@ def smith1990(array):
     return get_ext_coefs(array)
 
 
-def tail_dependence(array):
-    _, h, w, c = array.shape
-    array = array.reshape(-1, h * w, c)
-
-    coeffs = []
-    for i in range(h * w):
-        x, y = array[:, i, 0], array[:, i, 1]
-        chi = _tail_dependence_coeff(x, y)
-        coeffs.append(chi)
-    coeffs = np.stack(coeffs, axis=0).reshape(h, w)
-    return coeffs
-
-
+@njit
 def _chi(u, v, t=0.8):
     """Coles (2001) §8.4, u,v~Unif[0,1]"""
     n = len(u)
@@ -110,7 +97,6 @@ def _chi(u, v, t=0.8):
 def extcorr(array):
     _, h, w, c = array.shape
     array = array.reshape(-1, h * w, c)
-
     extcorrs = []
     for i in range(h * w):
         u, v = array[:, i, 0], array[:, i, 1]
@@ -121,80 +107,19 @@ def extcorr(array):
 
 
 @njit(parallel=True)
-def extcorrboot(array, nboot=100, size=150):
-    _, h, w, c = array.shape
-    array = array.reshape(-1, h * w, c)
-
-    extcorrs = []
-    np.random.seed(42)
-    for i in prange(h * w):
+def extcorrboot(array, nboot:int=100, size:int=150):
+    n, h, w, c = array.shape
+    hw = h * w
+    # array = array.reshape(n, hw, c)
+    array = np.reshape(array.copy(), (n, hw, c))
+    extcorrs = np.zeros(hw)
+    for i in prange(hw):
         u, v = array[:, i, 0], array[:, i, 1]
-        boot_coefs = []
+        chi = 0.
         for _ in range(nboot):
-            idx = np.random.choice(len(u), size=size, replace=True)
+            idx = np.random.choice(n, size=size, replace=True)
             u_samp = u[idx]
             v_samp = v[idx]
-            chi = _chi(u_samp, v_samp)
-            boot_coefs.append(chi)
-        extcorrs.append(np.nanmean(boot_coefs))
-    extcorrs = np.stack(extcorrs, axis=0).reshape(h, w)
-    return extcorrs
-
-
-
-# def _tail_dependence_coeff(u, v):
-#     """
-#     Classical tail dependence coefficient λ for upper tail dependence.
-
-#     Args:
-#         u, v: 1D arrays of uniform marginals
-#         tail: 'upper' or 'lower'
-#     Returns:
-#         λ: tail dependence coefficient
-
-#     Refs:
-#         https://doi.org/10.1201/9780367803896
-#         Nelsen, R. B. (2006). An Introduction to Copulas. Springer.
-#     """
-#     # thresholds = np.arange(0.8, 0.99, 0.01)  # Multiple thresholds
-#     lambdas = []
-    
-#     for t in thresholds:
-#         u_exceed = u > t
-#         both_exceed = (u > t) & (v > t)
-        
-#         if np.sum(u_exceed) > 0:
-#             lambda_t = np.sum(both_exceed) / np.sum(u_exceed)
-#             lambdas.append(lambda_t)
-
-#     return np.mean(lambdas) if lambdas else 0
-
-
-def _tail_dependence_coeff(u, v, thresholds=None):
-    """
-    Classical tail dependence coefficient λ for upper tail dependence.
-    Uses the Reiss & Thomas (2007) estimator.
-
-    Args:
-        u, v: 1D arrays of uniform marginals
-    Returns:
-        λ: tail dependence coefficient
-
-    Refs:
-        Reiss, R.-D. and Thomas, M. (2007) Statistical Analysis of Extreme Values,
-        Birkhäuser, 3rd edition, Eq (2.62)
-        https://rdrr.io/cran/extRemes/man/taildep.html
-    """
-    n = len(u)
-    thresholds = thresholds or np.arange(0.75, 0.9, 0.01)
-    lambdas = []
-    
-    for t in thresholds:
-        both_exceed = (u > t) & (v > t)
-        
-        # Reiss & Thomas (2007) formula: chi_hat = joint_exceedances / (n * (1-t))
-        chi_t = np.sum(both_exceed) / (n * (1 - t))
-        lambdas.append(chi_t)
-
-    return np.mean(lambdas) if lambdas else 0
-# %%
+            chi += _chi(u_samp, v_samp)
+        extcorrs[i] = chi / nboot
+    return np.reshape(extcorrs, (h, w))
