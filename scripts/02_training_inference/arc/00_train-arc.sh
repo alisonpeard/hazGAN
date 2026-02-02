@@ -11,7 +11,7 @@
 #SBATCH --cpus-per-task=4
 
 echo "Job started at $(date) on node $(hostname)"
-set -ex  # Added -x to print every command as it runs
+set -ex
 
 DATA="/data/ouce-opsis/spet5107/data/training/${SCALING}/${DOMAIN}/${FORMAT}.zip"
 OUTDIR="/data/ouce-opsis/spet5107/data/models/${SCALING}/${DOMAIN}/${FORMAT}"
@@ -25,14 +25,13 @@ source /data/ouce-opsis/spet5107/hazGAN2/workflow/scripts/cuda_env.sh
 
 mkdir -p $OUTDIR
 
-: '
+# train the model
 python $SCRIPT \
     --outdir=$OUTDIR \
     --data=$DATA \
     --gpus=1 \
     --DiffAugment="color,translation,cutout" \
     --kimg=$KIMG
-'
 
 # and generate samples
 SCRIPT="/data/ouce-opsis/spet5107/hazGAN/styleGAN-DA/src/generate.py"
