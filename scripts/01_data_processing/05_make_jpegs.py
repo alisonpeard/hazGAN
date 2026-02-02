@@ -12,15 +12,28 @@ from pathlib import Path
 from hazGAN import statistics
 
 
-# parameters
-i, j, k = 3, 1, 0
-DOMAINS = ["uniform", "gumbel", "gaussian"] # "rescaled"
-RESCALE_METHODS = ["rp"] # minmax
-RESCALE_ARGS = [10_000] # 0.9 for minmax
-FORMATS = ["npy", "png"] # TODO: add npy from hazGAN2 later
+domains = ["rescaled", "gaussian"] #["uniform", "gumbel", "gaussian"]
+rescale_funcs = ["rp"]
+rescale_args = [10_000]
+output_fmt = "npy"
+u10_threshold = 15
 
-# hardcode for now
-WINDTHRESHOLD = 15
+
+def save_stats_csv(path, stats_dict):
+    with open(path, "w") as f:
+        # header
+        headers = ["metric"] + list(stats_dict.keys())
+        headers = [h for h in headers]
+        f.write(",".join(headers) + "\n")
+        # rows
+        metrics = list(next(iter(stats_dict.values())).keys())
+        for metric in metrics:
+            row = [metric]
+            for section in stats_dict.keys():
+                value = stats_dict[section][metric]
+                val_str = f"{value:.4f}" if isinstance(value, (float, np.float64)) else str(value)
+                row.append(val_str)
+            f.write(",".join(row) + "\n")
 
 
 def rescale_array(array, method, arg, domain):
@@ -36,7 +49,14 @@ def rescale_array(array, method, arg, domain):
 
     elif method == "rp":
         if domain == "rescaled":
-            raise ValueError("Return period scaling not defined for 'rescaled' domain")
+            n = array.shape[0]
+            obs_max = array.max(axis=(0, 1, 2))
+            k = np.log(arg) / np.log(n)
+            array_max = k * obs_max
+            array_min = array.min(axis=(0, 1, 2))
+            array = (array - array_min) / (array_max - array_min)
+            stats = {'min': array_min, 'max': array_max, 'param': arg, 'method': method}
+            return array, stats
 
         ppf = getattr(statistics, domain)
         array_max = ppf(1 - 1 / arg)
@@ -48,6 +68,9 @@ def rescale_array(array, method, arg, domain):
         stats = {'min': array_min, 'max': array_max, 'param': arg, 'method': method}
         return array, stats
 
+    else:
+        raise ValueError(f"unknown rescaling method: {method}.")
+
 
 
 def main(rescale_method, rescale_arg, domain, output_format):
@@ -55,15 +78,16 @@ def main(rescale_method, rescale_arg, domain, output_format):
     env.read_env(recurse=True)
     traindir = Path(env.str("TRAINDIR"))
 
-    print(f"Loading training data from {traindir}")
+    results = {} # store additional stats
+
+    print(f"Loading training data from {traindir}.\n")
     ds = xr.open_dataset(traindir / 'data.nc')
-    ds['windmax'] = ds.sel(field='u10').anomaly.max(dim=['lon', 'lat'])
-    mask = (ds['windmax'] > WINDTHRESHOLD).values
+    ds['u10_max'] = ds.sel(field='u10').anomaly.max(dim=['lon', 'lat'])
+    mask = (ds['u10_max'] > u10_threshold).values
     idx  = np.where(mask)[0]
     ds   = ds.isel(time=idx)
 
-    print(f"\nFound {ds.time.size} training events with maximum wind exceeding {WINDTHRESHOLD} m/s")
-
+    print(f"count(max(u10) > {u10_threshold} m/s): {ds.time.size}.")
     outdir = traindir / 'images' / (rescale_method + str(rescale_arg)) / domain 
     stats_path = outdir / "image_stats.npz"
     os.makedirs(outdir / output_format, exist_ok=True)
@@ -72,24 +96,32 @@ def main(rescale_method, rescale_arg, domain, output_format):
 
     if domain == "rescaled":
          u = ds.anomaly.values
+         results["rescaled"] = {}
+         results["rescaled"]["max"] = u.max(axis=(0, 1, 2))
+         results["rescaled"]["min"] = u.min(axis=(0, 1, 2))
     else:
         u = ds.uniform.values
-        print(f"\nINFO: Maximum u-value found is {u.max():.6f}")
-        print(f"INFO: Corresponds to {1/(1-u.max()):,.0f}-year return level assumption")
-        print(f"INFO: Minimum u-value found is {u.min():.6f}")
-        print(f"INFO: Corresponds to {1/(1-u.min()):,.0f}-year return level assumption")
+        results["uniform"] = {}
+        results["uniform"]["max"] = u.max(axis=(0, 1, 2))
+        results["uniform"]["min"] = u.min(axis=(0, 1, 2))
 
-        if not ((u.max() < 1.0) and (u.min() >= 0.0)):
-            raise ValueError("Percentiles not in [0, 1) range")
+        if not (u.min() >= 0.0) & ((u.max() < 1.0)):
+            raise ValueError("percentiles not in [0, 1).")
     
     u = np.flip(u, axis=1)
 
-    assert u.shape[1:] == (64, 64, 3), f"Unexpected shape: {u.shape}"
+    assert u.shape[1:] == (64, 64, 3), f"unexpected shape: {u.shape}"
 
     ppf = getattr(statistics, domain)
     y = ppf(u)
     y, stats = rescale_array(y, method=rescale_method, arg=rescale_arg, domain=domain)
     np.savez(stats_path, **stats)
+
+    results[rescale_func] = stats
+
+    results["output"] = {}
+    results["output"]["max"] = y.max(axis=(0, 1, 2))
+    results["output"]["min"] = y.min(axis=(0, 1, 2))
 
     # save images
     storm_paths = []
@@ -106,8 +138,13 @@ def main(rescale_method, rescale_arg, domain, output_format):
             output_path = outdir / output_format / f"storm_{i}.{output_format}"
             np.save(output_path, y_i * 255)
         storm_paths.append(output_path)
-
     print(f"\nSaved {len(storm_paths)} images to {outdir}")
+
+    # save stats csv
+    resultspath = outdir / "image_stats.csv"
+    print(f"\n{results}\n")
+    save_stats_csv(resultspath, results)
+    print(f"Saved results stats to {resultspath}")
 
     # zip files for transfer to remote training server
     zipdir = traindir / 'zipfiles' / (rescale_method + str(rescale_arg)) / domain
@@ -119,9 +156,8 @@ def main(rescale_method, rescale_arg, domain, output_format):
 
 
 if __name__ == "__main__":
-    for method in RESCALE_METHODS:
-        for arg in RESCALE_ARGS:
-            for domain in DOMAINS:
-                for fmt in FORMATS:
-                     main(method, arg, domain, fmt)
+    for rescale_func in rescale_funcs:
+        for rescale_arg in rescale_args:
+            for domain in domains:
+                    main(rescale_func, rescale_arg, domain, output_fmt)
 # %% 

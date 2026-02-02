@@ -21,7 +21,7 @@ def anomaly(array, reference, params):
 
 def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, title="Untitled",
         cbar_label='', cbar_width=0.25, linewidth=.15, alpha=1e-4, alpha_vlim=True, 
-        nrows=4, ncols=8, **transform_kws):
+        nrows=4, ncols=8, cbar_formatter=None, **transform_kws):
     """Plot training samples on top row and generated samples on bottom row."""
 
     transform = transform or identity
@@ -66,6 +66,6 @@ def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, 
 
     axs[0, 0].set_ylabel("HazGAN")
     axs[midrow, 0].set_ylabel("ERA5")
-    fig.colorbar(im, cax=cax, label=cbar_label)
+    fig.colorbar(im, cax=cax, label=cbar_label, format=cbar_formatter)
 
     return fig

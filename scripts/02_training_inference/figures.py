@@ -37,7 +37,7 @@ THRESHOLD = [None, 15.][1]
 MONTH     = 9
 NYEARS    = 500
 SCALING   = "rp10000"
-DOMAIN    = "gaussian"
+DOMAIN    = "gumbel"
 savefigs = True
 savefig_kws = dict(dpi=300, bbox_inches='tight', transparent=True)
 
@@ -317,7 +317,10 @@ if __name__ == "__main__":
     if sampleplots:
         reload(samples)
 
-        field = 0
+        def format_rp(value, tick_number):
+            return f"{value:,.0f}"
+
+        field = 1
         shuffle = False
 
         k = scales[field]
@@ -330,9 +333,13 @@ if __name__ == "__main__":
         else:
             id_gen = np.arange(u_gen.shape[0])
             id_trn = np.arange(u_trn.shape[0])
-        
+
+        rp_trn = 1 / (1 - u_trn)
+        rp_gen = 1 / (1 - u_gen)
+
         fig_y = samples.plot(y_gen[id_gen], y_trn[id_trn], field=field, title="", cmap=cmap)
         fig_u = samples.plot(u_gen[id_gen], u_trn[id_trn], field=field, title="", cbar_label="", cmap=cmap)
+        fig_rp = samples.plot(rp_gen[id_gen], rp_trn[id_trn], field=field, title="", cbar_label="return period (years)", cmap=cmap, cbar_formatter=FuncFormatter(format_rp))
         fig_x = samples.plot(k*x_gen[id_gen], k*x_trn[id_trn], field=field, title="", cbar_label=metric, cmap=cmap, vmin=0)
     
         outdir = figdir / "samples-64x64" / DOMAIN
@@ -342,6 +349,8 @@ if __name__ == "__main__":
         savefig(fig_y, outpath, savefigs, savefig_kws)
         outpath = os.path.join(outdir, f"{field_names[field]}_u.png")
         savefig(fig_u, outpath, savefigs, savefig_kws)
+        outpath = os.path.join(outdir, f"{field_names[field]}_rp.png")
+        savefig(fig_rp, outpath, savefigs, savefig_kws)
         outpath = os.path.join(outdir, f"{field_names[field]}_x.png")
         savefig(fig_x, outpath, savefigs, savefig_kws)
     
@@ -407,7 +416,7 @@ if __name__ == "__main__":
         vmin = min([wd.min() for wd in wdists])
         vmax = max([wd.max() for wd in wdists])
         
-        fig, axs = plt.subplots(1, 3, figsize=(6, 2), constrained_layout=True, subplot_kw={'projection': ccrs.PlateCarree()})
+        fig, axs = plt.subplots(1, 3, figsize=(4, 1.5), constrained_layout=True, subplot_kw={'projection': ccrs.PlateCarree()})
         for field in range(3):
 
             im = fields.contourmap(
@@ -417,7 +426,7 @@ if __name__ == "__main__":
             axs[field].set_title(field_labels[field].capitalize())
 
         cbar = fig.colorbar(im, ax=axs, orientation='vertical', fraction=0.05, pad=0.04)
-        cbar.set_label("Wasserstein distance (normalised)")
+        cbar.set_label("Wasserstein dist.\n(normalised)")
         
         fig.savefig(os.path.join(outdir, f"{DOMAIN}.png"), dpi=300, bbox_inches='tight', transparent=True)
 

@@ -2,8 +2,8 @@
 
 # just run on headnode with bash, i.e. "bash 00_submit-arc.sh"
 SCALINGS=("rp10000")
-DOMAINS=("gaussian" "gumbel" "uniform") # "gumbel" "uniform") # "rescaled"
-FORMATS=("npy") # ("npy" "png")
+DOMAINS=("rescaled" "gaussian") #("gaussian" "gumbel" "uniform" "rescaled")
+FORMATS=("npy")
 KIMG=300
 
 for SCALING in "${SCALINGS[@]}"; do
