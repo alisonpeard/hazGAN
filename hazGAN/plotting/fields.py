@@ -1,17 +1,17 @@
 # %%
 import numpy as np
 import matplotlib.pyplot as plt
+from numba import njit, prange
 
 from .base import makegrid
 from .base import contourmap
-from .base import heatmap
 from .base import CMAP
 from ..statistics import get_extremal_coeffs_nd
 
 
 def plot(fake, train, func, fields=[0, 1], figsize=1.,
          cmap=CMAP, vmin=None, vmax=None,
-         title="Untitled", cbar_label="", **func_kws
+         title="", cbar_label="", **func_kws
          ) -> plt.Figure:
     """
     Plot relationships between climate fields.
@@ -120,13 +120,14 @@ def extcorr(array):
     return extcorrs
 
 
+@njit(parallel=True)
 def extcorrboot(array, nboot=100, size=150):
     _, h, w, c = array.shape
     array = array.reshape(-1, h * w, c)
 
     extcorrs = []
     np.random.seed(42)
-    for i in range(h * w):
+    for i in prange(h * w):
         u, v = array[:, i, 0], array[:, i, 1]
         boot_coefs = []
         for _ in range(nboot):

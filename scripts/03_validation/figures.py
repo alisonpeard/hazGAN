@@ -355,7 +355,7 @@ if __name__ == "__main__":
         savefig(fig_x, outpath, savefigs, savefig_kws)
     
     # %% - - - - - Wassterstein distances - - - - - - - - - - - - - - -
-    wassdists = True
+    wassdists = False
     if wassdists:
         reload(fields)
         import cartopy.crs as ccrs
@@ -425,8 +425,8 @@ if __name__ == "__main__":
             )
             axs[field].set_title(field_labels[field].capitalize())
 
-        cbar = fig.colorbar(im, ax=axs, orientation='vertical', fraction=0.05, pad=0.04)
-        cbar.set_label("Wasserstein dist.\n(normalised)")
+        cbar = fig.colorbar(im, ax=axs, orientation='vertical', shrink=0.6, fraction=0.05, pad=0.04)
+        cbar.set_label("W. dist.\n(x / std dev.)")
         
         fig.savefig(os.path.join(outdir, f"{DOMAIN}.png"), dpi=300, bbox_inches='tight', transparent=True)
 
@@ -466,7 +466,9 @@ if __name__ == "__main__":
             # Extremal dependence plots
             results[f"extremal{pair_str}"] = {}
             fig_χ, metrics_χ = fields.plot(
-                cop_gen, cop_trn, fields.extcorrboot,
+                cop_gen, cop_trn,
+                fields.extcorrboot,
+                # fields.extcorr, # compare results; if similar, don't bootstrap fields
                 fields=pair, figsize=.3,
                 title="", cbar_label="χ(u)",
                 cmap="viridis",
@@ -482,34 +484,60 @@ if __name__ == "__main__":
         print(f"Saved summary statistics to {statspath}")
     
     # %% - - - - - Plot spatial correlations - - - - - - - - - - - - - - - - -
-    if False:
+    spatialcorrplots = True
+    extcorrplot = True
+
+    # NOTE: this section is computationally demanding
+    # using two things to speed it up:
+    # 1) use low-res data (every second pixel)
+    # 2) use numba-optimized extremal correlation function
+
+    if spatialcorrplots:
         reload(spatial)
 
-        for FIELD in [0]: #, 1, 2]:
-            figa, metrics_a = spatial.plot(cop_gen , cop_trn, spatial.pearson, field=FIELD, figsize=.6,
-            title="", cbar_label=r"$r$", cmap="Spectral_r", vmin=-1, vmax=1)
+        outdir = figdir / "corr-spatial" / DOMAIN
+        outdir.mkdir(parents=True, exist_ok=True)
+        statspath = outdir / "summary.csv"
 
-            outpath = os.path.join(figdir, f"fig11a_{FIELD}.png")
-            savefig(figa, outpath, savefigs, savefig_kws)
+        results = {}
 
-            # %%  extremal coefficients (takes a minute)
-            if False: # turn off (too slow for now)
-                # TODO: add resampling as in hazGAN2
-                figb, metrics_b = spatial.plot(u_gen, u_trn, spatial.tail_dependence, field=FIELD, figsize=.6,
-                title="", cbar_label=r"$\hat\lambda$", cmap="Spectral", vmin=0, vmax=1)
+        cop_gen_lores = cop_gen[:, ::2, ::2, :].copy()
+        cop_trn_lores = cop_trn[:, ::2, ::2, :].copy()
 
-                outpath = os.path.join(figdir, f"fig11b_{FIELD}.png")
-                savefig(figb, outpath, savefigs, savefig_kws)
+        for k in [0, 1, 2]:
 
-                text = f"\nThe spatial correlation between the ERA5 and GAN-generated fields " \
-                    f"for {FIELD_LABELS[FIELD]} is {metrics_a['pearson']:.3f} " \
-                    f"(MAE = {metrics_a['mae']:.3f})."
+            # Pearson plots
+            results[f"pearson{k}"] = {}
+            fig_r, metrics_r = spatial.plot(
+                cop_gen_lores , cop_trn_lores,
+                spatial.pearson, field=k,
+                figsize=.3, title="", cbar_label="r",
+                cmap="viridis", vmin=-1, vmax=1
+            )
+
+            results[f"pearson{k}"]["mae"] = metrics_r['mae']
+            results[f"pearson{k}"]["pearson"] = metrics_r['pearson']
+            outpath = os.path.join(outdir, f"pearson_{k}.png")
+            savefig(fig_r, outpath, savefigs, savefig_kws)
+
+            if extcorrplot:
+                results[f"extremal{k}"] = {}
+                fig_χ, metrics_χ = spatial.plot(
+                    cop_gen_lores, cop_trn_lores,
+                    # spatial.extcorrboot,
+                    spatial.extcorr, # bootstrap for final version; compare results first
+                    field=k,
+                    figsize=.3, title="", cbar_label="χ(u)",
+                    cmap="viridis", vmin=0, vmax=1)
                 
-                text += f"\nFor the extremes, spatial correlation between the ERA5 and GAN-generated fields of tail dependence coefficients " \
-                        f"for {FIELD_LABELS[FIELD]} is {metrics_b['pearson']:.3f} " \
-                        f"(MAE = {metrics_b['mae']:.3f})."
+                results[f"extremal{k}"]["mae"] = metrics_χ['mae']
+                results[f"extremal{k}"]["pearson"] = metrics_χ['pearson']
+
+                outpath = os.path.join(outdir, f"extcorr_{k}.png")
+                savefig(fig_χ, outpath, savefigs, savefig_kws)
                 
-                print(text)
+        save_stats_csv(statspath, results)
+        print(f"Saved summary statistics to {statspath}")
 
     # %% 
  

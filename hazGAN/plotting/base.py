@@ -53,7 +53,7 @@ def heatmap(array, ax=None, extent=[80, 95, 10, 25], transform=ccrs.PlateCarree(
 
 def contourmap(array, ax=None, extent=[80, 95, 10, 25], transform=ccrs.PlateCarree(),
             cmap=CMAP, vmin=None, vmax=None, levels=10, extend="both", title=False,
-            linewidth=.5, ndecimals=1, *args, **kwargs):
+            linewidth=.5, ndecimals=1, features=True, *args, **kwargs):
     """Plot a heatmap with the coastline."""
     h, w = array.shape
     ax = ax or plt.axes(projection=transform)
@@ -64,8 +64,10 @@ def contourmap(array, ax=None, extent=[80, 95, 10, 25], transform=ccrs.PlateCarr
     levels = linspace(vmin, vmax, levels, ndecimals)
     im = ax.contourf(array, extent=extent, transform=transform, cmap=cmap, levels=levels,
                      extend=extend)
-    ax.add_feature(cfeature.COASTLINE, edgecolor='k', linewidth=linewidth)
-    ax.set_extent(extent)
+    
+    if features:
+        ax.add_feature(cfeature.COASTLINE, edgecolor='k', linewidth=linewidth)
+        ax.set_extent(extent)
     ax.set_xticks([])
     ax.set_yticks([])
     if title:
