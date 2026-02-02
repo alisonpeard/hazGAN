@@ -69,14 +69,14 @@ def contourmap(array, ax=None, extent=[80, 95, 10, 25], transform=ccrs.PlateCarr
     ax.set_xticks([])
     ax.set_yticks([])
     if title:
-        ax.set_title(title, fontsize=16);
+        ax.set_title(title);
     return im
 
 
-def makegrid(rows, cols, figsize:float=1, fig=None,
-             cbar_width=.05, cbar_pad=.1, projection=ccrs.PlateCarree()):    
-
-    total_width = cols + cbar_width + cbar_pad
+def makegrid(rows, cols, figsize:float=1., fig=None,
+             cbar_width=10, projection=ccrs.PlateCarree()):    
+    cbar_pad = cbar_width
+    total_width = cols + cbar_pad + cbar_width
     height = rows
     scale   = 8 / max(total_width, height)
     figsize = (figsize * total_width * scale, figsize * height * scale)
@@ -96,28 +96,20 @@ def makegrid(rows, cols, figsize:float=1, fig=None,
                          left=0.01, right=0.99,
                          top=0.99, bottom=0.01)
     
+    # add empty geo axes for each grid cell
     axes = np.empty((rows, cols), dtype=object)
     for i in range(rows):
         for j in range(cols):
             axes[i,j] = fig.add_subplot(gs[i, j], projection=projection)
+            axes[i,j].set_aspect('auto', adjustable='datalim')
             axes[i,j].set_xticks([])
             axes[i,j].set_yticks([])
     
+    # add colorbar axis over final column
     cax = fig.add_subplot(gs[:, -1])
-    
+
     return fig, axes.squeeze(), cax
 
-
-def log_image_to_wandb(fig, name:str, dir:str, **kwargs):
-    """Pass figure to wandb if available."""
-    import wandb
-    if wandb.run is not None:
-        impath = os.path.join(dir, f"{name}.png")
-        fig.savefig(impath, **kwargs)
-        wandb.log({name: wandb.Image(impath)})
-    else:
-        print("Not logging figure, wandb not intialised.")
-    
 
 def scalebar(ax, location='lower right', length_fraction=.6):
     # calculate dx
@@ -132,8 +124,9 @@ def scalebar(ax, location='lower right', length_fraction=.6):
     dx = geod.inverse(points, endpoints)
     dx = dx[0][0] / npixels
     scalebar = ScaleBar(dx, loc=location, fixed_value=1000, fixed_units='km',
-                        box_alpha=.8, frameon=True, box_color='white', color='k',
-                        bbox_to_anchor=(.8, .05), bbox_transform=ax.transAxes,
+                        box_alpha=.4, frameon=True, box_color='white',
+                        edgecolor='k', edgewidth=0.5,
+                        bbox_to_anchor=(.9, .05), bbox_transform=ax.transAxes,
                         width_fraction=.05)
     ax.add_artist(scalebar)
 

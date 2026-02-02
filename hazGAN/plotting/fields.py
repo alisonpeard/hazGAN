@@ -35,16 +35,18 @@ def plot(fake, train, func, fields=[0, 1], figsize=1.,
     cmap.set_under(cmap(0))
     cmap.set_over(cmap(.99))
 
-    fig, axs, cax = makegrid(1, 2, figsize=figsize)
-    im = contourmap(train_res, ax=axs[0], vmin=vmin, vmax=vmax, cmap=cmap)
-    _  = contourmap(fake_res, ax=axs[-1], vmin=vmin, vmax=vmax, cmap=cmap)
+    fig, axs, cax = makegrid(1, 2, figsize=figsize, cbar_width=0.1)
+    im = contourmap(train_res, ax=axs[0], vmin=vmin, vmax=vmax, cmap=cmap, linewidth=0.2)
+    _  = contourmap(fake_res, ax=axs[-1], vmin=vmin, vmax=vmax, cmap=cmap, linewidth=0.2)
 
-    axs[0].set_title("ERA5", y=-0.15)
-    axs[-1].set_title("HazGAN", y=-0.15)
+    axs[0].set_title("ERA5", y=-0.2)
+    axs[-1].set_title("HazGAN", y=-0.2)
 
-    fig.colorbar(im, cax=cax, label=cbar_label)
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.set_label(cbar_label, rotation=0, labelpad=10)
     fig.suptitle(title, y=1.05)
 
+    # TODO: look for alternatives!
     corr = np.corrcoef(train_res.flatten(), fake_res.flatten())[0, 1]
     print(f"Pearson correlation: {corr:.4f}")
 
@@ -93,6 +95,52 @@ def tail_dependence(array):
     return coeffs
 
 
+def _chi(u, v, t=0.8):
+    """Coles (2001) §8.4, u,v~Unif[0,1]"""
+    n = len(u)
+    both_below = np.sum((u < t) & (v < t))
+    prob_below = both_below / n
+    if prob_below > 0:
+        chi = 2 - np.log(prob_below) / np.log(t)
+    else:
+        chi = np.nan
+    return chi
+
+
+def extcorr(array):
+    _, h, w, c = array.shape
+    array = array.reshape(-1, h * w, c)
+
+    extcorrs = []
+    for i in range(h * w):
+        u, v = array[:, i, 0], array[:, i, 1]
+        chi = _chi(u, v)
+        extcorrs.append(chi)
+    extcorrs = np.stack(extcorrs, axis=0).reshape(h, w)
+    return extcorrs
+
+
+def extcorrboot(array, nboot=100, size=150):
+    _, h, w, c = array.shape
+    array = array.reshape(-1, h * w, c)
+
+    extcorrs = []
+    np.random.seed(42)
+    for i in range(h * w):
+        u, v = array[:, i, 0], array[:, i, 1]
+        boot_coefs = []
+        for _ in range(nboot):
+            idx = np.random.choice(len(u), size=size, replace=True)
+            u_samp = u[idx]
+            v_samp = v[idx]
+            chi = _chi(u_samp, v_samp)
+            boot_coefs.append(chi)
+        extcorrs.append(np.nanmean(boot_coefs))
+    extcorrs = np.stack(extcorrs, axis=0).reshape(h, w)
+    return extcorrs
+
+
+
 # def _tail_dependence_coeff(u, v):
 #     """
 #     Classical tail dependence coefficient λ for upper tail dependence.
@@ -121,7 +169,7 @@ def tail_dependence(array):
 #     return np.mean(lambdas) if lambdas else 0
 
 
-def _tail_dependence_coeff(u, v):
+def _tail_dependence_coeff(u, v, thresholds=None):
     """
     Classical tail dependence coefficient λ for upper tail dependence.
     Uses the Reiss & Thomas (2007) estimator.
@@ -137,8 +185,7 @@ def _tail_dependence_coeff(u, v):
         https://rdrr.io/cran/extRemes/man/taildep.html
     """
     n = len(u)
-    # thresholds = np.arange(0.8, 0.99, 0.01)  # Multiple thresholds
-    thresholds = np.arange(0.75, 0.9, 0.01)
+    thresholds = thresholds or np.arange(0.75, 0.9, 0.01)
     lambdas = []
     
     for t in thresholds:

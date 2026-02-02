@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
         for b in range(nboot):
 
-            idx = np.random.choice(len(u0), size=len(u0), replace=True)
+            idx = np.random.choice(len(u0), size=150, replace=True)
 
             u0_b, u1_b = u0[idx], u1[idx]
             
