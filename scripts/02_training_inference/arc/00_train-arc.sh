@@ -10,7 +10,8 @@
 #SBATCH --mem=24G
 #SBATCH --cpus-per-task=4
 
-set -e
+echo "Job started at $(date) on node $(hostname)"
+set -ex  # Added -x to print every command as it runs
 
 DATA="/data/ouce-opsis/spet5107/data/training/${SCALING}/${DOMAIN}/${FORMAT}.zip"
 OUTDIR="/data/ouce-opsis/spet5107/data/models/${SCALING}/${DOMAIN}/${FORMAT}"
