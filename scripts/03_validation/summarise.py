@@ -1,5 +1,8 @@
 """
 Make summary tables for each point of comparison.
+
+Run after running
+    python scripts/03_validation/figs.py
 """
 # %%
 import numpy as np

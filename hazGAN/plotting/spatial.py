@@ -6,54 +6,6 @@ from .base import makegrid
 from .base import contourmap
 
 
-def plot(fake, train, func, field=0, figsize=1.,
-         cmap="viridis", vmin=None, vmax=None,
-         title="", cbar_label="",
-         alpha:float=1e-4, **func_kws):
-    train = train[..., field].copy()
-    fake  = fake[..., field].copy()
-    
-    train_res = func(train)
-    fake_res  = func(fake)
-
-    if alpha is not None:
-        vmin = vmin or np.nanquantile(np.concatenate([fake_res, train_res]), alpha)
-        vmax = vmax or np.nanquantile(np.concatenate([fake_res, train_res]), 1-alpha)
-    else:
-        vmin = vmin or train_res.min()
-        vmax = vmax or train_res.max()
-    
-    cmap = getattr(plt.cm, cmap)
-    cmap.set_under(cmap(0))
-    cmap.set_over(cmap(.99))
-
-    fig, axs, cax = makegrid(1, 2, figsize=figsize, cbar_width=0.1)
-
-    im = contourmap(
-        train_res, ax=axs[0], vmin=vmin, vmax=vmax, cmap=cmap, linewidth=0.2, features=False
-    )
-    _  = contourmap(
-        fake_res, ax=axs[-1], vmin=vmin, vmax=vmax, cmap=cmap, linewidth=0.2, features=False
-    )
-
-    for ax in axs:
-        ax.spines['top'].set_visible(True)
-        ax.spines['right'].set_visible(True)
-
-    axs[0].set_title("ERA5", y=-0.2)
-    axs[-1].set_title("HazGAN", y=-0.2)
-    fig.suptitle(title, y=1.05)
-
-    cbar = fig.colorbar(im, cax=cax)
-    cbar.set_label(cbar_label, rotation=0, labelpad=10)
-    fig.suptitle(title, y=1.05)
-
-    corr = np.corrcoef(train_res.flatten(), fake_res.flatten())[0, 1]
-    mae = np.mean(np.abs(train_res - fake_res))
-
-    return fig, {"mae": mae, "pearson": corr}
-
-
 def pearson(array):
     n, h, w = array.shape
     array = array.reshape(n, h * w)
@@ -63,7 +15,7 @@ def pearson(array):
 
 
 @njit
-def _chi(u, v, t=0.8):
+def _chi(u, v, t=0.9):
     """Coles (2001) §8.4, u,v~Unif[0,1]"""
     n = len(u)
     both_below = np.sum((u < t) & (v < t))
@@ -115,3 +67,51 @@ def extcorrboot(array, nboot=100, size=150):
                 extcorrs[j, i] += chi
 
     return extcorrs / nboot
+
+
+def plot(fake, train, func, field=0, figsize=1.,
+         cmap="viridis", vmin=None, vmax=None,
+         title="", cbar_label="",
+         alpha:float=1e-4, **func_kws):
+    train = train[..., field].copy()
+    fake  = fake[..., field].copy()
+    
+    train_res = func(train)
+    fake_res  = func(fake)
+
+    if alpha is not None:
+        vmin = vmin or np.nanquantile(np.concatenate([fake_res, train_res]), alpha)
+        vmax = vmax or np.nanquantile(np.concatenate([fake_res, train_res]), 1-alpha)
+    else:
+        vmin = vmin or train_res.min()
+        vmax = vmax or train_res.max()
+    
+    cmap = getattr(plt.cm, cmap)
+    cmap.set_under(cmap(0))
+    cmap.set_over(cmap(.99))
+
+    fig, axs, cax = makegrid(1, 2, figsize=figsize, cbar_width=0.1)
+
+    im = contourmap(
+        train_res, ax=axs[0], vmin=vmin, vmax=vmax, cmap=cmap, linewidth=0.2, features=False
+    )
+    _  = contourmap(
+        fake_res, ax=axs[-1], vmin=vmin, vmax=vmax, cmap=cmap, linewidth=0.2, features=False
+    )
+
+    for ax in axs:
+        ax.spines['top'].set_visible(True)
+        ax.spines['right'].set_visible(True)
+
+    axs[0].set_title("ERA5", y=-0.2)
+    axs[-1].set_title("HazGAN", y=-0.2)
+    fig.suptitle(title, y=1.05)
+
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.set_label(cbar_label, rotation=0, labelpad=10)
+    fig.suptitle(title, y=1.05)
+
+    corr = np.corrcoef(train_res.flatten(), fake_res.flatten())[0, 1]
+    mae = np.mean(np.abs(train_res - fake_res))
+
+    return fig, {"mae": mae, "pearson": corr}

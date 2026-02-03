@@ -256,7 +256,7 @@ if __name__ == "__main__":
     
     # %% ==============================================================
     # Boulagiem (2022)-style scatterplots
-    scatterplots = True
+    scatterplots = False
     if scatterplots:
 
         from hazGAN.constants import OBSERVATION_POINTS
@@ -454,7 +454,7 @@ if __name__ == "__main__":
     
     # %% ==============================================================
     # inter-field correlation plots
-    fieldcorrplots = False
+    fieldcorrplots = True
     if fieldcorrplots:
         from itertools import combinations
         reload(fields)
@@ -504,7 +504,7 @@ if __name__ == "__main__":
     
     # %% ==============================================================
     # spatial correlation plots
-    spatialcorrplots = False
+    spatialcorrplots = True
     extcorrplot = True
 
     # NOTE: this section is computationally demanding

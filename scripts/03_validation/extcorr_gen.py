@@ -32,13 +32,13 @@ plt.rcParams.update({
 
 # settings
 scaling = "rp10000"
-margins = "rescaled"
-fields = ["u10", "mslp"] # use string for spatial, list for multivariate
+margins = "gumbel" # "rescaled", "uniform", "gaussian", "gumbel"
+fields = ["u10", "tp"] # use string for spatial, list for multivariate
 tmin = 0.7
 tmax = 0.99
 tstep = 0.01
 nboot = 200
-t_final = 0.8
+t_final = 0.9
 
 
 def subset(data, field:str, thresh:float=15):
@@ -132,19 +132,27 @@ if __name__ == "__main__":
 
         y0, y1 = statistics.gumbel(u0), statistics.gumbel(u1)
 
-        fig, axs = plt.subplots(2, 2, figsize=(3, 2), constrained_layout=True)
-        ax = axs[0, 0]
-        ax.hist(u0, bins=30, density=True, alpha=0.7, edgecolor='k', color='white', linewidth=0.5)
+        y_final = statistics.gumbel(t_final)
+        ymax = max(y0.max(), y1.max()) * 1.05
+        ymin = min(y0.min(), y1.min()) * 0.95
 
-        ax = axs[0, 1]
-        ax.hist(u1, bins=30, density=True, alpha=0.7, edgecolor='k', color='white', linewidth=0.5)
+        fig, axs = plt.subplots(1, 2, figsize=(3, 1.5), constrained_layout=True)
+        # ax = axs[0, 0]
+        # ax.hist(u0, bins=30, density=True, alpha=0.7, edgecolor='k', color='white', linewidth=0.5)
 
-        ax = axs[1, 0]
+        # ax = axs[0, 1]
+        # ax.hist(u1, bins=30, density=True, alpha=0.7, edgecolor='k', color='white', linewidth=0.5)
+
+        ax = axs[0]
         ax.scatter(y0, y1, s=5, facecolor='k', edgecolor='none')
         ax.set_xlabel("y0 ~ Gumbel")
         ax.set_ylabel("y1 ~ Gumbel")
+        ax.hlines(y_final, xmin=ymin, xmax=ymax, color='r', lw=0.5, ls='--', zorder=0)
+        ax.vlines(y_final, ymin=ymin, ymax=ymax, color='r', lw=0.5, ls='--', zorder=0)
+        ax.fill_between([y_final, ymax], y_final, ymax, color='gray', alpha=0.3,
+                zorder=0, edgecolor='none')
 
-        ax = axs[1, 1]
+        ax = axs[1]
         ax.plot(thresholds, chis_mean, '-', color='k', lw=0.5)
         ax.fill_between(thresholds, ci_lower, ci_upper,
                         color='gray', alpha=0.25, linewidth=0.1)

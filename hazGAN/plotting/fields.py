@@ -8,6 +8,76 @@ from .base import CMAP
 from ..statistics import get_extremal_coeffs_nd
 
 
+def pearson(array):
+    def pixelcorr(array, i):
+        array = array[:, i, :].copy()
+        corr  = np.corrcoef(array.T)
+        return corr
+    
+    _, h, w, c = array.shape
+    array = array.reshape(-1, h * w, c)
+
+    corrs = []
+    for i in range(h * w):
+        corrs.append(pixelcorr(array, i))
+    corrs = np.stack(corrs, axis=0).reshape(h, w, c, c)
+    return corrs[..., 0, 1]
+
+
+def smith1990(array):
+    def get_ext_coefs(x):
+        _, h, w, _ = x.shape
+        excoefs = get_extremal_coeffs_nd(x, [*range(h * w)])
+        excoefs = np.array([*excoefs.values()]).reshape(h, w)
+        return excoefs
+    
+    return get_ext_coefs(array)
+
+
+@njit
+def _chi(u, v, t=0.9):
+    """Coles (2001) §8.4, u,v~Unif[0,1]"""
+    n = len(u)
+    both_below = np.sum((u < t) & (v < t))
+    prob_below = both_below / n
+    if prob_below > 0:
+        chi = 2 - np.log(prob_below) / np.log(t)
+    else:
+        chi = np.nan
+    return chi
+
+
+def extcorr(array):
+    _, h, w, c = array.shape
+    array = array.reshape(-1, h * w, c)
+    extcorrs = []
+    for i in range(h * w):
+        u, v = array[:, i, 0], array[:, i, 1]
+        chi = _chi(u, v)
+        extcorrs.append(chi)
+    extcorrs = np.stack(extcorrs, axis=0).reshape(h, w)
+    return extcorrs
+
+
+@njit(parallel=True)
+def extcorrboot(array, nboot:int=100, size:int=150):
+    n, h, w, c = array.shape
+    hw = h * w
+    # array = array.reshape(n, hw, c)
+    array = np.reshape(array.copy(), (n, hw, c))
+    extcorrs = np.zeros(hw)
+    for i in prange(hw):
+        u, v = array[:, i, 0], array[:, i, 1]
+        chi = 0.
+        for _ in range(nboot):
+            idx = np.random.choice(n, size=size, replace=True)
+            u_samp = u[idx]
+            v_samp = v[idx]
+            chi += _chi(u_samp, v_samp)
+        extcorrs[i] = chi / nboot
+    return np.reshape(extcorrs, (h, w))
+
+
 def plot(fake, train, func, fields=[0, 1], figsize=1.,
          cmap=CMAP, vmin=None, vmax=None,
          title="", cbar_label="", **func_kws
@@ -53,73 +123,3 @@ def plot(fake, train, func, fields=[0, 1], figsize=1.,
     print(f"Mean Absolute Error: {mae:.4f}")
 
     return fig, {"mae": mae, "pearson": corr}
-
-
-def pearson(array):
-    def pixelcorr(array, i):
-        array = array[:, i, :].copy()
-        corr  = np.corrcoef(array.T)
-        return corr
-    
-    _, h, w, c = array.shape
-    array = array.reshape(-1, h * w, c)
-
-    corrs = []
-    for i in range(h * w):
-        corrs.append(pixelcorr(array, i))
-    corrs = np.stack(corrs, axis=0).reshape(h, w, c, c)
-    return corrs[..., 0, 1]
-
-
-def smith1990(array):
-    def get_ext_coefs(x):
-        _, h, w, _ = x.shape
-        excoefs = get_extremal_coeffs_nd(x, [*range(h * w)])
-        excoefs = np.array([*excoefs.values()]).reshape(h, w)
-        return excoefs
-    
-    return get_ext_coefs(array)
-
-
-@njit
-def _chi(u, v, t=0.8):
-    """Coles (2001) §8.4, u,v~Unif[0,1]"""
-    n = len(u)
-    both_below = np.sum((u < t) & (v < t))
-    prob_below = both_below / n
-    if prob_below > 0:
-        chi = 2 - np.log(prob_below) / np.log(t)
-    else:
-        chi = np.nan
-    return chi
-
-
-def extcorr(array):
-    _, h, w, c = array.shape
-    array = array.reshape(-1, h * w, c)
-    extcorrs = []
-    for i in range(h * w):
-        u, v = array[:, i, 0], array[:, i, 1]
-        chi = _chi(u, v)
-        extcorrs.append(chi)
-    extcorrs = np.stack(extcorrs, axis=0).reshape(h, w)
-    return extcorrs
-
-
-@njit(parallel=True)
-def extcorrboot(array, nboot:int=100, size:int=150):
-    n, h, w, c = array.shape
-    hw = h * w
-    # array = array.reshape(n, hw, c)
-    array = np.reshape(array.copy(), (n, hw, c))
-    extcorrs = np.zeros(hw)
-    for i in prange(hw):
-        u, v = array[:, i, 0], array[:, i, 1]
-        chi = 0.
-        for _ in range(nboot):
-            idx = np.random.choice(n, size=size, replace=True)
-            u_samp = u[idx]
-            v_samp = v[idx]
-            chi += _chi(u_samp, v_samp)
-        extcorrs[i] = chi / nboot
-    return np.reshape(extcorrs, (h, w))
