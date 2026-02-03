@@ -25,13 +25,15 @@ source /data/ouce-opsis/spet5107/hazGAN2/workflow/scripts/cuda_env.sh
 
 mkdir -p $OUTDIR
 
-# train the model
+# train the model (commented out!)
+: '
 python $SCRIPT \
     --outdir=$OUTDIR \
     --data=$DATA \
     --gpus=1 \
     --DiffAugment="color,translation,cutout" \
     --kimg=$KIMG
+'
 
 # and generate samples
 SCRIPT="/data/ouce-opsis/spet5107/hazGAN/styleGAN-DA/src/generate.py"

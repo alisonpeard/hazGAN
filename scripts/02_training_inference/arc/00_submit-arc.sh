@@ -2,7 +2,7 @@
 
 # just run on headnode with bash, i.e. "bash 00_submit-arc.sh"
 SCALINGS=("rp10000")
-DOMAINS=("rescaled") #("gaussian" "gumbel" "uniform" "rescaled")
+DOMAINS=("gaussian") #("gaussian" "gumbel" "uniform" "rescaled")
 FORMATS=("npy")
 KIMG=300
 

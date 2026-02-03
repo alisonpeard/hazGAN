@@ -207,7 +207,7 @@ if __name__ == "__main__":
 
     # %% ==============================================================
     # saffir-simpson barchart
-    barcharts = True
+    barcharts = False
     if barcharts:
         reload(misc)
 
@@ -231,7 +231,7 @@ if __name__ == "__main__":
     
     # %% ==============================================================
     # wind maxima vs return period plot
-    windprofiles = True
+    windprofiles = False
     if windprofiles:
         λ_trn = len(x_trn) / 81
         fig, ax = plt.subplots(figsize=(2.5, 1.5), constrained_layout=True)
@@ -330,7 +330,7 @@ if __name__ == "__main__":
 
     # %% ==============================================================
     # 64x64 plots of data
-    sampleplots = True
+    sampleplots = False
     if sampleplots:
         reload(samples)
 
@@ -373,7 +373,7 @@ if __name__ == "__main__":
     
     # %% ==============================================================
     # wasserstein distance maps
-    wassdists = True
+    wassdists = False
     if wassdists:
         reload(fields)
         import cartopy.crs as ccrs
@@ -454,7 +454,7 @@ if __name__ == "__main__":
     
     # %% ==============================================================
     # inter-field correlation plots
-    fieldcorrplots = True
+    fieldcorrplots = False
     if fieldcorrplots:
         from itertools import combinations
         reload(fields)
@@ -504,7 +504,7 @@ if __name__ == "__main__":
     
     # %% ==============================================================
     # spatial correlation plots
-    spatialcorrplots = True
+    spatialcorrplots = False
     extcorrplot = True
 
     # NOTE: this section is computationally demanding

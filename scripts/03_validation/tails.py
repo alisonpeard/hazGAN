@@ -27,8 +27,8 @@ plt.rcParams.update({
 # script parameters
 scaling   = "rp10000"
 domains   = ["rescaled", "uniform", "gumbel", "gaussian"]
-field_idx = 0
-field_nom = "mslp" # u10, tp, mslp
+field_idx = 2
+field_nom = ["u10", "tp", "mslp"][field_idx]
 tmax = 0.95
 hist_bins = 20
 
