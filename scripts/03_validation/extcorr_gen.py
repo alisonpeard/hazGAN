@@ -82,13 +82,15 @@ def sample(data, fields:str, var:str="anomaly"):
 def chi(u, v, t=0.8):
     """Coles (2001) §8.4, u,v~Unif[0,1]"""
     n = len(u)
-    both_below = np.sum((u < t) & (v < t))
-    prob_below = both_below / n
-    if prob_below > 0:
-        chi = 2 - np.log(prob_below) / np.log(t)
+    both_above = np.sum((u > t) & (v > t))
+    prob_above = both_above / n
+    u_above = np.sum(u > t) / n
+    if u_above > 0:
+        chi = prob_above / u_above
     else:
         chi = np.nan
     return chi
+
 
 
 # load the data
@@ -163,7 +165,8 @@ if __name__ == "__main__":
 
         ax.vlines(t_final, 0, chi_final, color='r', lw=0.5, ls='--')
         ax.hlines(chi_final, 0.6, t_final, color='r', lw=0.5, ls='--')
-        ax.text(0.8, 1.0, f"χ={chi_final:.2f}", color='r', fontsize=6)
+        ax.text(0.8, np.nanmax(chis_mean), f"χ={chi_final:.2f}",
+                color='r', fontsize=6, fontweight='bold')
 
         ax.set_xlabel("u")
         ax.set_ylabel("χ(u)")
