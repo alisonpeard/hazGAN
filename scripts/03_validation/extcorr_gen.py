@@ -17,7 +17,6 @@ from environs import Env
 from pathlib import Path
 
 from hazGAN import statistics
-from hazGAN.statistics import ecdf
 
 
 plt.rcParams.update({
@@ -31,9 +30,10 @@ plt.rcParams.update({
 
 
 # settings
+fields = ["u10", "tp"] # use string for spatial, list for multivariate
+method = "chi" # try 'chibar' to investigate asymptotic independence
+margins = "gaussian" # "rescaled", "uniform", "gaussian", "gumbel"
 scaling = "rp10000"
-margins = "rescaled" # "rescaled", "uniform", "gaussian", "gumbel"
-fields = "u10" # use string for spatial, list for multivariate
 tmin = 0.7
 tmax = 0.99
 tstep = 0.01
@@ -79,17 +79,36 @@ def sample(data, fields:str, var:str="anomaly"):
         return sample_pixels(data, fields, var=var)
 
 
-def chi(u, v, t=0.8):
-    """Coles (2001) §8.4, u,v~Unif[0,1]"""
+def chi(u, v, t):
+    """https://doi.org/10.1023/A:1009963131610"""
     n = len(u)
     both_above = np.sum((u > t) & (v > t))
     prob_above = both_above / n
-    u_above = np.sum(u > t) / n
-    if u_above > 0:
-        chi = prob_above / u_above
+    pu_above = np.sum(u > t) / n
+    if both_above < 3:
+        return np.nan
+    return prob_above / pu_above
+
+
+def chibar(u, v, t):
+    """https://doi.org/10.1023/A:1009963131610"""
+    n = len(u)
+    both_above = np.sum((u > t) & (v > t))
+    u_above = np.sum(u > t)
+    if both_above < 3:
+        return np.nan
+    pboth_above = both_above / n
+    pu_above = u_above / n
+    return 2 * np.log(pu_above) / np.log(pboth_above) - 1
+
+
+def extcorr(u, v, t=0.9, method="chi"):
+    if method == "chi":
+        return chi(u, v, t=t)
+    elif method == "chibar":
+        return chibar(u, v, t=t)
     else:
-        chi = np.nan
-    return chi
+        raise ValueError(f"Invalid method: {method}")
 
 
 # load the data
@@ -112,24 +131,21 @@ if __name__ == "__main__":
 
     for i in range(30):
         np.random.seed(42 + i)
-        x0, x1, labels = sample(data, fields, var="uniform")
-        u0, u1 = ecdf(x0)(x0), ecdf(x1)(x1)
-
+        u0, u1, labels = sample(data, fields, var="uniform")
         chis = np.zeros((nboot, len(thresholds)), dtype=float)
 
         for b in range(nboot):
-
             idx = np.random.choice(len(u0), size=150, replace=True)
-
             u0_b, u1_b = u0[idx], u1[idx]
             
             for j, u in enumerate(thresholds):
-                chis[b, j] = chi(u0_b, u1_b, t=u)
+                chis[b, j] = extcorr(u0_b, u1_b, t=u, method=method)
 
+        # bootstrap stats
         chis_mean = chis.mean(axis=0)
         ci_lower = np.percentile(chis, 2.5, axis=0)
         ci_upper = np.percentile(chis, 97.5, axis=0)
-        chi_final = chi(u0, u1, t=t_final)
+        chi_final = extcorr(u0, u1, t=t_final, method=method)
 
         y0, y1 = statistics.gumbel(u0), statistics.gumbel(u1)
 
@@ -138,11 +154,6 @@ if __name__ == "__main__":
         ymin = min(y0.min(), y1.min()) * 0.95
 
         fig, axs = plt.subplots(1, 2, figsize=(3, 1.5), constrained_layout=True)
-        # ax = axs[0, 0]
-        # ax.hist(u0, bins=30, density=True, alpha=0.7, edgecolor='k', color='white', linewidth=0.5)
-
-        # ax = axs[0, 1]
-        # ax.hist(u1, bins=30, density=True, alpha=0.7, edgecolor='k', color='white', linewidth=0.5)
 
         ax = axs[0]
         ax.scatter(y0, y1, s=5, facecolor='k', edgecolor='none')

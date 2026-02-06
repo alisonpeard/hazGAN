@@ -35,29 +35,15 @@ def smith1990(array):
 
 
 @njit
-def _chi2(u, v, t=0.9):
-    """Coles (2001) §8.4, u,v~Unif[0,1]"""
-    n = len(u)
-    both_below = np.sum((u < t) & (v < t))
-    prob_below = both_below / n
-    if prob_below > 0:
-        chi = 2 - np.log(prob_below) / np.log(t)
-    else:
-        chi = np.nan
-    return chi
-
-
-@njit
-def _chi1(u, v, t=0.9):
+def _chi(u, v, t=0.9):
+    """https://doi.org/10.1023/A:1009963131610"""
     n = len(u)
     both_above = np.sum((u > t) & (v > t))
     prob_above = both_above / n
-    prob_u = np.sum(u > t) / n
-    if prob_u > 0:
-        chi = prob_above / prob_u
-    else:
-        chi = np.nan
-    return chi
+    pu_above = np.sum(u > t) / n
+    if both_above < 3:
+        return np.nan
+    return prob_above / pu_above
 
 
 def extcorr(array):
@@ -66,7 +52,7 @@ def extcorr(array):
     extcorrs = []
     for i in range(h * w):
         u, v = array[:, i, 0], array[:, i, 1]
-        chi = _chi1(u, v)
+        chi = _chi(u, v)
         extcorrs.append(chi)
     extcorrs = np.stack(extcorrs, axis=0).reshape(h, w)
     return extcorrs
@@ -86,7 +72,9 @@ def extcorrboot(array, nboot:int=100, size:int=150):
             idx = np.random.choice(n, size=size, replace=True)
             u_samp = u[idx]
             v_samp = v[idx]
-            chi += _chi1(u_samp, v_samp)
+            chival = _chi(u_samp, v_samp)
+            if not np.isnan(chival):
+                chi += chival
         extcorrs[i] = chi / nboot
     return np.reshape(extcorrs, (h, w))
 

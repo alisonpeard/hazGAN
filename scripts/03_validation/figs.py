@@ -183,10 +183,10 @@ if __name__ == "__main__":
     results["climatology (median)"]["precipitation"] = f"{np.quantile(medians[..., 1], 0.5):.2f} m"
     results["climatology (median)"]["pressure"] = f"{np.quantile(medians[..., 2], 0.5):.2f} Pa"
 
-    results["training anomaly (median)"] = {}
-    results["training anomaly (median)"]["wind speed"] = f"{np.quantile(x_trn[..., 0], 0.5):.2f} m/s"
-    results["training anomaly (median)"]["precipitation"] = f"{np.quantile(x_trn[..., 1], 0.5):.2f} m"
-    results["training anomaly (median)"]["pressure"] = f"{np.quantile(x_trn[..., 2], 0.5):.2f} Pa"
+    results["median training anomaly"] = {}
+    results["median training anomaly"]["wind speed"] = f"{np.quantile(x_trn[..., 0], 0.5):.2f} m/s"
+    results["median training anomaly"]["precipitation"] = f"{np.quantile(x_trn[..., 1], 0.5):.2f} m"
+    results["median training anomaly"]["pressure"] = f"{np.quantile(x_trn[..., 2], 0.5):.2f} Pa"
 
     # add medians back to anomalies
     x_trn = x_trn.copy() + medians
@@ -196,10 +196,14 @@ if __name__ == "__main__":
     x_trn[..., 2] *= -1
     x_gen[..., 2] *= -1
 
-    results["training (median)"] = {}
-    results["training (median)"]["wind speed"] = f"{np.quantile(x_trn[..., 0], 0.5):.2f} m/s"
-    results["training (median)"]["precipitation"] = f"{np.quantile(x_trn[..., 1], 0.5):.2f} m"
-    results["training (median)"]["pressure"] = f"{np.quantile(x_trn[..., 2], 0.5):.2f} Pa"
+    # clip all at zero for cases medians don't handle
+    x_trn = np.clip(x_trn, a_min=0, a_max=None)
+    x_gen = np.clip(x_gen, a_min=0, a_max=None)
+
+    results["median training"] = {}
+    results["median training"]["wind speed"] = f"{np.quantile(x_trn[..., 0], 0.5):.2f} m/s"
+    results["median training"]["precipitation"] = f"{np.quantile(x_trn[..., 1], 0.5):.2f} m"
+    results["median training"]["pressure"] = f"{np.quantile(x_trn[..., 2], 0.5):.2f} Pa"
 
     save_stats_csv(statspath, results)
     print(f"Saved summary statistics to {statspath}")
@@ -471,7 +475,7 @@ if __name__ == "__main__":
             # Pearson plots
             results[f"pearson{pair_str}"] = {}
             fig_r, metrics_r = fields.plot(
-                cop_gen, cop_trn, fields.pearson,
+                u_gen, u_trn, fields.pearson,
                 fields=pair, figsize=.3,
                 title="", cbar_label="r",
                 cmap="viridis", vmin=-1, vmax=1
@@ -485,7 +489,7 @@ if __name__ == "__main__":
             # Extremal dependence plots
             results[f"extremal{pair_str}"] = {}
             fig_χ, metrics_χ = fields.plot(
-                cop_gen, cop_trn,
+                u_gen, u_trn,
                 fields.extcorrboot,
                 # fields.extcorr, # compare results; if similar, don't bootstrap fields
                 fields=pair, figsize=.3,
@@ -529,7 +533,7 @@ if __name__ == "__main__":
             # Pearson plots
             results[f"pearson{k}"] = {}
             fig_r, metrics_r = spatial.plot(
-                cop_gen_lores , cop_trn_lores,
+                cop_gen_lores, cop_trn_lores,
                 spatial.pearson, field=k,
                 figsize=.3, title="", cbar_label="r",
                 cmap="viridis", vmin=-1, vmax=1
