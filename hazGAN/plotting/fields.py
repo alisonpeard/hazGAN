@@ -35,7 +35,7 @@ def smith1990(array):
 
 
 @njit
-def _chi(u, v, t=0.9):
+def _chi2(u, v, t=0.9):
     """Coles (2001) §8.4, u,v~Unif[0,1]"""
     n = len(u)
     both_below = np.sum((u < t) & (v < t))
@@ -47,13 +47,26 @@ def _chi(u, v, t=0.9):
     return chi
 
 
+@njit
+def _chi1(u, v, t=0.9):
+    n = len(u)
+    both_above = np.sum((u > t) & (v > t))
+    prob_above = both_above / n
+    prob_u = np.sum(u > t) / n
+    if prob_u > 0:
+        chi = prob_above / prob_u
+    else:
+        chi = np.nan
+    return chi
+
+
 def extcorr(array):
     _, h, w, c = array.shape
     array = array.reshape(-1, h * w, c)
     extcorrs = []
     for i in range(h * w):
         u, v = array[:, i, 0], array[:, i, 1]
-        chi = _chi(u, v)
+        chi = _chi1(u, v)
         extcorrs.append(chi)
     extcorrs = np.stack(extcorrs, axis=0).reshape(h, w)
     return extcorrs
@@ -73,7 +86,7 @@ def extcorrboot(array, nboot:int=100, size:int=150):
             idx = np.random.choice(n, size=size, replace=True)
             u_samp = u[idx]
             v_samp = v[idx]
-            chi += _chi(u_samp, v_samp)
+            chi += _chi1(u_samp, v_samp)
         extcorrs[i] = chi / nboot
     return np.reshape(extcorrs, (h, w))
 

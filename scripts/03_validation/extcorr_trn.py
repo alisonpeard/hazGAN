@@ -30,7 +30,7 @@ plt.rcParams.update({
 
 
 # settings
-fields = "u10" # use string for spatial, list for multivariate
+fields = ["u10", "tp"] # use string for spatial, list for multivariate
 tmin = 0.7
 tmax = 0.99
 tstep = 0.01

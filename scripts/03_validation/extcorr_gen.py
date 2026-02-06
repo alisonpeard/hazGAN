@@ -32,8 +32,8 @@ plt.rcParams.update({
 
 # settings
 scaling = "rp10000"
-margins = "gumbel" # "rescaled", "uniform", "gaussian", "gumbel"
-fields = ["u10", "tp"] # use string for spatial, list for multivariate
+margins = "rescaled" # "rescaled", "uniform", "gaussian", "gumbel"
+fields = "u10" # use string for spatial, list for multivariate
 tmin = 0.7
 tmax = 0.99
 tstep = 0.01
@@ -90,7 +90,6 @@ def chi(u, v, t=0.8):
     else:
         chi = np.nan
     return chi
-
 
 
 # load the data

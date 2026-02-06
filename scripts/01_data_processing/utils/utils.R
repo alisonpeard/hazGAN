@@ -38,6 +38,7 @@ monthly_medians <- function(df, var) {
                               median)
   return(monthly_median)
 }
+
 ecdf <- function(x) {
   x <- sort(x)
   n <- length(x)
@@ -54,6 +55,7 @@ ecdf <- function(x) {
   attr(rval, "call") <- sys.call()
   rval
 }
+
 scdf <- function(train, loc, scale, shape, cdf = pgpd){
   # Note, trialing using excesses and setting loc=0
   # This is for flexibility with cdf choice
