@@ -35,6 +35,18 @@ def smith1990(array):
 
 
 @njit
+def _ecdf(x: np.ndarray) -> np.ndarray:
+    """R ecdf implementation with Weibull plotting position."""
+    n = len(x)
+    sorted_x = np.sort(x)
+    result = np.empty(n, dtype=np.float64)
+    for i in range(n):
+        rank = np.searchsorted(sorted_x, x[i], side='right')
+        result[i] = rank / (n + 1)  
+    return result
+
+
+@njit
 def _chi(u, v, t=0.9):
     """https://doi.org/10.1023/A:1009963131610"""
     n = len(u)
@@ -52,6 +64,8 @@ def extcorr(array):
     extcorrs = []
     for i in range(h * w):
         u, v = array[:, i, 0], array[:, i, 1]
+        u = _ecdf(u)
+        v = _ecdf(v)
         chi = _chi(u, v)
         extcorrs.append(chi)
     extcorrs = np.stack(extcorrs, axis=0).reshape(h, w)
@@ -72,6 +86,8 @@ def extcorrboot(array, nboot:int=100, size:int=150):
             idx = np.random.choice(n, size=size, replace=True)
             u_samp = u[idx]
             v_samp = v[idx]
+            u_samp = _ecdf(u_samp)
+            v_samp = _ecdf(v_samp)
             chival = _chi(u_samp, v_samp)
             if not np.isnan(chival):
                 chi += chival
@@ -87,8 +103,8 @@ def plot(fake, train, func, fields=[0, 1], figsize=1.,
     Plot relationships between climate fields.
 
     Args:
-        fake: model data of size _ x h x w c
-        train: trianing data of size _ x h x w x c
+        fake: model data of size (-1, h, w, c)
+        train: training data of size (-1, h, w, c)
         func: function to use to measure dependence
         fields: which fields to compare (pairs only)
     """
@@ -98,10 +114,10 @@ def plot(fake, train, func, fields=[0, 1], figsize=1.,
     train_res = func(train, **func_kws)
     fake_res  = func(fake, **func_kws)
 
+    # configure colormap
     vmin = vmin or np.nanmin(train_res)
     vmax = vmax or np.nanmax(train_res)
     cmap = getattr(plt.cm, cmap)
-
     cmap.set_under(cmap(0))
     cmap.set_over(cmap(.99))
 
@@ -116,11 +132,13 @@ def plot(fake, train, func, fields=[0, 1], figsize=1.,
     cbar.set_label(cbar_label, rotation=0, labelpad=10)
     fig.suptitle(title, y=1.05)
 
-    # TODO: look for alternatives!
-    corr = np.corrcoef(train_res.flatten(), fake_res.flatten())[0, 1]
+    valid = np.isfinite(train_res) & np.isfinite(fake_res)
+    print(f"Fraction of invalid points: {1 - valid.mean():.2f}")
+
+    corr = np.corrcoef(train_res[valid].flatten(), fake_res[valid].flatten())[0, 1]
     print(f"Pearson correlation: {corr:.4f}")
 
-    mae = np.mean(np.abs(train_res - fake_res))
+    mae = np.mean(np.abs(train_res[valid] - fake_res[valid]))
     print(f"Mean Absolute Error: {mae:.4f}")
 
     return fig, {"mae": mae, "pearson": corr}

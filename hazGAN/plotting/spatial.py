@@ -15,6 +15,18 @@ def pearson(array):
 
 
 @njit
+def _ecdf(x: np.ndarray) -> np.ndarray:
+    """R ecdf implementation with Weibull plotting position."""
+    n = len(x)
+    sorted_x = np.sort(x)
+    result = np.empty(n, dtype=np.float64)
+    for i in range(n):
+        rank = np.searchsorted(sorted_x, x[i], side='right')
+        result[i] = rank / (n + 1)  
+    return result
+
+
+@njit
 def _chi(u, v, t=0.9):
     """https://doi.org/10.1023/A:1009963131610"""
     n = len(u)
@@ -36,6 +48,8 @@ def extcorr(array):
     for i in prange(h * w):
         for j in range(i):
             u, v = array[:, i], array[:, j]
+            u = _ecdf(u)
+            v = _ecdf(v)
             chi = _chi(u, v)
             extcorrs[i, j] = chi
             extcorrs[j, i] = chi

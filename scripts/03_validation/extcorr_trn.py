@@ -15,6 +15,7 @@ import xarray as xr
 import matplotlib.pyplot as plt
 from environs import Env
 from pathlib import Path
+from numba import njit
 
 from hazGAN import statistics
 
@@ -29,8 +30,8 @@ plt.rcParams.update({
 
 
 # settings
-fields = "u10" # use string for spatial, list for multivariate
-method = "chi" # try 'chibar' to investigate asymptotic independence
+fields = ["u10", "tp"] # use string for spatial, list for multivariate
+method = "chibar" # try 'chibar' to investigate asymptotic independence
 tmin = 0.7
 tmax = 0.99
 tstep = 0.01
@@ -76,6 +77,18 @@ def sample(data, fields:str, var:str="anomaly"):
         return sample_pixels(data, fields, var=var)
 
 
+@njit
+def _ecdf(x: np.ndarray) -> np.ndarray:
+    """R ecdf implementation with Weibull plotting position."""
+    n = len(x)
+    sorted_x = np.sort(x)
+    result = np.empty(n, dtype=np.float64)
+    for i in range(n):
+        rank = np.searchsorted(sorted_x, x[i], side='right')
+        result[i] = rank / (n + 1)  
+    return result
+
+
 def chi(u, v, t):
     """https://doi.org/10.1023/A:1009963131610"""
     n = len(u)
@@ -100,6 +113,8 @@ def chibar(u, v, t):
 
 
 def extcorr(u, v, t=0.9, method="chi"):
+    u = _ecdf(u)
+    v = _ecdf(v)
     if method == "chi":
         return chi(u, v, t=t)
     elif method == "chibar":
@@ -108,13 +123,25 @@ def extcorr(u, v, t=0.9, method="chi"):
         raise ValueError(f"Invalid method: {method}")
 
 
+def bootstrap_stats(data, confidence=0.99):
+    from scipy import stats
+    mask = ~np.isnan(data)
+    n = mask.sum(axis=0)
+    mean = np.nanmean(data, axis=0)
+    std = np.nanstd(data, ddof=1, axis=0)
+    se = std / np.sqrt(n)
+    tcrit = stats.t.ppf(0.5 + confidence / 2, df=n-1)
+    moe = tcrit * se
+    return mean, mean - moe, mean + moe, n
+        
+
 # load the data
 if __name__ == "__main__":
     env = Env()
     env.read_env()
 
     datadir = Path(env.str("TRAINDIR"))
-    figdir = Path(env.str("FIG_DIR")) / "extcorr" / "train"
+    figdir = Path(env.str("FIG_DIR")) / method / "train"
 
     print(f"\nLoading data from {datadir / 'data.nc'}")
     print(f"Saving figures to {figdir}\n")
@@ -139,18 +166,11 @@ if __name__ == "__main__":
             u0_b, u1_b = u0[idx], u1[idx]
             for j, u in enumerate(thresholds):
                 chis[b, j] = extcorr(u0_b, u1_b, t=u, method=method)
+        chis_mean, ci_lower, ci_upper, n = bootstrap_stats(chis)
 
-        # get bootstrap stats
-        chis_mean = np.nanmean(chis, axis=0)
-        ci_lower = np.nanpercentile(chis, 2.5, axis=0)
-        ci_upper = np.nanpercentile(chis, 97.5, axis=0)
-        chi_final = extcorr(u0, u1, t=t_final, method=method)
-
-        # remove thresh where too many nans
-        mask = np.sum(np.isnan(chis), axis=0) > (0.5 * nboot)
-        chis_mean[mask] = np.nan
-        ci_lower[mask] = np.nan
-        ci_upper[mask] = np.nan
+        # get χ at t_final
+        t_final_idx = np.argmin(np.abs(thresholds - t_final))
+        chi_final = chis_mean[t_final_idx]
 
         y0, y1 = statistics.gumbel(u0), statistics.gumbel(u1)
         y_final = statistics.gumbel(t_final)
@@ -176,14 +196,17 @@ if __name__ == "__main__":
         ax.fill_between(thresholds, ci_lower, ci_upper,
                         color='gray', alpha=0.25, linewidth=0.1)
 
-        
-        ax.spines["bottom"].set_position("zero")
+        if method == "chi":
+            ax.set_ylim(-0.05, 1.05)
+        elif method == "chibar":
+            ax.set_ylim(-1.05, 1.05)
+            ax.spines["bottom"].set_position("zero")
         ax.set_xlim(0.7, 1.0)
 
         # highlight χ(t_final)
         ax.vlines(t_final, 0, chi_final, color='r', lw=0.5, ls='--')
         ax.hlines(chi_final, 0.6, t_final, color='r', lw=0.5, ls='--')
-        ax.text(0.8, np.nanmax(chis_mean), f"χ={chi_final:.2f}",
+        ax.text(t_final, np.nanmax(chis_mean), f"χ={chi_final:.2f}",
                 color='r', fontsize=6, fontweight='bold')
 
         ax.set_xlabel("u")
@@ -198,4 +221,3 @@ if __name__ == "__main__":
     print(f"Saved {i+1} diagnostic plots to {figdir}")
 
 # %%
-

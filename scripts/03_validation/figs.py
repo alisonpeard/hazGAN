@@ -494,6 +494,7 @@ if __name__ == "__main__":
                 # fields.extcorr, # compare results; if similar, don't bootstrap fields
                 fields=pair, figsize=.3,
                 title="", cbar_label="χ(u)",
+                vmin=0, vmax=1,
                 cmap="viridis",
             )
             results[f"extremal{pair_str}"]["mae"] = metrics_χ['mae']
@@ -505,7 +506,7 @@ if __name__ == "__main__":
 
         save_stats_csv(statspath, results)
         print(f"saved summary statistics to {statspath}")
-    
+
     # %% ==============================================================
     # spatial correlation plots
     spatialcorrplots = True
@@ -525,15 +526,15 @@ if __name__ == "__main__":
 
         results = {}
 
-        cop_gen_lores = cop_gen[:, ::2, ::2, :].copy()
-        cop_trn_lores = cop_trn[:, ::2, ::2, :].copy()
+        gen_lores = u_gen[:, ::2, ::2, :].copy()
+        trn_lores = u_trn[:, ::2, ::2, :].copy()
 
         for k in [0, 1, 2]:
 
             # Pearson plots
             results[f"pearson{k}"] = {}
             fig_r, metrics_r = spatial.plot(
-                cop_gen_lores, cop_trn_lores,
+                gen_lores, trn_lores,
                 spatial.pearson, field=k,
                 figsize=.3, title="", cbar_label="r",
                 cmap="viridis", vmin=-1, vmax=1
@@ -547,7 +548,7 @@ if __name__ == "__main__":
             if extcorrplot:
                 results[f"extremal{k}"] = {}
                 fig_χ, metrics_χ = spatial.plot(
-                    cop_gen_lores, cop_trn_lores,
+                    gen_lores, trn_lores,
                     spatial.extcorrboot,
                     # spatial.extcorr, # bootstrap for final version; compare results first
                     field=k,
