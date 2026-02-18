@@ -1,16 +1,92 @@
-# %%
 import numpy as np
-from tqdm import tqdm
+from numba import njit, prange
 import matplotlib.pyplot as plt
 
-from ..statistics import pairwise_extremal_coeffs
-
-from .base import CMAP
 from .base import makegrid
+from .base import contourmap
 
 
-def plot(fake, train, func, field=0, figsize=1., cmap=CMAP, vmin=None, vmax=None,
-         title="Untitled", cbar_label="", alpha:float=1e-4, **func_kws):
+def pearson(array):
+    n, h, w = array.shape
+    array = array.reshape(n, h * w)
+    corrs = np.corrcoef(array.T)
+    print(corrs.shape)
+    return corrs
+
+
+@njit
+def _ecdf(x: np.ndarray) -> np.ndarray:
+    """R ecdf implementation with Weibull plotting position."""
+    n = len(x)
+    sorted_x = np.sort(x)
+    result = np.empty(n, dtype=np.float64)
+    for i in range(n):
+        rank = np.searchsorted(sorted_x, x[i], side='right')
+        result[i] = rank / (n + 1)  
+    return result
+
+
+@njit
+def _chi(u, v, t=0.9):
+    """https://doi.org/10.1023/A:1009963131610"""
+    n = len(u)
+    both_above = np.sum((u > t) & (v > t))
+    prob_above = both_above / n
+    pu_above = np.sum(u > t) / n
+    if both_above < 3:
+        return np.nan
+    return prob_above / pu_above
+
+
+
+@njit(parallel=True)
+def extcorr(array):
+    _, h, w = array.shape
+    array = array.reshape(-1, h * w)
+
+    extcorrs = np.empty((h * w, h * w))
+    for i in prange(h * w):
+        for j in range(i):
+            u, v = array[:, i], array[:, j]
+            u = _ecdf(u)
+            v = _ecdf(v)
+            chi = _chi(u, v)
+            extcorrs[i, j] = chi
+            extcorrs[j, i] = chi
+
+    return extcorrs
+
+
+@njit(parallel=True)
+def extcorrboot(array, nboot=100, size=150):
+    n, h, w = array.shape
+    array = array.reshape(-1, h * w)
+
+    extcorrs = np.zeros((h * w, h * w))
+    
+    np.random.seed(42)
+    for i in prange(h * w):
+        for j in range(i):
+            u, v = array[:, i], array[:, j]
+            for _ in range(nboot):
+                idx = np.random.choice(n, size=size, replace=True)
+                u_samp = u[idx]
+                v_samp = v[idx]
+                chi = _chi(u_samp, v_samp)
+
+                if np.isnan(chi):
+                    continue
+                    
+                extcorrs[i, j] += chi
+                extcorrs[j, i] += chi
+
+    return extcorrs / nboot
+
+
+def plot(fake, train, func, field=0, figsize=1.,
+         cmap="viridis", vmin=None, vmax=None,
+         title="", cbar_label="",
+         alpha:float=1e-4, **func_kws):
     train = train[..., field].copy()
     fake  = fake[..., field].copy()
     
@@ -28,83 +104,28 @@ def plot(fake, train, func, field=0, figsize=1., cmap=CMAP, vmin=None, vmax=None
     cmap.set_under(cmap(0))
     cmap.set_over(cmap(.99))
 
-    fig, axs, cax = makegrid(1, 2, figsize=figsize, projection=None)
+    fig, axs, cax = makegrid(1, 2, figsize=figsize, cbar_width=0.1)
 
-    im = axs[0].imshow(train_res, cmap=cmap, vmin=vmin, vmax=vmax)
-    _  = axs[-1].imshow(fake_res, cmap=cmap, vmin=vmin, vmax=vmax)
+    im = contourmap(
+        train_res, ax=axs[0], vmin=vmin, vmax=vmax, cmap=cmap, linewidth=0.2, features=False
+    )
+    _  = contourmap(
+        fake_res, ax=axs[-1], vmin=vmin, vmax=vmax, cmap=cmap, linewidth=0.2, features=False
+    )
 
     for ax in axs:
         ax.spines['top'].set_visible(True)
         ax.spines['right'].set_visible(True)
 
-    axs[0].set_title("ERA5", y=-0.15)
-    axs[-1].set_title("HazGAN", y=-0.15)
+    axs[0].set_title("ERA5", y=-0.2)
+    axs[-1].set_title("HazGAN", y=-0.2)
     fig.suptitle(title, y=1.05)
 
-    fig.colorbar(im, cax=cax, label=cbar_label)
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.set_label(cbar_label, rotation=0, labelpad=10)
+    fig.suptitle(title, y=1.05)
 
     corr = np.corrcoef(train_res.flatten(), fake_res.flatten())[0, 1]
-    print(f"Pearson correlation: {corr:.4f}")
-
     mae = np.mean(np.abs(train_res - fake_res))
-    print(f"Mean Absolute Error: {mae:.4f}")
 
     return fig, {"mae": mae, "pearson": corr}
-
-
-def smith1990(array):
-    array = array.astype(np.float16)
-    return pairwise_extremal_coeffs(array)
-
-
-def pearson(array):
-    n, h, w = array.shape
-    array = array.reshape(n, h * w)
-    corrs = np.corrcoef(array.T)
-    print(corrs.shape)
-    return corrs
-
-
-def tail_dependence(array):
-
-    n, h, w = array.shape
-    array = array.reshape(n, h * w)
-
-    chi_values = np.empty((h * w, h * w))
-    for i in tqdm(range(h * w), desc="Calculating tail dependence coefficients"):
-        for j in range(i):
-            chi = _tail_dependence_coeff(array[:, i], array[:, j])
-            chi_values[i, j] = chi
-            chi_values[j, i] = chi
-
-    return chi_values
-
-
-def _tail_dependence_coeff(u, v):
-    """
-    Classical tail dependence coefficient λ for upper tail dependence.
-
-    Args:
-        u, v: 1D arrays of uniform marginals
-        tail: 'upper' or 'lower'
-    Returns:
-        λ: tail dependence coefficient
-
-    Refs:
-        Joe, H. (1997). Multivariate Models and Dependence Concepts. Chapman & Hall.
-        Nelsen, R. B. (2006). An Introduction to Copulas. Springer.
-    """
-    thresholds = np.arange(0.8, 0.99, 0.01)  # Multiple thresholds
-    lambdas = []
-    
-    for t in thresholds:
-        u_exceed = u > t
-        both_exceed = (u > t) & (v > t)
-        
-        if np.sum(u_exceed) > 0:
-            lambda_t = np.sum(both_exceed) / np.sum(u_exceed)
-            lambdas.append(lambda_t)
-
-    return np.mean(lambdas) if lambdas else 0
-
-# %%

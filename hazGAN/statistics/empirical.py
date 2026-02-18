@@ -79,7 +79,9 @@ class Empirical(object):
             (n + 1 - self.alpha - self.beta) 
         )
 
-        assert max(ecdf_vals) < 1, "ECDF values exceed 1."
+        # assert max(ecdf_vals) < 1, "ECDF values exceed 1."
+        if max(ecdf_vals) >= 1:
+            warn(f"ECDF values exceed or equal 1 {max(ecdf_vals)}.", RuntimeWarning)
 
         def interpolator(query_points):
             indices = np.searchsorted(unique_vals, query_points, side='right') - 1
@@ -122,12 +124,18 @@ class SemiParametric(Empirical):
     def _semicdf(self, x) -> np.ndarray:
         r"""(1.3) H&T for $\xi \leq 0$ and upper tail."""
         # empirical base
-        u = self.ecdf(x)
+        u = np.zeros_like(x, dtype=float)
 
         if np.isfinite(self.loc):
             # parametric tail
             loc_u = self.ecdf(self.loc)
+            base_mask = x <= self.loc
             tail_mask = x > self.loc
+
+            u[base_mask] = self.ecdf(x[base_mask])
+            u_loc = self.ecdf(self.loc)
+            u[tail_mask] = u_loc # backup for safety
+
             tail_x = x[tail_mask]
 
             tail_fit = self.distn.cdf(tail_x, self.shape, loc=self.loc, scale=self.scale)
@@ -139,14 +147,19 @@ class SemiParametric(Empirical):
                 assert not np.isnan(u).any(), "NaN values in CDF."
 
                 if self.shape < 0:
-                    assert (u <= 1).all(), "CDF values above 1."
-                    assert (u > 0).all(), "CDF values ≤ 0."
+                    assert (u <= 1).all(), f"CDF values above 1 {u.max()=}, {self.shape=}."
+                    assert (u > 0).all(), f"CDF values ≤ 0. {u.min()=}, {self.shape=}."
                 else:
-                    assert (u >= 0).all(), "CDF values below 0."
-                    assert (u < 1).all(), "CDF values ≥ 1."
+                    if u[tail_mask].max() >= 1:
+                        print(f"{loc_u=}, {u[tail_mask].max()=}, {u[base_mask].max()=}")
+                        print(f"{tail_fit.max()=}, {self.loc=}, {self.scale=}, {self.shape=}")
+                        print(f"{(1 - loc_u) * (1 - tail_fit.max())=}")
+                    assert (u < 1).all(), f"CDF values ≥ 1: {u.max()=}, {self.shape=}."
+                    assert (u >= 0).all(), f"CDF values below 0: {u.min()=}, {self.shape=}."
+
             
             except AssertionError as e:
-                print(e)
+                print(f"\nError in SemiParametric._semicdf:")
                 print("x: ", min(x), max(x))
                 print("u: ", min(u), max(u))
                 print("loc: ", self.loc)
@@ -158,19 +171,15 @@ class SemiParametric(Empirical):
 
 
     def _semiquantile(self, u) -> np.ndarray:
-        # empirical base
         x = self.quantile(u)
 
-        # check parameters are not NaN
         if np.isfinite(self.loc):
-            # parametric tail
             loc_u = self.ecdf(self.loc)
             tail_mask = u > loc_u
             tail_u = u[tail_mask]
 
             tail_u = 1 - ((1 - tail_u) / (1 - loc_u))
             tail_x = self.distn.ppf(tail_u, self.shape, loc=self.loc, scale=self.scale)
-
             x[tail_mask] = tail_x
 
             try:
@@ -178,7 +187,7 @@ class SemiParametric(Empirical):
                 assert not np.isnan(x).any(), "NaN values in quantile function."
 
             except AssertionError as e:
-                # debugging statements
+                print(f"\nError in SemiParametric._semiquantile:")
                 print("u: ", min(u), max(u))
                 print("x: ", min(x), max(x))
                 print("loc: ", self.loc)

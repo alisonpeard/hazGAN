@@ -1,11 +1,13 @@
 # %%
 import numpy as np
 from .base import CMAP
-from .base import makegrid, contourmap, scalebar
+from .base import makegrid, contourmap
 from ..statistics import invPIT
+
 
 def identity(array, *args, **kwargs):
     return array
+
 
 def gumbel(array, axis=0):
     array = np.clip(array, 1e-6, 1 - 1e-6)
@@ -16,9 +18,10 @@ def anomaly(array, reference, params):
     array = invPIT(array, reference, params)
     return array
 
+
 def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, title="Untitled",
-        cbar_label='', cbar_width=0.2, linewidth=.1, alpha=1e-4, alpha_vlim=True, 
-        nrows=4, ncols=8, ndecimals=1, **transform_kws):
+        cbar_label='', cbar_width=0.25, linewidth=.15, alpha=1e-4, alpha_vlim=True, 
+        nrows=4, ncols=8, cbar_formatter=None, **transform_kws):
     """Plot training samples on top row and generated samples on bottom row."""
 
     transform = transform or identity
@@ -41,9 +44,17 @@ def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, 
     midpoint = total // 2
     midrow  = nrows // 2
 
-    fig, axs, cax = makegrid(nrows, ncols, cbar_width=cbar_width, figsize=1.)
+    fig, axs, cax = makegrid(nrows, ncols, cbar_width=cbar_width, figsize=0.5)
+
+    if vmax > 1.0:
+        ndecimals = 0
+    else:
+        ndecimals = 2
+
     for i, ax in enumerate(axs.flat):
         if i < midpoint:
+            pos = ax.get_position()
+            im = ax.set_position([pos.x0, pos.y0 + 0.01, pos.width, pos.height])
             contourmap(fake[i, ...], ax=ax, vmin=vmin, vmax=vmax,
                        cmap=cmap, linewidth=linewidth, ndecimals=ndecimals)
         if i >= midpoint:
@@ -53,40 +64,8 @@ def plot(fake, train, field=0, transform=None, vmin=None, vmax=None, cmap=CMAP, 
             im = contourmap(train[j, ...], ax=ax, vmin=vmin, vmax=vmax,
                             cmap=cmap, linewidth=linewidth, ndecimals=ndecimals)
 
-    # # add (a) and (b) labels to top left of both blocks
-    # axs[0, 0].text(.3, .7, "HazGAN", transform=axs[0, 0].transAxes, ha='center', va='bottom',
-    #             fontsize=20, 
-    #             bbox=dict(facecolor='white', alpha=.8, linewidth=0, edgecolor='white', boxstyle='round,pad=0.2'))
-    
-    # axs[midrow, 0].text(.25, .7, "ERA5", transform=axs[midrow, 0].transAxes, ha='center', va='bottom',
-    #             fontsize=20, 
-    #             bbox=dict(facecolor='white', alpha=.8, linewidth=0, edgecolor='white', boxstyle='round,pad=0.2'))
+    axs[0, 0].set_ylabel("HazGAN")
+    axs[midrow, 0].set_ylabel("ERA5")
+    fig.colorbar(im, cax=cax, label=cbar_label, format=cbar_formatter)
 
-    axs[0, 0].set_ylabel("HazGAN", fontsize=18)
-    axs[midrow, 0].set_ylabel("ERA5", fontsize=18)
-    
-    # add a scale bar
-    scalebar(axs[-1, -1])
-    scalebar(axs[midrow-1, -1])
-
-    fig.colorbar(im, cax=cax, label=cbar_label)
     return fig
-
-
-if __name__ == "__main__":
-    import xarray as xr
-
-    data_path = "/Users/alison/Documents/DPhil/paper1.nosync/training/64x64/data.nc"
-    data = xr.open_dataset(data_path)
-    uniform = data['uniform'].values
-    x       = data['anomaly'].values
-    params  = data['params'].values
-
-    uniform = np.nan_to_num(uniform, nan=1e-6, posinf=1 - 1e-6, neginf=1e-6)
-    uniform = uniform.clip(1e-6, 1 - 1e-6)
-
-    plot(uniform, uniform, title="Uniform samples");
-    plot(uniform, uniform, transform=gumbel, title="Gumbel samples");
-    plot(uniform, uniform, transform=anomaly, title="Anomaly samples", reference=x, params=params);
-
-# %%

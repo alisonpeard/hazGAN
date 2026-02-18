@@ -27,15 +27,40 @@ def inv_exp(uniform):
 
 def gumbel(uniform):
     """uniform -> Gumbel(0, 1)"""
-    maxval = np.max(uniform) # .numpy()
-    if maxval == 1:
-        warn("Values == 1 found, scaling by 1e-6")
-        uniform *= 1 - 1e-6
-    if maxval > 1:
-        raise ValueError("Some uniform > 1")
+    maxval = np.max(uniform)
+    if maxval >= 1:
+        raise ValueError("Some uniform >= 1")
     return -np.log(-np.log(uniform))
 
 
 def inv_gumbel(x):
     """Gumbel(0, 1) -> uniform"""
     return np.exp(-np.exp(-x))
+
+
+def uniform(u):
+    """Identity function for uniform marginals."""
+    return u
+
+def inv_uniform(x):
+    """Identity function for uniform marginals."""
+    return x
+
+def gaussian(u):
+    """uniform -> standard Gaussian"""
+    from scipy.special import erfinv
+    return np.sqrt(2) * erfinv(2 * u - 1)
+
+def inv_gaussian(x):
+    """standard Gaussian -> uniform"""
+    from scipy.stats import norm
+    return norm.cdf(x)
+
+
+def rescaled(u):
+    """Identity function for any marginals."""
+    return u
+
+def inv_rescaled(x):
+    """Identity function for any marginals."""
+    return x

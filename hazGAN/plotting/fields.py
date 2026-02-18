@@ -1,57 +1,11 @@
-# %%
 import numpy as np
 import matplotlib.pyplot as plt
+from numba import njit, prange
 
 from .base import makegrid
 from .base import contourmap
-from .base import heatmap
 from .base import CMAP
 from ..statistics import get_extremal_coeffs_nd
-
-
-def plot(fake, train, func, fields=[0, 1], figsize=1.,
-         cmap=CMAP, vmin=None, vmax=None,
-         title="Untitled", cbar_label="", **func_kws
-         ) -> plt.Figure:
-    """
-    Plot relationships between climate fields.
-
-    Args:
-        fake: model data of size _ x h x w c
-        train: trianing data of size _ x h x w x c
-        func: function to use to measure dependence
-        fields: which fields to compare (pairs only)
-    """
-    train = train[..., fields]
-    fake  = fake[..., fields]
-
-    train_res = func(train, **func_kws)
-    fake_res  = func(fake, **func_kws)
-
-    vmin = vmin or np.nanmin(train_res)
-    vmax = vmax or np.nanmax(train_res)
-    cmap = getattr(plt.cm, cmap)
-
-    cmap.set_under(cmap(0))
-    cmap.set_over(cmap(.99))
-
-    fig, axs, cax = makegrid(1, 2, figsize=figsize)
-    im = contourmap(train_res, ax=axs[0], vmin=vmin, vmax=vmax, cmap=cmap)
-    _  = contourmap(fake_res, ax=axs[-1], vmin=vmin, vmax=vmax, cmap=cmap)
-
-    axs[0].set_title("ERA5", y=-0.15)
-    axs[-1].set_title("HazGAN", y=-0.15)
-
-    fig.colorbar(im, cax=cax, label=cbar_label)
-    fig.suptitle(title, y=1.05)
-
-    corr = np.corrcoef(train_res.flatten(), fake_res.flatten())[0, 1]
-    print(f"Pearson correlation: {corr:.4f}")
-
-    mae = np.mean(np.abs(train_res - fake_res))
-    print(f"Mean Absolute Error: {mae:.4f}")
-
-    return fig, {"mae": mae, "pearson": corr}
 
 
 def pearson(array):
@@ -80,44 +34,111 @@ def smith1990(array):
     return get_ext_coefs(array)
 
 
-def tail_dependence(array):
+@njit
+def _ecdf(x: np.ndarray) -> np.ndarray:
+    """R ecdf implementation with Weibull plotting position."""
+    n = len(x)
+    sorted_x = np.sort(x)
+    result = np.empty(n, dtype=np.float64)
+    for i in range(n):
+        rank = np.searchsorted(sorted_x, x[i], side='right')
+        result[i] = rank / (n + 1)  
+    return result
+
+
+@njit
+def _chi(u, v, t=0.8):
+    """https://doi.org/10.1023/A:1009963131610"""
+    n = len(u)
+    both_above = np.sum((u > t) & (v > t))
+    prob_above = both_above / n
+    pu_above = np.sum(u > t) / n
+    if both_above < 3:
+        return np.nan
+    return prob_above / pu_above
+
+
+def extcorr(array):
     _, h, w, c = array.shape
     array = array.reshape(-1, h * w, c)
-
-    coeffs = []
+    extcorrs = []
     for i in range(h * w):
-        x, y = array[:, i, 0], array[:, i, 1]
-        chi = _tail_dependence_coeff(x, y)
-        coeffs.append(chi)
-    coeffs = np.stack(coeffs, axis=0).reshape(h, w)
-    return coeffs
+        u, v = array[:, i, 0], array[:, i, 1]
+        u = _ecdf(u)
+        v = _ecdf(v)
+        chi = _chi(u, v)
+        extcorrs.append(chi)
+    extcorrs = np.stack(extcorrs, axis=0).reshape(h, w)
+    return extcorrs
 
 
-def _tail_dependence_coeff(u, v):
+@njit(parallel=True)
+def extcorrboot(array, nboot:int=100, size:int=150):
+    n, h, w, c = array.shape
+    hw = h * w
+    # array = array.reshape(n, hw, c)
+    array = np.reshape(array.copy(), (n, hw, c))
+    extcorrs = np.zeros(hw)
+    for i in prange(hw):
+        u, v = array[:, i, 0], array[:, i, 1]
+        chi = 0.
+        for _ in range(nboot):
+            idx = np.random.choice(n, size=size, replace=True)
+            u_samp = u[idx]
+            v_samp = v[idx]
+            u_samp = _ecdf(u_samp)
+            v_samp = _ecdf(v_samp)
+            chival = _chi(u_samp, v_samp)
+            if not np.isnan(chival):
+                chi += chival
+        extcorrs[i] = chi / nboot
+    return np.reshape(extcorrs, (h, w))
+
+
+def plot(fake, train, func, fields=[0, 1], figsize=1.,
+         cmap=CMAP, vmin=None, vmax=None,
+         title="", cbar_label="", **func_kws
+         ) -> plt.Figure:
     """
-    Classical tail dependence coefficient λ for upper tail dependence.
+    Plot relationships between climate fields.
 
     Args:
-        u, v: 1D arrays of uniform marginals
-        tail: 'upper' or 'lower'
-    Returns:
-        λ: tail dependence coefficient
-
-    Refs:
-        Joe, H. (1997). Multivariate Models and Dependence Concepts. Chapman & Hall.
-        Nelsen, R. B. (2006). An Introduction to Copulas. Springer.
+        fake: model data of size (-1, h, w, c)
+        train: training data of size (-1, h, w, c)
+        func: function to use to measure dependence
+        fields: which fields to compare (pairs only)
     """
-    thresholds = np.arange(0.8, 0.99, 0.01)  # Multiple thresholds
-    lambdas = []
-    
-    for t in thresholds:
-        u_exceed = u > t
-        both_exceed = (u > t) & (v > t)
-        
-        if np.sum(u_exceed) > 0:
-            lambda_t = np.sum(both_exceed) / np.sum(u_exceed)
-            lambdas.append(lambda_t)
+    train = train[..., fields]
+    fake  = fake[..., fields]
 
-    return np.mean(lambdas) if lambdas else 0
+    train_res = func(train, **func_kws)
+    fake_res  = func(fake, **func_kws)
 
-# %%
+    # configure colormap
+    vmin = vmin or np.nanmin(train_res)
+    vmax = vmax or np.nanmax(train_res)
+    cmap = getattr(plt.cm, cmap)
+    cmap.set_under(cmap(0))
+    cmap.set_over(cmap(.99))
+
+    fig, axs, cax = makegrid(1, 2, figsize=figsize, cbar_width=0.1)
+    im = contourmap(train_res, ax=axs[0], vmin=vmin, vmax=vmax, cmap=cmap, linewidth=0.2)
+    _  = contourmap(fake_res, ax=axs[-1], vmin=vmin, vmax=vmax, cmap=cmap, linewidth=0.2)
+
+    axs[0].set_title("ERA5", y=-0.2)
+    axs[-1].set_title("HazGAN", y=-0.2)
+
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.set_label(cbar_label, rotation=0, labelpad=10)
+    fig.suptitle(title, y=1.05)
+
+    valid = np.isfinite(train_res) & np.isfinite(fake_res)
+    print(f"Fraction of invalid points: {1 - valid.mean():.2f}")
+
+    corr = np.corrcoef(train_res[valid].flatten(), fake_res[valid].flatten())[0, 1]
+    print(f"Pearson correlation: {corr:.4f}")
+
+    mae = np.mean(np.abs(train_res[valid] - fake_res[valid]))
+    print(f"Mean Absolute Error: {mae:.4f}")
+
+    return fig, {"mae": mae, "pearson": corr}

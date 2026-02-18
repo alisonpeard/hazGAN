@@ -13,40 +13,37 @@ import geopandas as gpd
 import xarray as xr
 from environs import Env
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 from utils.statistics import calculate_total_return_periods
 
 bay_of_bengal_crs = 24346
+savefigs = False
 FRACTION = False  # whether to divide by mangrove area
 
 env = Env()
 env.read_env()
 
 # %% load generated data
-samples_dir    = env.str("SAMPLES_DIR")
-data_dir       = os.path.join("..", "..", "..", "hazGAN-data") #env.str("DATADIR")
-mangroves_dir  = env.str("MANGROVE_DIR")
-mangroves_path = env.str("MANGROVES")
+samples_dir    = Path(env.str("SAMPLES_DIR"))
+mangroves_dir  = Path(env.str("MANGROVE_DIR"))
+mangroves_path = Path(env.str("MANGROVES"))
+figdir = Path(env.str("FIG_DIR")) / "mangroves"
+figdir.mkdir(parents=True, exist_ok=True)
 
-train_damages       = xr.open_dataset(os.path.join(data_dir, "mangroves", "train_damages.nc"))
-fake_damages        = xr.open_dataset(os.path.join(data_dir, "mangroves", "fake_damages.nc"))
-independent_damages = xr.open_dataset(os.path.join(data_dir, "mangroves", "independent_damages.nc"))
-dependent_damages   = xr.open_dataset(os.path.join(data_dir, "mangroves", "dependent_damages.nc"))
+train_damages       = xr.open_dataset(mangroves_dir / "results" / "train_damages.nc")
+fake_damages        = xr.open_dataset(mangroves_dir / "results" / "fake_damages.nc")
+independent_damages = xr.open_dataset(mangroves_dir / "results" / "independent_damages.nc")
+dependent_damages   = xr.open_dataset(mangroves_dir / "results" / "dependent_damages.nc")
 
 # different rates for different datasets
 rate = train_damages.sizes["sample"] / 81
 train_damages['rate']       = rate
 fake_damages['rate']        = rate
-independent_damages['rate'] = 1249 / 81
-
-if True:
-    # subset to 500 years of data
-    nsamples = 500 * rate
-    fake_mask = fake_damages["sample"] < nsamples
-    fake_damages = fake_damages.isel(sample=fake_mask)
+independent_damages['rate'] = 1249 / 81 # because we sampled uniformly from [0,1] and pseudo-obs come from original 1249 events
 
 # %%
-mangrove_grid_path = os.path.join(mangroves_dir, "mangrove_grid.nc")
+mangrove_grid_path = mangroves_dir / "mangrove_grid.nc"
 
 if not os.path.exists(mangrove_grid_path):
     from shapely.geometry import box
@@ -78,12 +75,14 @@ tree = xr.DataTree()
 tree['ERA5'] = xr.DataTree(train_damages)
 tree['HazGAN']  = xr.DataTree(fake_damages)
 tree['Independent'] = xr.DataTree(independent_damages)
-tree.to_netcdf(os.path.join(mangroves_dir, "damage_areas.nc"))
+tree['Dependent'] = xr.DataTree(dependent_damages)
+tree.to_netcdf(mangroves_dir / "results" / "damage_areas.nc")
 
 # %%
 def calculate_total_return_periods(
         damages:xr.Dataset, var:str,
-        fraction:bool=FRACTION
+        fraction:bool=FRACTION,
+        rate:float=rate,
         ) -> xr.Dataset:
     """
     Calculate total damages and return periods for a given variable
@@ -92,7 +91,7 @@ def calculate_total_return_periods(
     # skip root node in datatree
     if len(damages.data_vars) > 0:
         # aggregate to overall damages
-        npy = damages['rate'].values.item()
+        npy = rate# damages['rate'].values.item()
         totals = damages[var].sum(dim=['lat', 'lon']).to_dataset()
 
         if fraction:
@@ -107,12 +106,12 @@ def calculate_total_return_periods(
         return totals
 
 tree = tree.map_over_datasets(calculate_total_return_periods, 'expected_damage')
+
+# calculate return periods differently for dependent damages
 tree['Dependent'] = dependent_damages
 tree['Dependent']['expected_damage'] = tree['Dependent']['expected_damage'].sum(dim=['lat', 'lon'])
-
 if FRACTION:
     tree['Dependent']['expected_damage'] =  tree['Dependent']['expected_damage'] / mangrove_area
-
 
 # %%
 xmin = min([ds['return_period'].min() for ds in tree.values()]).data.item()
@@ -120,9 +119,7 @@ xmax = max([ds['return_period'].max() for ds in tree.values()]).data.item()
 ymin = min([ds['expected_damage'].min() for ds in tree.values()]).data.item()
 ymax = max([ds['expected_damage'].max() for ds in tree.values()]).data.item()
 
-# %% PLOT THE LAMB (2010) style RISK PROFILE
-from hazGAN.plotting.misc import blues
-
+# %% plot the Lamb (2010) style risk profile
 def riskprofileplot(tree:xr.DataTree, label:str, ax:plt.Axes,
                     minrp:float=1, maxrp:float=500, **kwargs):
     ds = tree[label].to_dataset()
@@ -131,24 +128,34 @@ def riskprofileplot(tree:xr.DataTree, label:str, ax:plt.Axes,
     print(ds["expected_damage"].shape)
     ax.plot(ds['return_period'], ds['expected_damage'], label=label, **kwargs)
 
-plt.style.use('default')
-plt.rcParams['legend.frameon'] = False
-plt.rcParams['axes.spines.top'] = False
-plt.rcParams['axes.spines.right'] = False
-plt.rcParams['font.size'] = 12
-plt.rcParams['font.family'] = 'sans-serif'
-plt.rcParams['font.sans-serif'] = 'Helvetica'
+plt.rcParams.update({
+    'font.size': 7,
+    'axes.labelsize': 8,
+    'axes.titlesize': 8,
+    'figure.titlesize': 8,
+    'figure.titleweight': 'bold',
+    'axes.titleweight': 'normal',
+    'legend.fontsize': 7,
+    'legend.frameon': False,
+    'font.family': 'sans-serif',
+    'axes.spines.top': False,
+    'axes.spines.right': False,
+    'axes.spines.left': True,
+    'axes.spines.bottom': True
+})
 
+c0, c1, c2, c3 ='#4D4D4D', '#7096BB','#5F8A7B', '#B35828'
+lw = 1.2
 scatter_kwargs = {'linestyle': 'none', 'marker': 'o', 'mfc': 'k',
-                  'mec': 'k', 'mew': 0.25, 'alpha': 0.8, 'ms': 4}
-line_kwargs = {'linewidth': 2, 'alpha': 0.8, 'marker': 'o', 'ms': 3} #, 'mfc': 'none'
+                  'mec': 'k', 'mew': 0.25, 'alpha': 0.8, 'ms': 1.5}
+line_kwargs = {'linewidth': lw, 'alpha': 0.8, 'marker': 'o', 'ms': 1.5} #, 'mfc': 'none'
 
-fig, ax = plt.subplots(figsize=(7.0, 4.33))
+fig, ax = plt.subplots(figsize=(3.75, 2))
 
-riskprofileplot(tree, 'ERA5', ax, color='k', **scatter_kwargs)
-riskprofileplot(tree, 'HazGAN', ax, color="#4682B4", **line_kwargs)
-riskprofileplot(tree, 'Independent', ax, color=blues[3], zorder=0, **line_kwargs)
-riskprofileplot(tree, 'Dependent', ax, color=blues[2], **line_kwargs)
+riskprofileplot(tree, 'ERA5', ax, color='k', **scatter_kwargs, zorder=10)
+riskprofileplot(tree, 'HazGAN', ax, color=c2, **line_kwargs, markevery=1)
+riskprofileplot(tree, 'Independent', ax, color=c1, zorder=0, **line_kwargs, markevery=50)
+riskprofileplot(tree, 'Dependent', ax, color=c3, **line_kwargs)
 
 def rp_damages(tree:xr.DataTree, label:str, rp:float) -> xr.Dataset:
     ds = tree[label].to_dataset()
@@ -156,19 +163,20 @@ def rp_damages(tree:xr.DataTree, label:str, rp:float) -> xr.Dataset:
     damages = ds.sel(return_period=rp, method='nearest')["expected_damage"]
     return damages.values.item()
 
-ax.vlines(100, ax.get_ylim()[0], rp_damages(tree, 'Dependent', 100), color='#333333', linestyle="--", alpha=0.4, linewidth=1, zorder=1)
-ax.hlines(rp_damages(tree, 'ERA5', 100), 0, 100, color='#333333', linestyle="--", alpha=0.4, linewidth=1)
-ax.hlines(rp_damages(tree, 'HazGAN', 100),0, 100, color='#4682B4', linestyle="--", alpha=0.4, linewidth=1)
-ax.hlines(rp_damages(tree, 'Independent', 100),0, 100, color=blues[3], linestyle="--", alpha=0.4, linewidth=1)
-ax.hlines(rp_damages(tree, 'Dependent', 100),0, 100, color=blues[2], linestyle="--", alpha=0.4, linewidth=1)
+
+ax.vlines(100, ax.get_ylim()[0], rp_damages(tree, 'Dependent', 100), color='k', linestyle=":", alpha=0.6, linewidth=0.8 * lw, zorder=1)
+ax.hlines(rp_damages(tree, 'ERA5', 100), 0, 100, color='k', linestyle=":", alpha=0.6, linewidth=0.8 * lw)
+# ax.hlines(rp_damages(tree, 'HazGAN', 100),0, 100, color=c2, linestyle="--", alpha=0.8, linewidth=0.8 * lw)
+ax.hlines(rp_damages(tree, 'Independent', 100),0, 100, color=c1, linestyle="--", alpha=0.8, linewidth=0.8 * lw)
+ax.hlines(rp_damages(tree, 'Dependent', 100),0, 100, color=c3, linestyle="--", alpha=0.8, linewidth=0.8 * lw)
 
 # legend options
 ax.legend(
     loc='upper center',
-    bbox_to_anchor=(0.5, -0.15),  # Center horizontally, below the plot
+    bbox_to_anchor=(0.33, -0.15),  # Center horizontally, below the plot
     ncol=4,  # Spread entries horizontally
     frameon=False,
-    handletextpad=0.5,  # Reduce space between handle and text (default is 0.8)
+    handletextpad=0.25,  # Reduce space between handle and text (default is 0.8)
     columnspacing=2.0,  # Reduce space between columns (default is 2.0)
     labelspacing=0.4
 )
@@ -180,11 +188,6 @@ yticks = np.array([ymin, 2000, 4000, 6000, ymax])
 yticks = yticks[(yticks > ymin) & (yticks <= ymax)]
 yticklabels = [f"{y:.0f}" for y in yticks]
 
-# ax.set_yticks(yticks, labels=yticklabels)
-# ax.spines['left'].set_bounds(ymin, ymax)
-# ax.text(0, ymin - 400, f"({ymin:.0f})", transform=ax.get_yaxis_transform(), 
-#         ha='right', va='center', fontsize=12)
-
 ax.set_xticks([1, 10, 100, 500], labels=['1', '10', '100', '500'])
 ax.spines['bottom'].set_bounds(1, 500)
 
@@ -192,33 +195,25 @@ ax.spines['bottom'].set_bounds(1, 500)
 ax.tick_params(direction='in')
 ax.xaxis.set_tick_params(which='minor', direction='in')
 ax.yaxis.set_tick_params(which='minor', direction='in')
-ax.tick_params(axis='x', length=8)
-ax.tick_params(axis='y', length=8)
-ax.tick_params(axis='x', which='minor', length=4)
-ax.tick_params(axis='y', which='minor', length=4)
+ax.tick_params(axis='x', length=4)
+ax.tick_params(axis='y', length=4)
+ax.tick_params(axis='x', which='minor', length=2)
+ax.tick_params(axis='y', which='minor', length=2)
 
 # turn off minor x-ticks
 ax.xaxis.set_minor_formatter(plt.NullFormatter())
 ax.xaxis.set_minor_locator(plt.NullLocator())
 
-ax.set_xlabel("Return period (years)", fontsize=13, fontweight='bold')
-ax.set_ylabel("Expected\ndamage\narea\n(km$^2$)", 
-              fontsize=12, 
+ax.set_xlabel("Return period (years)", fontweight='bold', labelpad=0)
+ax.set_ylabel("Expected\ndamage\narea\n(km²)", 
               fontweight='bold',
               rotation=0,
-              labelpad=15,  # Reduced padding
+              labelpad=10,  # Reduced padding
               va='center',
               ha='right')
 
-# mark the 100-year return period
-# ax.fill_betweenx([ymin, ymax], 0, 100, color="#F1F3F5", alpha=0.8, zorder=0) #'#F4F1EA'
-# ax.axvline(x=100, ymax=0.95, color='#333333', linestyle='dashed', linewidth=1, zorder=1)
-
-
-plt.subplots_adjust(left=0.2) 
-plt.tight_layout()  
-plt.savefig(os.path.join(data_dir, "..", "figures", 'risk_profile.pdf'), dpi=300, bbox_inches='tight')
-
+if savefigs:
+    plt.savefig(os.path.join(figdir, 'risk_profile.pdf'), dpi=300, transparent=True, bbox_inches='tight')
 
 # %% Damage probability field samples
 from cartopy import crs as ccrs
@@ -226,15 +221,27 @@ import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import xarray as xr
 
-# turn on spines
-plt.rcParams['axes.spines.top'] = True
-plt.rcParams['axes.spines.right'] = True
 
-RP = 20
+plt.rcParams.update({
+    'font.size': 6,
+    'axes.labelsize': 7,
+    'axes.titlesize': 8,
+    'figure.titlesize': 8,
+    'figure.titleweight': 'bold',
+    'axes.titleweight': 'normal',
+    'legend.fontsize': 6,
+    'font.family': 'sans-serif',
+    'axes.spines.top': False,
+    'axes.spines.right': False,
+    'axes.spines.left': True,
+    'axes.spines.bottom': True
+})
+
+RP = 25
 
 def damagefield(
         tree:xr.DataTree, label:str,  ds, ds_var, axs:plt.Axes, rp=10,
-        add_colorbar=False
+        add_colorbar=False, levels=10
         ) -> None:
     ds = ds.copy()
     ds["return_period"] = tree[label]['return_period']
@@ -243,29 +250,29 @@ def damagefield(
     sample = ds.sel(return_period=rp, method='nearest')
     
     # Plot on each row without colorbars
-    im1 = sample.isel(field=0)[ds_var].plot.contourf(ax=axs[0], cmap="viridis", levels=10,
+    im1 = sample.isel(field=0)[ds_var].plot.contourf(ax=axs[0], cmap="summer_r", levels=levels,
                                                      add_colorbar=False, vmin=0, vmax=32)
-    im2 = sample.isel(field=1)[ds_var].plot.contourf(ax=axs[1], cmap="PuBu", levels=10, 
+    im2 = sample.isel(field=1)[ds_var].plot.contourf(ax=axs[1], cmap="PuBu", levels=levels, 
                                                      add_colorbar=False, vmin=0, vmax=0.3)
-    im3 = sample['damage_prob'].plot.contourf(ax=axs[2], cmap="YlOrRd", levels=10,
+    im3 = sample['damage_prob'].plot.contourf(ax=axs[2], cmap="YlOrBr", levels=levels,
                                                      add_colorbar=False, vmin=0, vmax=1)
     
     # Store the image references for later colorbar creation
     rp_approx = sample['return_period'].values.item()
-    title = f"{label}\n(1-in-{rp_approx:.0f})"
+    title = f"{label}\n({rp_approx:.0f}-yr)"
 
     if add_colorbar:
         return im1, im2, im3, title
     
-    axs[0].set_title(f"{label}\n(1-in-{rp_approx:.0f})")
+    axs[0].set_title(f"{label}\n({rp_approx:.0f}-yr)", fontweight='bold')
     axs[1].set_title("")
     axs[2].set_title("")
     
     return title
 
 # Create the figure with the appropriate layout
-fig = plt.figure(figsize=(10, 8))
-gs = fig.add_gridspec(3, 5, width_ratios=[1, 1, 1, 1, 0.05], wspace=0.1, hspace=0.1)
+fig = plt.figure(figsize=(3.5, 2.6))
+gs = fig.add_gridspec(3, 5, width_ratios=[1, 1, 1, 1, 0.05], wspace=0.0, hspace=0.0)
 
 # Create axes with projections
 axs = []
@@ -283,23 +290,23 @@ cbar_ax2 = fig.add_subplot(gs[1, 4])
 cbar_ax3 = fig.add_subplot(gs[2, 4])
 
 # Call damagefield for the first three columns without colorbars
-title0 = damagefield(tree, 'ERA5', train_damages, 'train', axs[:, 0], rp=RP)
-title1 = damagefield(tree, 'Dependent', dependent_damages, 'dependent', axs[:, 1], rp=RP)
-title2 = damagefield(tree, 'Independent', independent_damages, 'independent', axs[:, 2], rp=RP)
+levels = 10
+title0 = damagefield(tree, 'ERA5', train_damages, 'train', axs[:, 0], rp=RP, levels=levels)
+title1 = damagefield(tree, 'Dependent', dependent_damages, 'dependent', axs[:, 1], rp=RP, levels=levels)
+title2 = damagefield(tree, 'Independent', independent_damages, 'independent', axs[:, 2], rp=RP, levels=levels)
 
 # Call the last column with colorbar flag set to True to get the image references
-im1, im2, im3, title3 = damagefield(tree, 'HazGAN', fake_damages, 'fake', axs[:, 3], add_colorbar=True, rp=RP)
+im1, im2, im3, title3 = damagefield(tree, 'HazGAN', fake_damages, 'fake', axs[:, 3], add_colorbar=True, rp=RP, levels=levels)
 
 # Add colorbars using the image references from the last column
-plt.colorbar(im1, cax=cbar_ax1, orientation='vertical', label='')
-plt.colorbar(im2, cax=cbar_ax2, orientation='vertical', label='')
-plt.colorbar(im3, cax=cbar_ax3, orientation='vertical', label='')
-
-# format colorbars to have percentage labels
-cbar_ax1.yaxis.set_major_formatter(plt.matplotlib.ticker.StrMethodFormatter("{x:.2f}"))
-cbar_ax2.yaxis.set_major_formatter(plt.matplotlib.ticker.StrMethodFormatter("{x:.2f}"))
-cbar_ax3.yaxis.set_major_formatter(plt.matplotlib.ticker.PercentFormatter(1, 0))
-
+plt.colorbar(im1, cax=cbar_ax1, orientation='vertical', shrink=0.8, label='', ticks=[0, 10, 20, 30, 40], aspect=20)
+plt.colorbar(im2, cax=cbar_ax2, orientation='vertical', shrink=0.8, label='', ticks=[0, 0.1, 0.2, 0.3])
+plt.colorbar(im3, cax=cbar_ax3, orientation='vertical', shrink=0.8, label='', ticks=[0.25, 0.5, 0.75], format=plt.matplotlib.ticker.PercentFormatter(1, 0))
+for ax in [cbar_ax1, cbar_ax2, cbar_ax3]:
+    pos = ax.get_position()
+    # [left, bottom, width, height] -> making them 20% thinner and 10% shorter
+    ax.set_position([pos.x0 + 0.02, pos.y0 + 0.01, pos.width * 1.1, pos.height * 0.8])
+    
 # Set labels and features for all axes
 for ax in axs.flat:
     ax.set_xlabel("")
@@ -307,19 +314,22 @@ for ax in axs.flat:
     ax.set_title("")
     ax.add_feature(cfeature.COASTLINE, linewidth=0.2)
 
-axs[0, 0].set_ylabel(r"Wind speed (ms$^{-1}$)")
-axs[1, 0].set_ylabel("Precipitation (m)")
-axs[2, 0].set_ylabel("Damage probability")
+# axs[0, 0].set_ylabel(r"Wind speed (ms$^{-1}$)")
+# axs[1, 0].set_ylabel("Precipitation (m)")
+# axs[2, 0].set_ylabel("Damage probability")
 
 # Add titles to the top row
-axs[-1, 0].set_title(title0, y=-.4)
-axs[-1, 1].set_title(f"Dependent\n(1-in-{RP})", y=-.4)
-axs[-1, 2].set_title(f"Independent\n(1-in-{RP})", y=-.4)
-axs[-1, 3].set_title(f"HazGAN\n(1-in-{RP})", y=-.4)
+axs[-1, 0].set_title(title0, y=-.5)
+axs[-1, 1].set_title(f"Dep.\n({RP}-yr)", y=-0.5)
+axs[-1, 2].set_title(f"Indep.\n({RP}-yr)", y=-.5)
+axs[-1, 3].set_title(f"HazGAN\n({RP}-yr)", y=-.5)
 
-plt.tight_layout()
-plt.show()
-fig.savefig(os.path.join(data_dir, "..", "figures", "10yr_mangrove_damages.pdf"), transparent=True, bbox_inches="tight")
+if savefigs:
+    fig.savefig(
+        figdir / f"{RP}yr_mangrove_damages.png",
+        transparent=True,
+        dpi=300,
+    )
 # %% Error table
 
 def assign_rps(
@@ -335,7 +345,7 @@ def assign_rps(
     return sample
 
 all_rps = tree['ERA5']['return_period'].values.tolist()
-sample_rps = [5, 10, 25, 50, 100, 500]
+sample_rps = [5, 10, 25, 50, 100]
 train_rps = assign_rps(tree, 'ERA5', train_damages, rps=sample_rps)
 gan_rps = assign_rps(tree, 'HazGAN', fake_damages, rps=sample_rps)
 indep_rps = assign_rps(tree, 'Independent', independent_damages, rps=sample_rps)
@@ -354,10 +364,9 @@ def make_risk_profile_table(
         constant = 1.0
     data = []
     for rp in rps:
-
-        # era5_rp = train_rps.sel(return_period=rp, method='nearest')
-        # data.append(['ERA5', 'Expected damage area (km²)', rp, era5_rp['expected_damage'].values.item() / constant])
-        # data.append(['ERA5', 'Return period (years)', rp, era5_rp['return_period'].values.item()])
+        era5_rp = train_rps.sel(return_period=rp, method='nearest')
+        data.append(['ERA5', 'Expected damage area (km²)', rp, era5_rp['expected_damage'].values.item() / constant])
+        data.append(['ERA5', 'Return period (years)', rp, era5_rp['return_period'].values.item()])
 
         gan_rp = gan_rps.sel(return_period=rp, method='nearest')
         data.append(['HazGAN', 'Expected damage area (km²)', rp, gan_rp['expected_damage'].values.item() / constant])
@@ -386,12 +395,13 @@ print(df_pivot.to_string(float_format='%.2f'))
 
 
 # %% Calculate errors
-gan_err = gan_rps["expected_damage"].values - train_rps["expected_damage"].values
-gan_dev = gan_rps["return_period"].values - train_rps["return_period"].values
-indep_err = indep_rps["expected_damage"].values - train_rps["expected_damage"].values
-indep_dev = indep_rps["return_period"].values - train_rps["return_period"].values
-dep_err = dep_rps["expected_damage"].values - train_rps["expected_damage"].values
-dep_dev = dep_rps["return_period"].values - train_rps["return_period"].values
+ntrn = len(train_rps['return_period'])
+gan_err = gan_rps["expected_damage"].values[:ntrn] - train_rps["expected_damage"].values
+gan_dev = gan_rps["return_period"].values[:ntrn] - train_rps["return_period"].values
+indep_err = indep_rps["expected_damage"].values[:ntrn] - train_rps["expected_damage"].values
+indep_dev = indep_rps["return_period"].values[:ntrn] - train_rps["return_period"].values
+dep_err = dep_rps["expected_damage"].values[:ntrn] - train_rps["expected_damage"].values
+dep_dev = dep_rps["return_period"].values[:ntrn] - train_rps["return_period"].values
 
 gan_err   = list(gan_err)
 indep_err = list(indep_err)
@@ -427,7 +437,41 @@ indep_dev += [mae_indep_rp]
 dep_dev += [mae_dep_rp]
 sample_rps.append('MAE')  # Add MAE to the list of return periods
 
+# %%
+# print the train results
+print(f"Train:\n-------")
+print("Expected damage area (km²) for return period 5 years:")
+res5yr = train_rps.drop_duplicates(dim="return_period").sel(return_period=5, method="nearest")["expected_damage"].values.item()
+print(f"    {res5yr:.2f}, which is {res5yr/mangrove_area:.2%} of total mangrove area")
+print("Expected damage area (km²) for return period 100 years:")
+res100yr = train_rps.drop_duplicates(dim="return_period").sel(return_period=100, method="nearest")["expected_damage"].values.item()
+print(f"    {res100yr:.2f}, which is {res100yr/mangrove_area:.2%} of total mangrove area")
+
+print(f"HazGAN:\n-------")
+print("Expected damage area (km²) for return period 5 years:")
+res5yr = gan_rps.drop_duplicates(dim="return_period").sel(return_period=5, method="nearest")["expected_damage"].values.item()
+print(f"    {res5yr:.2f}, which is {res5yr/mangrove_area:.2%} of total mangrove area")
+print("Expected damage area (km²) for return period 100 years:")
+res100yr = gan_rps.drop_duplicates(dim="return_period").sel(return_period=100, method="nearest")["expected_damage"].values.item()
+print(f"    {res100yr:.2f}, which is {res100yr/mangrove_area:.2%} of total mangrove area")
+
+print(f"Independent:\n-------")
+print("Expected damage area (km²) for return period 5 years:")
+res5yr = indep_rps.drop_duplicates(dim="return_period").sel(return_period=5, method="nearest")["expected_damage"].values.item()
+print(f"    {res5yr:.2f}, which is {res5yr/mangrove_area:.2%} of total mangrove area")
+print("Expected damage area (km²) for return period 100 years:")
+res100yr = indep_rps.drop_duplicates(dim="return_period").sel(return_period=100, method="nearest")["expected_damage"].values.item()
+print(f"    {res100yr:.2f}, which is {res100yr/mangrove_area:.2%} of total mangrove area") 
+
+print(f"Dependent:\n-------")
+print("Expected damage area (km²) for return period 5 years:")
+res5yr = dep_rps.drop_duplicates(dim="return_period").sel(return_period=5, method="nearest")["expected_damage"].values.item()
+print(f"    {res5yr:.2f}, which is {res5yr/mangrove_area:.2%} of total mangrove area")
+print("Expected damage area (km²) for return period 100 years:")
+res100yr = dep_rps.drop_duplicates(dim="return_period").sel(return_period=100, method="nearest")["expected_damage"].values.item()
+print(f"    {res100yr:.2f}, which is {res100yr/mangrove_area:.2%} of total mangrove area")
 # %% Create hierarchical data structure
+print("Table of errors")
 data = []
 
 for i, rp in enumerate(sample_rps):
@@ -475,4 +519,22 @@ latex_table = df_pivot.to_latex(
 )
 
 print(latex_table)
+# %% Look at 500-yr risk
+
+gan_rps = assign_rps(tree, 'HazGAN', fake_damages, rps=[500])
+indep_rps = assign_rps(tree, 'Independent', independent_damages, rps=[500])
+dep_rps = assign_rps(tree, 'Dependent', dependent_damages, rps=[500])
+
+# %%
+gan_exp = gan_rps["expected_damage"].values.item()
+gan_frac = gan_exp / mangrove_area
+print(f"HazGAN 500-yr expected damage area: {gan_exp:.2f} km², which is {gan_frac:.2%} of total mangrove area")
+# %%
+dep_exp = dep_rps["expected_damage"].values.item()
+dep_frac = dep_exp / mangrove_area
+print(f"Dependent 500-yr expected damage area: {dep_exp:.2f} km², which is {dep_frac:.2%} of total mangrove area")
+# %%
+indep_exp = indep_rps["expected_damage"].values.item()
+indep_frac = indep_exp / mangrove_area
+print(f"Independent 500-yr expected damage area: {indep_exp:.2f} km², which is {indep_frac:.2%} of total mangrove area")
 # %%
