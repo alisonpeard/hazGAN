@@ -14,7 +14,9 @@ plt.rcParams.update({
     'font.family': 'sans-serif'
 })
 
+
 path = "extcorrs.csv"
+
 
 def hist(x, ax, **kwargs):
     x_data = df[x]
@@ -39,7 +41,7 @@ def scatter_with_corr(df, x, y, ax, **kwargs):
         f"{'R^2':<{w}} = {r_squared:.3f}\n"
         f"{'MAE':<{w}} = {mae:.3f}"
     )
-    ax.text(0.7, 0.5, label, transform=ax.transAxes, 
+    ax.text(0.7, 0.3, label, transform=ax.transAxes, 
             verticalalignment='top',
             family='monospace',
             bbox=dict(boxstyle='round', facecolor='white', alpha=0.)
@@ -55,21 +57,22 @@ if __name__ == "__main__":
     scatter_kws = dict(s=1, alpha=1., color='k', edgecolor="none")
 
     # plot spatial extremal correlations
-    fig, axs = plt.subplots(3, 2, figsize=(3.5, 4),
+    fig, axs = plt.subplots(2, 3, figsize=(6, 3),
                             sharex=True, sharey=True,
                             layout="constrained"
     )
 
-    scatter_with_corr(df, "chi_base_u10_spatial", "chi_ht_u10_spatial", axs[0, 0], **scatter_kws)
-    scatter_with_corr(df, "chi_base_u10_spatial", "chi_samp_u10_spatial", axs[0, 1], **scatter_kws)
+    scatter_with_corr(df, "chi_base_u10_spatial", "chi_samp_u10_spatial", axs[0, 0], **scatter_kws)
+    scatter_with_corr(df, "chi_base_u10_spatial", "chi_ht_u10_spatial", axs[1, 0], **scatter_kws)
 
-    scatter_with_corr(df, "chi_base_tp_spatial", "chi_ht_tp_spatial", axs[1, 0], **scatter_kws)
-    scatter_with_corr(df, "chi_base_tp_spatial", "chi_samp_tp_spatial", axs[1, 1], **scatter_kws)
-    scatter_with_corr(df, "chi_base_mslp_spatial", "chi_ht_mslp_spatial", axs[2, 0], **scatter_kws)
-    scatter_with_corr(df, "chi_base_mslp_spatial", "chi_samp_mslp_spatial", axs[2,1], **scatter_kws)
+    scatter_with_corr(df, "chi_base_tp_spatial", "chi_samp_tp_spatial", axs[0, 1], **scatter_kws)
+    scatter_with_corr(df, "chi_base_tp_spatial", "chi_ht_tp_spatial", axs[1, 1], **scatter_kws)
+
+    scatter_with_corr(df, "chi_base_mslp_spatial", "chi_samp_mslp_spatial", axs[0, 2], **scatter_kws)
+    scatter_with_corr(df, "chi_base_mslp_spatial", "chi_ht_mslp_spatial", axs[1, 2], **scatter_kws)
 
     for ax in axs.flat:
-        ax.set_xlabel("χ(0.9) - ERA5")
+        ax.set_xlabel("χ(0.8) - ERA5")
         ax.label_outer()
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
@@ -78,13 +81,13 @@ if __name__ == "__main__":
         ax.set_xlim(-0.1, 1.1)
         ax.set_ylim(-0.1, 1.1)
 
-    axs[0, 0].set_title("H&T (2004)", y=0.85)
-    axs[0, 1].set_title("hazGAN", y=0.85)
-    axs[0,0].set_ylabel("\nu10")
-    axs[1,0].set_ylabel("χ(0.9) - generated\ntp")
-    axs[2,0].set_ylabel("\nmslp")
+    axs[0, 0].set_title("u10", y=0.85, fontweight='bold')
+    axs[0, 1].set_title("tp", y=0.85, fontweight='bold')
+    axs[0, 2].set_title("mslp", y=0.85, fontweight='bold')
+    axs[0,0].set_ylabel("hazGAN")
+    axs[1,0].set_ylabel("H&T (2004)")
 
-    caption = """Extremal coefficient χ(0.9) between 1000 randomly sampled pairs of locations for wind speed (u10),
+    caption = """Extremal coefficient χ(0.8) between 1000 randomly sampled pairs of locations for wind speed (u10),
     precipitation (tp), and mean sea level pressure (mslp). HT2004 refers to the method of Heffernan and Tawn (2004),
     where the the first member of each location pair is used as the conditioning variable. Both HT2004 and
     hazGAN generate 914 samples for each pair (corresponding to 500 years of events)."""
@@ -93,21 +96,22 @@ if __name__ == "__main__":
     fig.savefig(figdir / "extcorrs_spatial.png", dpi=300, transparent=True)
 
     # %% plot multivariate extremal correlations
-    fig, axs = plt.subplots(3, 2, figsize=(3.5, 4),
+    fig, axs = plt.subplots(2, 3, figsize=(6, 3),
                             sharex=True, sharey=True,
                             layout="constrained"
     )
 
-    scatter_with_corr(df, "chi_base_u10_tp", "chi_ht_u10_tp", axs[0, 0], **scatter_kws)
-    scatter_with_corr(df, "chi_base_u10_tp", "chi_samp_u10_tp", axs[0, 1], **scatter_kws)
+    scatter_with_corr(df, "chi_base_u10_tp", "chi_samp_u10_tp", axs[0, 0], **scatter_kws)
+    scatter_with_corr(df, "chi_base_u10_tp", "chi_ht_u10_tp", axs[1, 0], **scatter_kws)
 
-    scatter_with_corr(df, "chi_base_u10_mslp", "chi_ht_u10_mslp", axs[1, 0], **scatter_kws)
-    scatter_with_corr(df, "chi_base_u10_mslp", "chi_samp_u10_mslp", axs[1,1], **scatter_kws)
-    scatter_with_corr(df, "chi_base_tp_mslp", "chi_ht_tp_mslp", axs[2, 0], **scatter_kws)
-    scatter_with_corr(df, "chi_base_tp_mslp", "chi_samp_tp_mslp", axs[2,1], **scatter_kws)
+    scatter_with_corr(df, "chi_base_u10_mslp", "chi_samp_u10_mslp", axs[0, 1], **scatter_kws)
+    scatter_with_corr(df, "chi_base_u10_mslp", "chi_ht_u10_mslp", axs[1, 1], **scatter_kws)
+
+    scatter_with_corr(df, "chi_base_tp_mslp", "chi_samp_tp_mslp", axs[0, 2], **scatter_kws)
+    scatter_with_corr(df, "chi_base_tp_mslp", "chi_ht_tp_mslp", axs[1, 2], **scatter_kws)
 
     for ax in axs.flat:
-        ax.set_xlabel("χ(0.9) - ERA5")
+        ax.set_xlabel("χ(08) - ERA5")
         ax.label_outer()
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
@@ -116,80 +120,11 @@ if __name__ == "__main__":
         ax.set_xlim(-0.1, 1.1)
         ax.set_ylim(-0.1, 1.1)
 
-    axs[0, 0].set_title("H&T (2004)", y=0.85)
-    axs[0, 1].set_title("hazGAN", y=0.85)
-    axs[0,0].set_ylabel("\nu10 v tp")
-    axs[1,0].set_ylabel("χ(0.9) - generated\nu10 v mslp")
-    axs[2,0].set_ylabel("\ntp v mslp")
+    axs[0, 0].set_title("u10 v tp", y=0.85, fontweight='bold')
+    axs[0, 1].set_title("u10 v mslp", y=0.85, fontweight='bold')
+    axs[0,2].set_title("tp v mslp", y=0.85, fontweight='bold')
+    axs[1,0].set_ylabel("H&T (2004)")
+    axs[0,0].set_ylabel("hazGAN")
 
     fig.savefig(figdir / "extcorrs_multiv.png", dpi=300, transparent=True)
-    # %%
-    hist_kws = dict(bins=20, color="lightgrey",
-                    edgecolor='k', linewidth=0.5, density=True,
-                    histtype="stepfilled")
-
-
-    fig, axs = plt.subplots(3, 3, figsize=(3.5, 3),
-                            sharex=True, sharey=True,
-                            layout="constrained"
-    )
-
-    hist("chi_base_u10_spatial", axs[0, 0], **hist_kws)
-    hist("chi_ht_u10_spatial", axs[0, 1], **hist_kws)
-    hist("chi_samp_u10_spatial", axs[0, 2], **hist_kws)
-
-    hist("chi_base_tp_spatial", axs[1, 0], **hist_kws)
-    hist("chi_ht_tp_spatial", axs[1, 1], **hist_kws)
-    hist("chi_samp_tp_spatial", axs[1, 2], **hist_kws)
-
-    hist("chi_base_mslp_spatial", axs[2, 0], **hist_kws)
-    hist("chi_ht_mslp_spatial", axs[2, 1], **hist_kws)
-    hist("chi_samp_mslp_spatial", axs[2, 2], **hist_kws)
-
-    for ax in axs.flat:
-        ax.label_outer()
-        ax.set_xlabel("χ(0.9)")
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-
-    axs[0, 0].set_title("ERA5 (n=150)", y=0.85)
-    axs[0, 1].set_title("H&T (2004)", y=0.85)
-    axs[0, 2].set_title("hazGAN", y=0.85)
-    axs[0,0].set_ylabel("u10")
-    axs[1,0].set_ylabel("tp")
-    axs[2,0].set_ylabel("mslp")
-
-    fig.savefig(figdir / "hists_spatial.png", dpi=300, transparent=True)
-    # %%
-    fig, axs = plt.subplots(3, 3, figsize=(3.5, 3),
-                            sharex=True, sharey=True,
-                            layout="constrained"
-    )
-
-    hist("chi_base_u10_tp", axs[0, 0], **hist_kws)
-    hist("chi_ht_u10_tp", axs[0, 1], **hist_kws)
-    hist("chi_samp_u10_tp", axs[0, 2], **hist_kws)
-
-    hist("chi_base_u10_mslp", axs[1, 0], **hist_kws)
-    hist("chi_ht_u10_mslp", axs[1, 1], **hist_kws)
-    hist("chi_samp_u10_mslp", axs[1, 2], **hist_kws)
-
-    hist("chi_base_tp_mslp", axs[2, 0], **hist_kws)
-    hist("chi_ht_tp_mslp", axs[2, 1], **hist_kws)
-    hist("chi_samp_tp_mslp", axs[2, 2], **hist_kws)
-
-    for ax in axs.flat:
-        ax.label_outer()
-        ax.set_xlabel("χ(0.9)")
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-
-    axs[0, 0].set_title("ERA5 (n=150)", y=0.85)
-    axs[0, 1].set_title("H&T (2004)", y=0.85)
-    axs[0, 2].set_title("hazGAN", y=0.85)
-    axs[0,0].set_ylabel("u10 v tp")
-    axs[1,0].set_ylabel("u10 v mslp")
-    axs[2,0].set_ylabel("tp v mslp")
-
-    fig.savefig(figdir / "hists_multiv.png", dpi=300, transparent=True)
 # %%

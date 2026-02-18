@@ -9,7 +9,7 @@ from joblib import load
 
 from . import MangroveDamage
 
-MODELPATH = "/Users/alison/Documents/DPhil/paper1.nosync/hazGAN-data/mangroves/damagemodel.pkl"
+MODELPATH = "/Users/alison/Documents/dphil/data/hazGAN/mangroves/damagemodel.pkl"
 
 class mangroveDamageModel(object):
     def __init__(self, modelpath=None) -> None:

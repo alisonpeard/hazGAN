@@ -333,16 +333,16 @@ if __name__ == "__main__":
         del results, statspath
 
     # %% ==============================================================
-    # 64x64 plots of data
-    sampleplots = False
+    # 64x64 plots of footprints
+    sampleplots = True
+    field = 0
+    shuffle = False
     if sampleplots:
         reload(samples)
 
         def format_rp(value, tick_number):
             return f"{value:,.0f}"
 
-        field = 0
-        shuffle = False
 
         k = scales[field]
         metric = units[field]
@@ -503,7 +503,6 @@ if __name__ == "__main__":
             outpath = os.path.join(outdir, f"extcorr_{pair_str}.png")
             savefig(fig_χ, outpath, savefigs, savefig_kws)
 
-
         save_stats_csv(statspath, results)
         print(f"saved summary statistics to {statspath}")
 
@@ -545,6 +544,7 @@ if __name__ == "__main__":
             outpath = os.path.join(outdir, f"pearson_{k}.png")
             savefig(fig_r, outpath, savefigs, savefig_kws)
 
+            # Extremal dependence plots (χ(u))
             if extcorrplot:
                 results[f"extremal{k}"] = {}
                 fig_χ, metrics_χ = spatial.plot(

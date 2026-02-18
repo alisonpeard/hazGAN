@@ -199,7 +199,7 @@ if __name__ == "__main__":
             results[var]["significant p-values"] = p_significant["grid"].nunique()
 
             outpath = figdir / f"{var}.png"
-            fig.savefig(outpath, dpi=300, transparent=True)
+            fig.savefig(outpath, dpi=300, transparent=False)
             print(f"Saved {var} parameters plot to {outpath}")
 
     #  important: assert ecdfs are in [0, 1)

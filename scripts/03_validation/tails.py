@@ -27,7 +27,7 @@ plt.rcParams.update({
 # script parameters
 scaling   = "rp10000"
 domains   = ["rescaled", "uniform", "gumbel", "gaussian"]
-field_idx = 2
+field_idx = 0
 field_nom = ["u10", "tp", "mslp"][field_idx]
 tmax = 0.95
 hist_bins = 20
@@ -98,8 +98,8 @@ def histogram(ax, i, j, thresh, train, gen, trn_kws, gen_kws):
     ax.hist(train, label=f"ERA5", **trn_kws);
     ax.hist(gen, label=f"HazGAN", **gen_kws);
 
-    if (i == 0) & (j == 2):
-        ax.legend(loc="center right", frameon=False)
+    if (i == 0) & (j == 3):
+        ax.legend(loc="center right", frameon=False, bbox_to_anchor=(1.25, 0.5))
     if i == 0:
         ax.set_title(f"{domain.capitalize()}", y=0.85)
     if (j == 0) & (i == 0):

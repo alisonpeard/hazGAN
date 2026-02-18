@@ -47,7 +47,7 @@ def _ecdf(x: np.ndarray) -> np.ndarray:
 
 
 @njit
-def _chi(u, v, t=0.9):
+def _chi(u, v, t=0.8):
     """https://doi.org/10.1023/A:1009963131610"""
     n = len(u)
     both_above = np.sum((u > t) & (v > t))

@@ -16,7 +16,19 @@ SIMPLIFIED = False
 env = Env()
 env.read_env()
 
+plt.rcParams.update({
+    'font.size': 6,
+    'axes.labelsize': 7,
+    'axes.titlesize': 8,
+    'figure.titlesize': 8,
+    'figure.titleweight': 'bold',
+    'axes.titleweight': 'normal',
+    'legend.fontsize': 6,
+    'font.family': 'sans-serif'
+})
+
 data_dir = env.str("DATA_DIR")
+figdir = env.str("FIG_DIR")
 path = os.path.join(data_dir, "processing", "storms.parquet")
 
 
@@ -61,7 +73,7 @@ else:
     grid_counts = filtered_df.groupby("grid").size().reset_index(name="count").sort_values(by="count", ascending=False)
 
 
-# %% Add visualisation
+# %% Add visualisations
 path = os.path.join(data_dir, "processing", "data_1941_2022.nc")
 coords = xr.open_dataset(path)
 coords = coords['grid'].to_dataframe().reset_index()
@@ -82,12 +94,18 @@ counts = gdf.set_index(["lat", "lon"]).to_xarray()
 counts["perc"] = counts["count"] / nevents
 
 print(f"Max conditioning percentage: {counts['perc'].max().item()*100:.2f}%")
-# %%
-fig, ax = plt.subplots(1, 1, figsize=(10, 10), subplot_kw={"projection": ccrs.PlateCarree()})
-counts["perc"].plot(ax=ax, transform=ccrs.PlateCarree(), cmap="OrRd")
-ax.add_feature(cfeature.COASTLINE)
-ax.add_feature(cfeature.BORDERS, linestyle=':')
-ax.set_title("Number of storms conditioned on each grid cell (1941-2022)")
+# %% === plot just the percentage of storms conditioned on each grid cell === 
+fig, ax = plt.subplots(1, 1, figsize=(3, 3), subplot_kw={"projection": ccrs.PlateCarree()})
+counts["perc"].plot.contourf(ax=ax, transform=ccrs.PlateCarree(), cmap="OrRd",
+                             cbar_kwargs={
+                                 "label": "Conditioning frequency (%)",
+                                 "orientation": "horizontal",
+                                 "pad": 0.025, "shrink": 0.8,
+                                 "format": lambda x, _: f"{x*100:.1f}"
+                                })
+ax.add_feature(cfeature.COASTLINE, linewidth=0.5, alpha=0.8)
+ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.5, alpha=0.8)
+# ax.set_title("Number of storms conditioned on each grid cell (1941-2022)")
 
 # %%
 path = os.path.join(data_dir, "processing", "data_1941_2022.nc")
@@ -102,37 +120,56 @@ mean_anomaly_u10 = anomaly_u10.mean(dim="time")
 std_anomaly_u10 = anomaly_u10.std(dim="time")
 q99_anomaly_u10 = anomaly_u10.quantile(0.99, dim="time")
 
-plt.rcParams.update({'font.size': 8})
+
+
+# %% plot mean, std and percentage of storms conditioned on each grid cell
 
 # increase cbar font size
 CMAP = "OrRd"
 
-fig, ax = plt.subplots(1, 3, figsize=(11/2, 5/2), subplot_kw={"projection": ccrs.PlateCarree()})
-mean_u10.plot(ax=ax[0], transform=ccrs.PlateCarree(), cmap=CMAP,
-                      cbar_kwargs={"label": "m/s", "orientation": "horizontal", "pad": 0.01, "shrink": 0.9,
-                                   "format": lambda x, _: f"{x:.2f}"})
-ax[0].add_feature(cfeature.COASTLINE)
-ax[0].add_feature(cfeature.BORDERS, linestyle=':')
-ax[0].set_title("Mean 10 m wind speed")
+# resample counts to 1 degree grid for better visualisation
+# comment to toggle resampling
+# counts_resampled = counts["perc"].coarsen(lat=3, lon=3, boundary="trim").max()
+counts_resampled = counts["perc"].copy()
 
-std_u10.plot(ax=ax[1], transform=ccrs.PlateCarree(), cmap=CMAP,
-                      cbar_kwargs={"label": "m/s", "orientation": "horizontal", "pad": 0.01, "shrink": 0.9,
-                                   "format": lambda x, _: f"{x:.3f}"})
+fig, axs = plt.subplots(1, 3,
+                       figsize=(4, 3),
+                       subplot_kw={"projection": ccrs.PlateCarree()},
+                       constrained_layout=True
+                       )
 
-ax[1].add_feature(cfeature.COASTLINE)
-ax[1].add_feature(cfeature.BORDERS, linestyle=':')
-ax[1].set_title("Std. of 10 m wind speed ")
+mean_u10.plot(ax=axs[0], transform=ccrs.PlateCarree(), cmap=CMAP,
+                      cbar_kwargs={
+                          "label": "mean u10 (m s⁻²)",
+                          "orientation": "horizontal",
+                          "pad": 0.01, "shrink": 0.8,
+                          "format": lambda x, _: f"{x:.2f}",
+                          "ticks": [0.0, 2.5, 5.0, 7.5]}
+                        )
 
-counts["perc"].plot(ax=ax[2], transform=ccrs.PlateCarree(), cmap=CMAP,
-                      cbar_kwargs={"label": "conditioning frequency (%)",
-                                   "orientation": "horizontal", "pad": 0.01,
-                                   "shrink": 0.9,
-                                   "format": lambda x, _: f"{x*100:.1f}"
-                                   })
-ax[2].add_feature(cfeature.COASTLINE)
-ax[2].add_feature(cfeature.BORDERS, linestyle=':')
-ax[2].set_title("Storm conditioning")
+std_u10.plot(ax=axs[1], transform=ccrs.PlateCarree(), cmap=CMAP,
+                      cbar_kwargs={
+                          "label": "std u10 (m s⁻²)",
+                          "orientation": "horizontal",
+                          "pad": 0.01, "shrink": 0.8,
+                          "format": lambda x, _: f"{x:.0f}",
+                          "ticks": [1.0, 2.0, 3.0, 4.0]}
+                )
 
-plt.tight_layout()
+counts_resampled.plot(ax=axs[2], transform=ccrs.PlateCarree(), cmap=CMAP,
+                      cbar_kwargs={
+                          "label": "freq. (%)",
+                          "orientation": "horizontal",
+                          "pad": 0.01, "shrink": 0.8,
+                          "format": lambda x, _: f"{x*100:.1f}",
+                          "ticks": [0.01, 0.02, 0.03]
+                          })
+
+for ax in axs.flatten():
+    ax.add_feature(cfeature.COASTLINE, linewidth=0.5, alpha=0.8)
+    ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.5, alpha=0.8)
+
+fig.savefig(os.path.join(figdir, "conditioning_bias.png"), dpi=300)
+
 # %%
 

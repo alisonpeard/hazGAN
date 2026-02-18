@@ -16,9 +16,9 @@ samples_path <- "/Users/alison/Documents/dphil/data/hazGAN/generated/rp10000/gau
 # how many pairs of points to sample
 # 300 for dev, 1000 for report
 n_pairs <- 1000
-empirical <- TRUE
+empirical <- FALSE # empirical seems to give better results
 constrain_ht <- TRUE
-thresh <- 0.9
+thresh <- 0.8
 
 ecdf <- function(x) {
   # ecdf that avoids (0, 1), Weibull plotting positions

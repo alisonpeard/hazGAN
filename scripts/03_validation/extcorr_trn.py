@@ -36,7 +36,7 @@ tmin = 0.7
 tmax = 0.99
 tstep = 0.01
 nboot = 200
-t_final = 0.9
+t_final = 0.8
 
 
 def subset(data, field:str, thresh:float=15):
@@ -166,7 +166,14 @@ if __name__ == "__main__":
             u0_b, u1_b = u0[idx], u1[idx]
             for j, u in enumerate(thresholds):
                 chis[b, j] = extcorr(u0_b, u1_b, t=u, method=method)
-        chis_mean, ci_lower, ci_upper, n = bootstrap_stats(chis)
+        chis_mean, ci_lower, ci_upper, _ = bootstrap_stats(chis)
+
+        # calculate num exceeding each threshold overall
+        u0_ecdf = _ecdf(u0)
+        u1_ecdf = _ecdf(u1)
+        n = np.zeros_like(thresholds, dtype=int)
+        for j, t in enumerate(thresholds):
+             n[j] = np.sum((u0_ecdf > t) & (u1_ecdf > t))
 
         # get χ at t_final
         t_final_idx = np.argmin(np.abs(thresholds - t_final))
@@ -192,7 +199,9 @@ if __name__ == "__main__":
 
         # χ(u) plot
         ax = axs[1]
-        ax.plot(thresholds, chis_mean, '-', color='k', lw=0.5)
+        valid = n >= 5
+        ax.plot(thresholds[valid], chis_mean[valid], '-', color='k', lw=0.5)
+        ax.plot(thresholds, chis_mean, ':', color='k', lw=0.5)
         ax.fill_between(thresholds, ci_lower, ci_upper,
                         color='gray', alpha=0.25, linewidth=0.1)
 
@@ -221,3 +230,4 @@ if __name__ == "__main__":
     print(f"Saved {i+1} diagnostic plots to {figdir}")
 
 # %%
+
