@@ -41,7 +41,7 @@ if __name__ == "__main__":
     # set up directories
     env = Env()
     env.read_env(recurse=True)
-    datadir = env.str("ERA5DIR")
+    datadir = env.str("PROCDIR")
     source_dir = os.path.join(datadir,'input')
     target_dir = os.path.join(datadir,'resampled')
     os.makedirs(target_dir, exist_ok=True)

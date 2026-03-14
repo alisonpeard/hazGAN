@@ -10,11 +10,11 @@ source("utils/settings.R")
 
 readRenviron("../../.env")
 
-WD      <- Sys.getenv("PROCESSING_DIR")
+WD      <- Sys.getenv("PROCDIR")
 DRYRUN  <- FALSE
 NDRYRUN <- 8
 
-daily    <- read_parquet(paste0(WD, "/", "daily.parquet"))
+cubes    <- read_parquet(paste0(WD, "/", "cubes.parquet"))
 metadata <- read_parquet(paste0(WD, "/", "storms_metadata.parquet"))
 
 # subset to mini data set if it's a dry run
@@ -26,9 +26,9 @@ if(DRYRUN) {
 #%%######## TRANSFORM STORMS ###################################################
 print("Transforming fields...")
 # storms_wind <- weibull_transformer(daily, metadata, "u10", Q);warnings()
-storms_wind <- gpd_transformer(daily, metadata, "u10", Q);warnings()
-storms_mslp <- gpd_transformer(daily, metadata, "msl", Q);warnings()
-storms_tp   <- gpd_transformer(daily, metadata, "tp", Q);warnings()
+storms_wind <- gpd_transformer(cubes, metadata, "u10", Q);warnings()
+storms_mslp <- gpd_transformer(cubes, metadata, "msl", Q);warnings()
+storms_tp   <- gpd_transformer(cubes, metadata, "tp", Q);warnings()
 
 print("Done. Putting it all together...")
 renamer <- function(df, var) {
@@ -52,8 +52,8 @@ storms$thresh.q <- Q # keep track of threshold used
 ########### SAVE RESULTS #######################################################
 if (!DRYRUN) {
   print("Saving...")
-  write_parquet(storms, paste0(WD, "/", "storms.parquet"))
-  cat("\nSaved as:", paste0(WD, "/", "storms.parquet"))
+  write_parquet(storms, paste0(WD, "/", "event_footprints.parquet"))
+  cat("\nSaved as:", paste0(WD, "/", "event_footprints.parquet"))
   print(paste0("Finished! ", length(unique(storms$storm)), " events processed."))
 }
 ########### END ################################################################
