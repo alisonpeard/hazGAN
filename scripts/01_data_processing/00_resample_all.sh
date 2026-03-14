@@ -10,5 +10,5 @@
 
 YEARS=($(seq 1940 2022))
 
-python resample.py --year ${YEARS[$SLURM_ARRAY_TASK_ID]} --res 64 64
+python 00_resample_year.py --year ${YEARS[$SLURM_ARRAY_TASK_ID]} --res 64 64
 

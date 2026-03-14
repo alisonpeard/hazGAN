@@ -42,8 +42,8 @@ if __name__ == "__main__":
     # setup environment
     env = Env()
     env.read_env(recurse=True)
-    source_dir = env.str("ERA5DIR")
-    target_dir = env.str("ERA5DIR")
+    source_dir = env.str("PROCDIR")
+    target_dir = env.str("PROCDIR")
     files = glob(os.path.join(source_dir, "resampled", f"*.nc"))
     start = time()
 
@@ -134,7 +134,7 @@ if __name__ == "__main__":
     year0 = ds_filtered['time'].dt.year.values.min()
     yearn = ds_filtered['time'].dt.year.values.max()
     np.save(os.path.join(target_dir, "windbomb.npy"), template.compute())
-    ds_filtered.to_netcdf(os.path.join(target_dir, f"data_{year0}_{yearn}.nc"))
+    ds_filtered.to_netcdf(os.path.join(target_dir, f"resampled_{year0}_{yearn}.nc"))
 
     end = time()
     print(f"Processing time: {end - start:.2f} seconds")

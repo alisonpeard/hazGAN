@@ -39,7 +39,7 @@ if __name__ == '__main__':
     env = Env()
     env.read_env(recurse=True)
     source_dir = '/soge-home/data/analysis/era5/0.28125x0.28125/hourly/'
-    target_dir = os.path.join(env.str('ERA5DIR'), 'original')
+    target_dir = os.path.join(env.str('PROCDIR'), 'input')
 
     i = int(sys.argv[1]) # load the index from the command line
     years = np.arange(YEAR0, YEARN)

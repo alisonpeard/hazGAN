@@ -57,7 +57,7 @@ RES = (64, 64)
 
 # for snakemake in future
 CMAP = "PuBu_r"
-INFILES = ['data_1941_2022.nc', 'storms.parquet', 'storms_metadata.parquet', 'medians.csv']
+INFILES = ['resampled_1941_2022.nc', 'event_footprints.parquet', 'event_metadata.parquet', 'climatology.csv']
 OUTFILES = ['data.nc']
 
 
@@ -77,9 +77,9 @@ if __name__ == "__main__":
     # configure paths
     env = Env()
     env.read_env(recurse=True)
-    datadir = env.str("PROCESSING_DIR")
+    datadir = env.str("PROCDIR")
     outdir = env.str("TRAINDIR")
-    figdir = Path(env.str("FIG_DIR")) / "params"
+    figdir = Path(env.str("FIGDIR")) / "params"
     figdir.mkdir(parents=True, exist_ok=True)
 
     # load coordinates

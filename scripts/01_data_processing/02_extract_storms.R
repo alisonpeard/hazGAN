@@ -12,8 +12,6 @@ Files:
   - storms.parquet
   - metadata.parquet
   - medians.csv
-
-LAST RUN: 17-02-2025
 "
 #%%######### START #############################################################
 # Clear environment
@@ -34,7 +32,7 @@ try(setwd(dirname(rstudioapi::getActiveDocumentContext()$path)))
 
 readRenviron("../../.env")
 
-WD <- Sys.getenv("ERA5DIR")
+WD <- Sys.getenv("PROCDIR")
 
 #%%######### LOAD AND STANDARDISE DATA #########################################
 print("Loading and standardising data...")
@@ -74,8 +72,8 @@ metadata   <- storm_extractor(daily, "u10", RFUNC)
 
 ########### SAVE RESULTS #######################################################
 print("Finished storm extraction. Saving...")
-write.csv(medians, paste0(WD, "/", "medians.csv"), row.names = FALSE)
-write_parquet(metadata, paste0(WD, "/", "storms_metadata.parquet"))
-write_parquet(daily, paste0(WD, "/", "daily.parquet"))
+write.csv(medians, paste0(WD, "/", "climatology.csv"), row.names = FALSE)
+write_parquet(metadata, paste0(WD, "/", "event_metadata.parquet"))
+write_parquet(daily, paste0(WD, "/", "event_cubes.parquet"))
 
 ########### END ################################################################

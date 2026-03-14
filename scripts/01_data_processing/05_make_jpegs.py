@@ -72,7 +72,6 @@ def rescale_array(array, method, arg, domain):
         raise ValueError(f"unknown rescaling method: {method}.")
 
 
-
 def main(rescale_method, rescale_arg, domain, output_format):
     env = Env()
     env.read_env(recurse=True)
@@ -138,6 +137,7 @@ def main(rescale_method, rescale_arg, domain, output_format):
             output_path = outdir / output_format / f"storm_{i}.{output_format}"
             np.save(output_path, y_i * 255)
         storm_paths.append(output_path)
+    
     print(f"\nSaved {len(storm_paths)} images to {outdir}")
 
     # save stats csv
