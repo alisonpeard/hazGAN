@@ -141,7 +141,7 @@ if __name__ == "__main__":
     env.read_env()
 
     datadir = Path(env.str("TRAINDIR"))
-    figdir = Path(env.str("FIG_DIR")) / method / "train"
+    figdir = Path(env.str("FIGDIR")) / method / "train"
 
     print(f"\nLoading data from {datadir / 'data.nc'}")
     print(f"Saving figures to {figdir}\n")

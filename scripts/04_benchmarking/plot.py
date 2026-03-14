@@ -3,6 +3,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
+from environs import Env
 import numpy as np
 
 
@@ -49,9 +50,13 @@ def scatter_with_corr(df, x, y, ax, **kwargs):
 
 
 if __name__ == "__main__":
+
+    env = Env()
+    env.read_env()
+
     df = pd.read_csv(path).dropna()
 
-    figdir = Path("/Users/alison/Documents/dphil/data/hazGAN/figures") / "ht2004"
+    figdir = Path(env.str("FIGDIR")) / "ht2004"
     figdir.mkdir(exist_ok=True, parents=True)
 
     scatter_kws = dict(s=1, alpha=1., color='k', edgecolor="none")

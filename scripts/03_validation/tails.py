@@ -131,8 +131,8 @@ if __name__ == "__main__":
     fig, axes = plt.subplots(2, 4, figsize=(6, 2.0), constrained_layout=True)
 
     trndir = Path(env.str("TRAINDIR")) / "images" / scaling
-    gendir = Path(env.str("SAMPLES_DIR")) / scaling
-    figdir = Path(env.str("FIG_DIR")) / "tails" / scaling
+    gendir = Path(env.str("GENDIR")) / scaling
+    figdir = Path(env.str("FIGDIR")) / "tails" / scaling
     figdir.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{trndir=}")

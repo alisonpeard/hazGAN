@@ -143,8 +143,8 @@ if __name__ == "__main__":
     env = Env()
     env.read_env()
 
-    datadir = Path(env.str("SAMPLES_DIR")) / scaling / margins / "nc"
-    figdir = Path(env.str("FIG_DIR")) / method / "gen" / scaling / margins
+    datadir = Path(env.str("GENDIR")) / scaling / margins / "nc"
+    figdir = Path(env.str("FIGDIR")) / method / "gen" / scaling / margins
 
     print(f"\nLoading data from {datadir / 'data.nc'}")
     print(f"Saving figures to {figdir}\n")

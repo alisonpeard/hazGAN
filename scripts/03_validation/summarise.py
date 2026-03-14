@@ -14,7 +14,7 @@ from scipy.stats import wasserstein_distance
 env = Env()
 env.read_env()
 
-figdir = Path(env.str("FIG_DIR"))
+figdir = Path(env.str("FIGDIR"))
 
 # %% Summarise wasserstein distances
 # NOTE: these are divided by std.

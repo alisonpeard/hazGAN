@@ -126,8 +126,8 @@ if __name__ == "__main__":
 
     # configure paths   
     train_dir = Path(env.str("TRAINDIR"))
-    samples_dir = Path(env.str("SAMPLES_DIR")) / args.scaling / args.domain / "npy"
-    figdir = Path(env.str("FIG_DIR"))
+    samples_dir = Path(env.str("GENDIR")) / args.scaling / args.domain / "npy"
+    figdir = Path(env.str("FIGDIR"))
     figdir.mkdir(parents=True, exist_ok=True)
     medians_path = train_dir / "data.nc"
 

@@ -27,9 +27,9 @@ plt.rcParams.update({
     'font.family': 'sans-serif'
 })
 
-data_dir = env.str("DATA_DIR")
-figdir = env.str("FIG_DIR")
-path = os.path.join(data_dir, "processing", "storms.parquet")
+datadir = env.str("PROCDIR")
+figdir = env.str("FIGDIR")
+path = os.path.join(datadir, "event_footprints.parquet")
 
 
 if SIMPLIFIED:
@@ -53,11 +53,11 @@ if SIMPLIFIED:
 else:
     # try including all days of storms
     os.listdir(os.path.dirname(path))
-    daily_path = os.path.join(data_dir, "processing", "daily.parquet")
+    daily_path = os.path.join(datadir, "event_cubes.parquet")
     daily_df = pd.read_parquet(daily_path)
     daily_df.head()
 
-    meta_path = os.path.join(data_dir, "processing", "storms_metadata.parquet")
+    meta_path = os.path.join(datadir, "event_metadata.parquet")
     meta_df = pd.read_parquet(meta_path)
     meta_df.head()
 
@@ -74,7 +74,7 @@ else:
 
 
 # %% Add visualisations
-path = os.path.join(data_dir, "processing", "data_1941_2022.nc")
+path = os.path.join(datadir, "resampled_1941_2022.nc")
 coords = xr.open_dataset(path)
 coords = coords['grid'].to_dataframe().reset_index()
 coords = gpd.GeoDataFrame(
@@ -108,7 +108,7 @@ ax.add_feature(cfeature.BORDERS, linestyle=':', linewidth=0.5, alpha=0.8)
 # ax.set_title("Number of storms conditioned on each grid cell (1941-2022)")
 
 # %%
-path = os.path.join(data_dir, "processing", "data_1941_2022.nc")
+path = os.path.join(datadir, "resampled_1941_2022.nc")
 ds = xr.open_dataset(path)
 # %%
 mean_u10 = ds["u10"].mean(dim="time")
