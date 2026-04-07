@@ -30,6 +30,8 @@ from calendar import month_name as month
 
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from matplotlib.colors import TwoSlopeNorm
+from matplotlib.colors import LinearSegmentedColormap
 
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
@@ -52,11 +54,12 @@ plt.rcParams.update({
 FIELDS = ["u10", "tp", 'mslp']
 VISUALISATIONS = True
 PROCESS_OUTLIERS = False
+SAVE = False
 THRESHOLD = 0.75 # (for outliers, not using)
 RES = (64, 64)
 
 # for snakemake in future
-CMAP = "PuBu_r"
+CMAP = "PuBu"
 INFILES = ['resampled_1941_2022.nc', 'event_footprints.parquet', 'event_metadata.parquet', 'climatology.csv']
 OUTFILES = ['data.nc']
 
@@ -110,6 +113,7 @@ if __name__ == "__main__":
     times = pd.to_datetime(events[['storm', 'time']].groupby('storm').first()['time'].reset_index(drop=True))
     
     # %% Check fit quality and that it looks right
+
     paramplot = True
     if paramplot:
 
@@ -118,7 +122,7 @@ if __name__ == "__main__":
         
         results = {}
 
-        for var in  FIELDS:
+        for var in FIELDS:
 
             fig = plt.figure(figsize=(6, 1.75), constrained_layout=True)
             gs = gridspec.GridSpec(
@@ -135,13 +139,37 @@ if __name__ == "__main__":
             # bottom row: colorbars
             caxs = [fig.add_subplot(gs[1, i]) for i in range(5)]
 
+            # colormap for p-values
             p_cmap = plt.get_cmap(CMAP)
-            p_cmap.set_under("crimson")
+            p_cmap = p_cmap(np.linspace(0.1, 0.9, 256))
+            p_cmap = LinearSegmentedColormap.from_list("pvalues", p_cmap)
+            p_cmap.set_under('r')
 
-            im0 = ds[f"pk_{var}"].plot(ax=axs[0], cmap=p_cmap, vmin=alpha, vmax=1, add_colorbar=False)
-            im1 = ds[f"thresh_{var}"].plot(ax=axs[1], cmap=CMAP, add_colorbar=False)
-            im2 = ds[f"scale_{var}"].plot(ax=axs[2], cmap=CMAP, add_colorbar=False)
-            im3 = ds[f"shape_{var}"].plot(ax=axs[3], cmap=CMAP, add_colorbar=False)
+            # colormap for params
+            BAD = 'w'
+            cmap_params = plt.get_cmap(CMAP)
+            cmap_params = cmap_params(np.linspace(0.1, 0.9, 256))
+            cmap_params = LinearSegmentedColormap.from_list("params", cmap_params)
+            cmap_params.set_bad(BAD)
+
+            # colormap for shapes
+            orange_half = plt.get_cmap('Oranges')(np.linspace(0.1, 1.0, 128)) 
+            blue_half = plt.get_cmap('PuBu')(np.linspace(0.1, 0.8, 128))
+            k = 0.5
+            mid_color = (k * orange_half[0] + (1-k)*blue_half[0])
+            colors = np.vstack([orange_half[::-1], mid_color, mid_color, blue_half])
+            cmap_shape = LinearSegmentedColormap.from_list("shapes", colors)
+            cmap_shape.set_over(plt.get_cmap('PuBu')(1.0))
+            cmap_shape.set_bad(BAD)
+
+            vmin = -0.3 # ds[f'shape_{var}'].min()
+            vmax = 0.3  # ds[f'shape_{var}'].max()
+            norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+
+            im0 = ds[f"pk_{var}"].plot(ax=axs[0], cmap=p_cmap, vmin=alpha, vmax=1, add_colorbar=False) #  
+            im1 = ds[f"thresh_{var}"].plot(ax=axs[1], cmap=cmap_params, add_colorbar=False)
+            im2 = ds[f"scale_{var}"].plot(ax=axs[2], cmap=cmap_params, add_colorbar=False)
+            im3 = ds[f"shape_{var}"].plot(ax=axs[3], cmap=cmap_shape, norm=norm, add_colorbar=False)
             
             # plot the density for three sample grid points
             dist = getattr(scipy.stats, 'genpareto')
@@ -150,10 +178,7 @@ if __name__ == "__main__":
             shapes = gdf[f'shape_{var}'].quantile(percs)
             scale  = gdf[f'scale_{var}'].mean()
 
-            vmin = min(shapes_all)
-            vmax = max(shapes_all)
-            norm = plt.Normalize(vmin, vmax)
-            colors = [plt.get_cmap(CMAP)(norm(value)) for value in shapes]
+            colors = [cmap_shape(norm(value)) for value in shapes]
             
             for i, shape in enumerate(shapes):
                 def fraction_formatter(x, pos):
@@ -179,7 +204,7 @@ if __name__ == "__main__":
                 'aspect': 0.01, 'pad': 0.0
             }
             labels = ['p', 'μ', 'σ', 'ξ', 'ξ']
-            extend = ['min', 'neither', 'neither', 'neither', 'neither']
+            extend = ['both', 'neither', 'neither', 'both', 'both']
             for i, im in enumerate([im0, im1, im2, im3, im3]):
                 fig.colorbar(
                     im, cax=caxs[i], extend=extend[i], label=labels[i],
@@ -189,7 +214,7 @@ if __name__ == "__main__":
                     caxs[i].set_xticks([0.25, 0.5, 0.75])
 
             for ax in axs:
-                ax.add_feature(cfeature.COASTLINE, linewidth=0.25)
+                ax.add_feature(cfeature.COASTLINE, linewidth=0.25, color='k')
                 ax.set_title("")
             ax4.set_title("")
 
@@ -218,6 +243,7 @@ if __name__ == "__main__":
 
         results[var]["max return period"] = f"{rpmax:,.0f}-yr"
         results[var]["min return period"] = f"{rpmin:,.0f}-yr"
+
 
     statspath = figdir / "summary.txt"
     save_stats_text(statspath, results)
@@ -304,11 +330,12 @@ if __name__ == "__main__":
     ds.attrs['note'] = "Fixed interpolation: [0, 1] --> (0, 1)."
 
     # %% save
-    print("Finished! Saving to netcdf...")
-    ds.to_netcdf(os.path.join(outdir, OUTFILES[0]))
-    print("Saved to", os.path.join(outdir, OUTFILES[0]))
-        
-    ds.close()
-    print(f"U1 max in memory: {U1.max()}")
+    if SAVE:
+        print("Finished! Saving to netcdf...")
+        ds.to_netcdf(os.path.join(outdir, OUTFILES[0]))
+        print("Saved to", os.path.join(outdir, OUTFILES[0]))
+            
+        ds.close()
+        print(f"U1 max in memory: {U1.max()}")
 
 # %%

@@ -13,6 +13,7 @@ import sys
 from environs import Env
 import numpy as np
 import xarray as xr
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from importlib import reload
@@ -41,7 +42,7 @@ plt.rcParams.update({
 
 # settings for interactive script
 global DOMAIN
-DOMAIN = "gaussian"
+DOMAIN = "uniform"
 
 # field metadata
 savefigs = True
@@ -334,7 +335,7 @@ if __name__ == "__main__":
 
     # %% ==============================================================
     # 64x64 plots of footprints
-    sampleplots = True
+    sampleplots = False
     field = 0
     shuffle = False
     if sampleplots:
@@ -346,7 +347,7 @@ if __name__ == "__main__":
 
         k = scales[field]
         metric = units[field]
-        cmap = field_cmaps[field] 
+        cmap = field_cmaps[field]
 
         if shuffle:
             id_gen = np.random.permutation(u_gen.shape[0])
@@ -482,6 +483,7 @@ if __name__ == "__main__":
             )
             results[f"pearson{pair_str}"]["mae"] = metrics_r['mae']
             results[f"pearson{pair_str}"]["pearson"] = metrics_r['pearson']
+            results[f"pearson{pair_str}"]["me"] = metrics_r['me']
 
             outpath = os.path.join(outdir, f"pearson_{pair_str}.png")
             savefig(fig_r, outpath, savefigs, savefig_kws)
@@ -499,6 +501,7 @@ if __name__ == "__main__":
             )
             results[f"extremal{pair_str}"]["mae"] = metrics_χ['mae']
             results[f"extremal{pair_str}"]["pearson"] = metrics_χ['pearson']
+            results[f"extremal{pair_str}"]["me"] = metrics_χ['me']
 
             outpath = os.path.join(outdir, f"extcorr_{pair_str}.png")
             savefig(fig_χ, outpath, savefigs, savefig_kws)
@@ -506,10 +509,14 @@ if __name__ == "__main__":
         save_stats_csv(statspath, results)
         print(f"saved summary statistics to {statspath}")
 
+        results_df = pd.DataFrame(results)
+        mecols = ["extremal01", "extremal02", "extremal12"]
+        print(results_df[mecols].sum(axis=1))
+
     # %% ==============================================================
     # spatial correlation plots
-    spatialcorrplots = True
-    extcorrplot = True
+    spatialcorrplots = False
+    extcorrplot = False
 
     # NOTE: this section is computationally demanding
     # using two things to speed it up:
