@@ -141,4 +141,7 @@ def plot(fake, train, func, fields=[0, 1], figsize=1.,
     mae = np.mean(np.abs(train_res[valid] - fake_res[valid]))
     print(f"Mean Absolute Error: {mae:.4f}")
 
-    return fig, {"mae": mae, "pearson": corr}
+    me = np.mean(train_res[valid] - fake_res[valid])
+    print(f"Mean Error: {me:.4f}")
+
+    return fig, {"mae": mae, "pearson": corr, "me": me}
